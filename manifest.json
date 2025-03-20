@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Website Blocker",
+  "version": "0.1",
+  "description": "Block distracting websites dynamically.",
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "dist/block.js"
+  },
+
+  "web_accessible_resources": [{
+    "resources": ["block.html"],
+    "matches": ["<all_urls>"]
+  }]
+}

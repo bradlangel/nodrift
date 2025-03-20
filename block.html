@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Site Blocked!</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      height: 90vh;
+      margin: 0;
+      background-color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .popup {
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+    ul {
+      text-align: left;
+      font-size: 1.1em;
+    }
+    button {
+      margin-top: 15px;
+      padding: 8px 12px;
+      border: none;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="popup">
+    <h2>🚫 This site is blocked!</h2>
+    <p>Maybe do one of these instead:</p>
+    <ul>
+      <li>📖 Read a book</li>
+      <li>🏃‍♀️ Go for a run</li>
+      <li>✅ Complete a task</li>
+      <li>📝 Improve a skill</li>
+    </ul>
+    <button id="redirect-btn">Go to Career Tracker</button>
+  </div>
+
+  <script src="redirect.js"></script>
+</body>
+</html>
