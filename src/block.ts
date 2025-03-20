@@ -1,4 +1,9 @@
-const blockedSites = ["reddit.com", "old.reddit.com", "www.reddit.com"];
+const blockedSites = [
+  "reddit.com",
+  "old.reddit.com",
+  "www.reddit.com",
+  "www.youtube.com",
+];
 
 const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] => {
   return sites.map((site, idx) => ({
