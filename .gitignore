@@ -1,0 +1,15 @@
+# .gitignore
+
+# compiled output
+dist/
+
+# node modules
+node_modules/
+
+# OS-specific files
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
