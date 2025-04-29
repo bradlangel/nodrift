@@ -4,6 +4,7 @@ const blockedSites = [
   "www.reddit.com",
   "www.youtube.com",
   "www.yahoo.com",
+  "news.ycombinator.com",
 ];
 
 const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] => {
