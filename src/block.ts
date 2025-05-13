@@ -14,7 +14,7 @@ const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] => {
     action: {
       type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
       redirect: {
-        extensionPath: `/block.html?blockedUrl=${encodeURIComponent('{url}')}`
+        extensionPath: `/block.html`
       },
     },
     condition: {
