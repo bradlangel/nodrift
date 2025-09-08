@@ -9,21 +9,23 @@ const blockedSites = [
 
 const TEMP_ALLOW_MINUTES = 30;
 
+const buildRule = (site: string, id: number): chrome.declarativeNetRequest.Rule => ({
+  id,
+  priority: 1,
+  action: {
+    type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
+    redirect: {
+      extensionPath: `/block.html`,
+    },
+  },
+  condition: {
+    urlFilter: `*://${site}/*`,
+    resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
+  },
+});
+
 const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] => {
-  return sites.map((site, idx) => ({
-    id: idx + 1,
-    priority: 1,
-    action: {
-      type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
-      redirect: {
-        extensionPath: `/block.html`
-      },
-    },
-    condition: {
-      urlFilter: `*://${site}/*`,
-      resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
-    },
-}));
+  return sites.map((site, idx) => buildRule(site, idx + 1));
 };
 console.log('Website blocker: Service Worker Loaded');
 
@@ -51,12 +53,20 @@ const temporarilyAllow = (site: string, minutes: number) => {
   chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [id],
   });
-  setTimeout(() => {
-    chrome.declarativeNetRequest.updateDynamicRules({
-      addRules: buildRules([site]),
-    });
-  }, minutes * 60 * 1000);
+  chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes });
 };
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name.startsWith('restore-')) {
+    const id = parseInt(alarm.name.split('-')[1], 10);
+    const site = blockedSites[id - 1];
+    if (site) {
+      chrome.declarativeNetRequest.updateDynamicRules({
+        addRules: [buildRule(site, id)],
+      });
+    }
+  }
+});
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === 'temporarily-allow' && tab?.url) {
