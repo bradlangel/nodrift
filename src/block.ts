@@ -7,6 +7,8 @@ const blockedSites = [
   "news.ycombinator.com",
 ];
 
+const TEMP_ALLOW_MINUTES = 30;
+
 const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] => {
   return sites.map((site, idx) => ({
     id: idx + 1,
@@ -21,7 +23,7 @@ const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] => {
       urlFilter: `*://${site}/*`,
       resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
     },
-  }));
+}));
 };
 console.log('Website blocker: Service Worker Loaded');
 
@@ -34,4 +36,31 @@ chrome.runtime.onInstalled.addListener(() => {
       console.log('Dynamic rules have been updated:', rules);
     });
   });
+
+  chrome.contextMenus.create({
+    id: 'temporarily-allow',
+    title: `Temporarily allow this site`,
+    contexts: ['action'],
+  });
+});
+
+const temporarilyAllow = (site: string, minutes: number) => {
+  const idx = blockedSites.indexOf(site);
+  if (idx === -1) return;
+  const id = idx + 1;
+  chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [id],
+  });
+  setTimeout(() => {
+    chrome.declarativeNetRequest.updateDynamicRules({
+      addRules: buildRules([site]),
+    });
+  }, minutes * 60 * 1000);
+};
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'temporarily-allow' && tab?.url) {
+    const url = new URL(tab.url);
+    temporarilyAllow(url.hostname, TEMP_ALLOW_MINUTES);
+  }
 });
