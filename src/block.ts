@@ -1,4 +1,4 @@
-const blockedSites = [
+const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
   "old.reddit.com",
   "www.reddit.com",
@@ -7,6 +7,8 @@ const blockedSites = [
   "news.ycombinator.com",
 ];
 
+let blockedSites = [...DEFAULT_BLOCKED_SITES];
+
 const TEMP_ALLOW_MINUTES = 30;
 
 // ---------- Rule builder ----------
@@ -14,7 +16,7 @@ const TEMP_ALLOW_MINUTES = 30;
 const buildRule = (
   site: string,
   id: number
-): chrome.declarativeNetRequest.Rule => ({
+): any => ({
   id,
   priority: 1,
   action: {
@@ -41,7 +43,7 @@ const buildRule = (
   },
 });
 
-const buildRules = (sites: string[]): chrome.declarativeNetRequest.Rule[] =>
+const buildRules = (sites: string[]): any[] =>
   sites.map((site, idx) => buildRule(site, idx + 1));
 
 const allRuleIds = () => blockedSites.map((_, idx) => idx + 1);
@@ -74,6 +76,32 @@ const withLastErrorLog =
     }
     next?.();
   };
+
+const refreshRules = () => {
+  chrome.declarativeNetRequest.getDynamicRules((rules) => {
+    const ids = rules.map((r) => r.id);
+    chrome.declarativeNetRequest.updateDynamicRules(
+      { removeRuleIds: ids, addRules: buildRules(blockedSites) },
+      withLastErrorLog("refreshRules")
+    );
+  });
+};
+
+const loadBlockedSites = () => {
+  chrome.storage.sync.get({ blockedSites: DEFAULT_BLOCKED_SITES }, (data) => {
+    blockedSites = data.blockedSites;
+    refreshRules();
+  });
+};
+
+loadBlockedSites();
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.blockedSites) {
+    blockedSites = changes.blockedSites.newValue;
+    refreshRules();
+  }
+});
 
 // Temporarily allow by rule id (removes rule & sets timer to restore).
 const temporarilyAllowById = (id: number, minutes: number) => {
@@ -161,19 +189,6 @@ const resetAllRulesAndReload = (tabId?: number, currentUrl?: string) => {
 // ---------- Lifecycle & Menus ----------
 
 chrome.runtime.onInstalled.addListener(() => {
-  // Initialize a clean set of rules.
-  chrome.declarativeNetRequest.updateDynamicRules(
-    {
-      removeRuleIds: allRuleIds(),
-      addRules: buildRules(blockedSites),
-    },
-    withLastErrorLog("initial updateDynamicRules", () => {
-      chrome.declarativeNetRequest.getDynamicRules((rules) => {
-        console.log("Dynamic rules have been updated:", rules.map((r) => r.id));
-      });
-    })
-  );
-
   // Context menu: Temporarily allow current site.
   chrome.contextMenus.create({
     id: "temporarily-allow",

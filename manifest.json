@@ -18,6 +18,8 @@
     "service_worker": "dist/block.js"
   },
 
+  "options_page": "options.html",
+
   "web_accessible_resources": [{
     "resources": ["block.html"],
     "matches": ["<all_urls>"]
