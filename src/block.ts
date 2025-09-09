@@ -90,7 +90,16 @@ const refreshRules = () => {
 const loadBlockedSites = () => {
   chrome.storage.sync.get({ blockedSites: DEFAULT_BLOCKED_SITES }, (data) => {
     blockedSites = data.blockedSites;
-    refreshRules();
+
+    chrome.storage.local.get({ cachedBlockedSites: null }, (cache) => {
+      const cached = cache.cachedBlockedSites;
+      const changed =
+        !cached || JSON.stringify(cached) !== JSON.stringify(blockedSites);
+      if (changed) {
+        refreshRules();
+        chrome.storage.local.set({ cachedBlockedSites: blockedSites });
+      }
+    });
   });
 };
 
@@ -100,6 +109,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync" && changes.blockedSites) {
     blockedSites = changes.blockedSites.newValue;
     refreshRules();
+    chrome.storage.local.set({ cachedBlockedSites: blockedSites });
   }
 });
 
