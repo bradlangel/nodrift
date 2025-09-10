@@ -114,14 +114,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// Temporarily allow by rule id (removes rule & sets timer to restore).
-// Remove a single rule for a limited time.
-const allowRuleTemporarily = (id: number, minutes: number) => {
+// Temporarily allow one or more rules (removes rules & sets timers to restore).
+const allowRulesTemporarily = (ids: number[], minutes: number) => {
+  if (ids.length === 0) return;
   chrome.declarativeNetRequest.updateDynamicRules(
-    { removeRuleIds: [id] },
+    { removeRuleIds: ids },
     withLastErrorLog("removeRuleIds")
   );
-  chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes });
+  ids.forEach((id) =>
+    chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes })
+  );
 };
 
 // Temporarily allow a hostname and any related rules (base domain + subdomains).
@@ -135,7 +137,7 @@ const temporarilyAllow = (host: string, minutes: number) => {
       ids.push(i + 1);
     }
   }
-  ids.forEach((id) => allowRuleTemporarily(id, minutes));
+  allowRulesTemporarily(ids, minutes);
 };
 
 // Entry point when we only know the rule id (e.g., from the block page).
