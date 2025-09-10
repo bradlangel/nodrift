@@ -18,7 +18,8 @@ const buildRule = (
   id: number
 ): any => ({
   id,
-  priority: 1,
+  // Give more specific domains higher priority so subdomains override their base domain.
+  priority: site.split(".").length,
   action: {
     type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
     // Use transform so we can attach query params identifying the rule+site.
