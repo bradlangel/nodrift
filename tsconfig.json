@@ -4,8 +4,7 @@
     "module": "ES2020",
     "moduleResolution": "node",
     "outDir": "./dist",
-    "types": ["chrome"],
-    "typeRoots": ["./types"]
+    "types": ["chrome"]
   },
   "include": ["src/**/*"]
 }
