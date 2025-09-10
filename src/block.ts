@@ -115,7 +115,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // Temporarily allow by rule id (removes rule & sets timer to restore).
-const temporarilyAllowById = (id: number, minutes: number) => {
+// Remove a single rule for a limited time.
+const allowRuleTemporarily = (id: number, minutes: number) => {
   chrome.declarativeNetRequest.updateDynamicRules(
     { removeRuleIds: [id] },
     withLastErrorLog("removeRuleIds")
@@ -134,7 +135,14 @@ const temporarilyAllow = (host: string, minutes: number) => {
       ids.push(i + 1);
     }
   }
-  ids.forEach((id) => temporarilyAllowById(id, minutes));
+  ids.forEach((id) => allowRuleTemporarily(id, minutes));
+};
+
+// Entry point when we only know the rule id (e.g., from the block page).
+const temporarilyAllowById = (id: number, minutes: number) => {
+  const site = blockedSites[id - 1];
+  if (!site) return;
+  temporarilyAllow(site, minutes);
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
