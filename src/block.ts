@@ -123,10 +123,18 @@ const temporarilyAllowById = (id: number, minutes: number) => {
   chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes });
 };
 
-// (Optional) hostname-based helper (uses most-specific match).
+// Temporarily allow a hostname and any related rules (base domain + subdomains).
 const temporarilyAllow = (host: string, minutes: number) => {
-  const id = findRuleIdByHostname(host);
-  if (id) temporarilyAllowById(id, minutes);
+  const parts = host.split(".");
+  const base = parts.slice(-2).join(".");
+  const ids: number[] = [];
+  for (let i = 0; i < blockedSites.length; i++) {
+    const site = blockedSites[i];
+    if (site === host || site === base || site.endsWith("." + base)) {
+      ids.push(i + 1);
+    }
+  }
+  ids.forEach((id) => temporarilyAllowById(id, minutes));
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
