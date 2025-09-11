@@ -8,8 +8,13 @@ const DEFAULT_BLOCKED_SITES = [
 ];
 
 let blockedSites = [...DEFAULT_BLOCKED_SITES];
+let tempAllowMinutes = 30;
 
-const TEMP_ALLOW_MINUTES = 30;
+const loadTempAllowMinutes = () => {
+  chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
+    tempAllowMinutes = data.tempAllowMinutes;
+  });
+};
 
 // ---------- Rule builder ----------
 
@@ -105,12 +110,18 @@ const loadBlockedSites = () => {
 };
 
 loadBlockedSites();
+loadTempAllowMinutes();
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "sync" && changes.blockedSites) {
-    blockedSites = changes.blockedSites.newValue;
-    refreshRules();
-    chrome.storage.local.set({ cachedBlockedSites: blockedSites });
+  if (area === "sync") {
+    if (changes.blockedSites) {
+      blockedSites = changes.blockedSites.newValue;
+      refreshRules();
+      chrome.storage.local.set({ cachedBlockedSites: blockedSites });
+    }
+    if (changes.tempAllowMinutes) {
+      tempAllowMinutes = changes.tempAllowMinutes.newValue;
+    }
   }
 });
 
@@ -127,7 +138,7 @@ const allowRulesTemporarily = (ids: number[], minutes: number) => {
 };
 
 // Temporarily allow a hostname and any related rules (base domain + subdomains).
-const temporarilyAllow = (host: string, minutes: number) => {
+const temporarilyAllow = (host: string, minutes = tempAllowMinutes) => {
   const parts = host.split(".");
   const base = parts.slice(-2).join(".");
   const ids: number[] = [];
@@ -141,7 +152,7 @@ const temporarilyAllow = (host: string, minutes: number) => {
 };
 
 // Entry point when we only know the rule id (e.g., from the block page).
-const temporarilyAllowById = (id: number, minutes: number) => {
+const temporarilyAllowById = (id: number, minutes = tempAllowMinutes) => {
   const site = blockedSites[id - 1];
   if (!site) return;
   temporarilyAllow(site, minutes);
@@ -258,9 +269,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "temporarily-allow") {
     const rid = Number(u.searchParams.get("rid"));
     if (Number.isFinite(rid)) {
-      temporarilyAllowById(rid, TEMP_ALLOW_MINUTES);
+      temporarilyAllowById(rid);
     } else {
-      temporarilyAllow(u.hostname, TEMP_ALLOW_MINUTES);
+      temporarilyAllow(u.hostname);
     }
     return;
   }
