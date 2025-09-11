@@ -8,13 +8,19 @@ const DEFAULT_BLOCKED_SITES = [
 ];
 
 let blockedSites = [...DEFAULT_BLOCKED_SITES];
-let tempAllowMinutes = 30;
+let tempAllowMinutes: number | null = null;
 
-const loadTempAllowMinutes = () => {
-  chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
-    tempAllowMinutes = data.tempAllowMinutes;
+const getTempAllowMinutes = (): Promise<number> =>
+  new Promise((resolve) => {
+    if (tempAllowMinutes !== null) {
+      resolve(tempAllowMinutes);
+    } else {
+      chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
+        tempAllowMinutes = data.tempAllowMinutes;
+        resolve(tempAllowMinutes);
+      });
+    }
   });
-};
 
 // ---------- Rule builder ----------
 
@@ -110,7 +116,7 @@ const loadBlockedSites = () => {
 };
 
 loadBlockedSites();
-loadTempAllowMinutes();
+getTempAllowMinutes();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
@@ -138,7 +144,8 @@ const allowRulesTemporarily = (ids: number[], minutes: number) => {
 };
 
 // Temporarily allow a hostname and any related rules (base domain + subdomains).
-const temporarilyAllow = (host: string, minutes = tempAllowMinutes) => {
+const temporarilyAllow = async (host: string, minutes?: number) => {
+  const mins = minutes ?? (await getTempAllowMinutes());
   const parts = host.split(".");
   const base = parts.slice(-2).join(".");
   const ids: number[] = [];
@@ -148,14 +155,14 @@ const temporarilyAllow = (host: string, minutes = tempAllowMinutes) => {
       ids.push(i + 1);
     }
   }
-  allowRulesTemporarily(ids, minutes);
+  allowRulesTemporarily(ids, mins);
 };
 
 // Entry point when we only know the rule id (e.g., from the block page).
-const temporarilyAllowById = (id: number, minutes = tempAllowMinutes) => {
+const temporarilyAllowById = async (id: number, minutes?: number) => {
   const site = blockedSites[id - 1];
   if (!site) return;
-  temporarilyAllow(site, minutes);
+  await temporarilyAllow(site, minutes);
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
