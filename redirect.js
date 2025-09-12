@@ -6,8 +6,11 @@ if (site) {
   if (h2) h2.textContent = `🚫 ${site} is blocked!`;
 }
 
-// Your existing button
-function redirectToCareer() {
-  window.location = "http://localhost:5173";
-}
-document.getElementById("redirect-btn").addEventListener("click", redirectToCareer);
+const DEFAULT_REDIRECT_URL = "http://localhost:5173";
+
+chrome.storage.sync.get({ redirectUrl: DEFAULT_REDIRECT_URL }, (data) => {
+  const target = data.redirectUrl || DEFAULT_REDIRECT_URL;
+  document.getElementById("redirect-btn").addEventListener("click", () => {
+    window.location = target;
+  });
+});
