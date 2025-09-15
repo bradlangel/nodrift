@@ -25,8 +25,14 @@
       text-align: left;
       font-size: 1.1em;
     }
-    button {
+    .actions {
       margin-top: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+    button {
       padding: 8px 12px;
       border: none;
       background-color: #4CAF50;
@@ -34,6 +40,14 @@
       cursor: pointer;
       border-radius: 4px;
       font-size: 1em;
+      transition: background-color 0.2s ease;
+    }
+    button.secondary {
+      background-color: #2563eb;
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
     }
   </style>
 </head>
@@ -47,7 +61,10 @@
       <li>✅ Complete a task</li>
       <li>📝 Improve a skill</li>
     </ul>
-    <button id="redirect-btn">Go to Career Tracker</button>
+    <div class="actions">
+      <button id="redirect-btn">Go to Career Tracker</button>
+      <button id="peek-chatgpt-btn" class="secondary" title="Opens ChatGPT with a quick prompt so you can stay focused">Peek with ChatGPT</button>
+    </div>
   </div>
 
   <script src="redirect.js"></script>

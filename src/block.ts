@@ -233,6 +233,241 @@ const resetAllRulesAndReload = (tabId?: number, currentUrl?: string) => {
   );
 };
 
+// ---------- Peek with ChatGPT integration ----------
+
+type PeekInjectionStatus = "sent" | "filled" | "clipboard" | "error" | "unknown";
+
+type PeekWithChatGPTMessage = {
+  type: "peek-with-chatgpt";
+  site?: string | null;
+  originalUrl?: string | null;
+};
+
+const parseSiteFromSender = (sender?: chrome.runtime.MessageSender): string | null => {
+  if (!sender?.url) return null;
+  try {
+    const u = new URL(sender.url);
+    return u.searchParams.get("site");
+  } catch (err) {
+    console.warn("Failed to parse sender site", err);
+    return null;
+  }
+};
+
+const sanitizeSite = (value?: string | null): string | null => {
+  if (!value) return null;
+  return value.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+};
+
+const buildPeekPrompt = (
+  payload: PeekWithChatGPTMessage,
+  sender?: chrome.runtime.MessageSender
+): string => {
+  const siteFromPayload = sanitizeSite(payload.site);
+  const siteFromSender = sanitizeSite(parseSiteFromSender(sender));
+  const site = siteFromPayload || siteFromSender;
+  const attemptedUrl = payload.originalUrl?.trim();
+
+  const parts: string[] = [
+    "You are my focus-preserving assistant.",
+    site
+      ? `I blocked ${site} so I wouldn't doomscroll, but I still need any essential updates or insights I might miss.`
+      : "I blocked a distracting site so I wouldn't doomscroll, but I still need any essential updates or insights I might miss.",
+    attemptedUrl ? `If it helps, I was heading to: ${attemptedUrl}.` : "",
+    "Respond with at most five short, high-signal bullets focused on actionable takeaways or critical facts.",
+    "If you truly need more detail, ask for up to three specific snippets for me to paste instead of guessing.",
+    "If nothing sounds urgent, remind me in one sentence to return to my priority work.",
+  ].filter(Boolean) as string[];
+
+  return parts.join(" ");
+};
+
+const injectPromptIntoChatGPT = async (
+  tabId: number,
+  prompt: string,
+  options: { autoSend?: boolean } = {}
+): Promise<PeekInjectionStatus> => {
+  const { autoSend = true } = options;
+
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "ISOLATED",
+      func: async (text: string, autoSendFlag: boolean) => {
+        const sleep = (ms: number) =>
+          new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+        const selectors = [
+          '[data-testid="prompt-textarea"]',
+          "form textarea",
+          "textarea",
+          '[contenteditable="true"][role="textbox"]',
+        ];
+
+        const findInput = () => {
+          for (const selector of selectors) {
+            const el = document.querySelector(selector) as any;
+            if (el) return el;
+          }
+          return null;
+        };
+
+        const setInputValue = (el: any, value: string) => {
+          if (!el) return false;
+          const isContentEditable =
+            typeof el.getAttribute === "function" &&
+            el.getAttribute("contenteditable") === "true";
+          if (isContentEditable) {
+            el.textContent = value;
+          } else if ("value" in el) {
+            el.value = value;
+          } else {
+            return false;
+          }
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          return true;
+        };
+
+        const clickSend = () => {
+          const button = document.querySelector(
+            '[data-testid="send-button"], button[aria-label*="Send"], form button[type="submit"]'
+          ) as any;
+          if (button && !button.disabled) {
+            button.click();
+            return true;
+          }
+          return false;
+        };
+
+        for (let attempt = 0; attempt < 25; attempt++) {
+          const input = findInput();
+          if (input && setInputValue(input, text)) {
+            if (typeof input.focus === "function") {
+              input.focus();
+            }
+            if (autoSendFlag) {
+              return clickSend() ? "sent" : "filled";
+            }
+            return "filled";
+          }
+          await sleep(200);
+        }
+
+        try {
+          await navigator.clipboard.writeText(text);
+          return "clipboard";
+        } catch (err) {
+          console.warn("Peek prompt clipboard fallback failed", err);
+          return "error";
+        }
+      },
+      args: [prompt, autoSend],
+    });
+
+    const status = results?.[0]?.result;
+    if (status === "sent" || status === "filled" || status === "clipboard" || status === "error") {
+      return status;
+    }
+    return "unknown";
+  } catch (error) {
+    console.warn("injectPromptIntoChatGPT failed", error);
+    return "error";
+  }
+};
+
+const openChatGPTWithPrompt = async (prompt: string): Promise<PeekInjectionStatus> => {
+  try {
+    const tab = await chrome.tabs.create({ url: "https://chatgpt.com/" });
+    if (typeof tab.id !== "number") {
+      return "error";
+    }
+
+    const tabId = tab.id;
+    return await new Promise<PeekInjectionStatus>((resolve) => {
+      let finished = false;
+      let safetyTimer: ReturnType<typeof setTimeout>;
+
+      const finalize = (status: PeekInjectionStatus) => {
+        if (finished) return;
+        finished = true;
+        chrome.tabs.onUpdated.removeListener(handleUpdated);
+        chrome.tabs.onRemoved.removeListener(handleRemoved);
+        clearTimeout(safetyTimer);
+        resolve(status);
+      };
+
+      const handleUpdated = async (
+        updatedTabId: number,
+        info: chrome.tabs.TabChangeInfo
+      ) => {
+        if (finished) return;
+        if (updatedTabId === tabId && info.status === "complete") {
+          const status = await injectPromptIntoChatGPT(tabId, prompt, {
+            autoSend: true,
+          });
+          finalize(status);
+        }
+      };
+
+      const handleRemoved = (removedTabId: number) => {
+        if (removedTabId === tabId) {
+          finalize("error");
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(handleUpdated);
+      chrome.tabs.onRemoved.addListener(handleRemoved);
+
+      safetyTimer = setTimeout(async () => {
+        if (finished) return;
+        const status = await injectPromptIntoChatGPT(tabId, prompt, {
+          autoSend: true,
+        });
+        finalize(status);
+      }, 5000);
+    });
+  } catch (error) {
+    console.warn("openChatGPTWithPrompt failed", error);
+    return "error";
+  }
+};
+
+const handlePeekWithChatGPTRequest = async (
+  payload: PeekWithChatGPTMessage,
+  sender?: chrome.runtime.MessageSender
+) => {
+  const prompt = buildPeekPrompt(payload, sender);
+  const siteForStorage = sanitizeSite(
+    payload.site || parseSiteFromSender(sender)
+  );
+
+  if (chrome.storage?.session?.set) {
+    chrome.storage.session.set({
+      lastPeekPrompt: prompt,
+      lastPeekSite: siteForStorage,
+      lastPeekUrl: payload.originalUrl ?? null,
+    });
+  }
+
+  const status = await openChatGPTWithPrompt(prompt);
+  return { status, prompt };
+};
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "peek-with-chatgpt") {
+    handlePeekWithChatGPTRequest(message as PeekWithChatGPTMessage, sender)
+      .then((result) => {
+        sendResponse({ status: result.status, prompt: result.prompt });
+      })
+      .catch((error) => {
+        console.warn("peek-with-chatgpt request failed", error);
+        sendResponse({ status: "error", error: error?.message ?? String(error) });
+      });
+    return true;
+  }
+  return undefined;
+});
+
 // ---------- Lifecycle & Menus ----------
 
 chrome.runtime.onInstalled.addListener(() => {

@@ -20,3 +20,63 @@ chrome.storage.sync.get(
     });
   }
 );
+
+const peekBtn = document.getElementById("peek-chatgpt-btn");
+if (peekBtn) {
+  const originalLabel = peekBtn.textContent || "Peek with ChatGPT";
+  let attemptedUrl = document.referrer || "";
+  if (attemptedUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`)) {
+    attemptedUrl = "";
+  }
+  peekBtn.addEventListener("click", () => {
+    peekBtn.disabled = true;
+    peekBtn.textContent = "Opening ChatGPT...";
+
+    chrome.runtime.sendMessage(
+      {
+        type: "peek-with-chatgpt",
+        site,
+        originalUrl: attemptedUrl || null,
+      },
+      (response) => {
+        const reset = (label = originalLabel, delay = 0) => {
+          window.setTimeout(() => {
+            peekBtn.disabled = false;
+            peekBtn.textContent = label;
+          }, delay);
+        };
+
+        if (chrome.runtime.lastError) {
+          console.warn("Peek with ChatGPT failed", chrome.runtime.lastError.message);
+          reset("Prompt copied — paste into ChatGPT", 0);
+          reset(originalLabel, 3000);
+          return;
+        }
+
+        const status = response?.status;
+        if (status === "sent") {
+          reset("Prompt sent to ChatGPT", 800);
+          reset(originalLabel, 2500);
+          return;
+        }
+        if (status === "filled") {
+          reset("Prompt ready in ChatGPT", 800);
+          reset(originalLabel, 2500);
+          return;
+        }
+        if (status === "clipboard") {
+          reset("Prompt copied — paste into ChatGPT", 0);
+          reset(originalLabel, 3000);
+          return;
+        }
+        if (status === "error" || status === "unknown") {
+          reset("Open ChatGPT manually", 0);
+          reset(originalLabel, 3000);
+          return;
+        }
+
+        reset(originalLabel, 400);
+      }
+    );
+  });
+}
