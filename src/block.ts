@@ -314,29 +314,121 @@ const injectPromptIntoChatGPT = async (
 
         const setInputValue = (el: any, value: string) => {
           if (!el) return false;
+
           const isContentEditable =
             typeof el.getAttribute === "function" &&
             el.getAttribute("contenteditable") === "true";
+
+          const ownerDoc = el.ownerDocument || document;
+          const view = ownerDoc.defaultView || window;
+
+          const createEvent = (EventCtor: any, type: string, init?: any) => {
+            const fallbackCtor = view.Event || window.Event;
+            try {
+              return new EventCtor(type, init);
+            } catch {
+              return new fallbackCtor(type, init);
+            }
+          };
+
+          const dispatchInputEvents = () => {
+            const InputEventCtor = view.InputEvent || window.InputEvent || Event;
+            const EventCtor = view.Event || window.Event;
+            const inputEvt = createEvent(InputEventCtor, "input", {
+                bubbles: true,
+                cancelable: true,
+                data: value,
+                inputType: "insertText",
+              });
+            el.dispatchEvent(inputEvt);
+            const changeEvt = createEvent(EventCtor, "change", { bubbles: true });
+            el.dispatchEvent(changeEvt);
+          };
+
           if (isContentEditable) {
             el.textContent = value;
-          } else if ("value" in el) {
-            el.value = value;
-          } else {
-            return false;
+            dispatchInputEvents();
+            return true;
           }
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          return true;
+
+          if ("value" in el) {
+            const prototypes: any[] = [];
+            if (view.HTMLTextAreaElement?.prototype) {
+              prototypes.push(view.HTMLTextAreaElement.prototype);
+            }
+            if (view.HTMLInputElement?.prototype) {
+              prototypes.push(view.HTMLInputElement.prototype);
+            }
+            prototypes.push(Object.getPrototypeOf(el));
+
+            let applied = false;
+            for (const proto of prototypes) {
+              if (!proto) continue;
+              const descriptor = Object.getOwnPropertyDescriptor(proto, "value");
+              if (descriptor?.set) {
+                descriptor.set.call(el, value);
+                applied = true;
+                break;
+              }
+            }
+
+            if (!applied) {
+              el.value = value;
+            }
+
+            dispatchInputEvents();
+            return true;
+          }
+
+          return false;
         };
 
-        const clickSend = () => {
+        const clickSend = async (inputEl: any) => {
           const button = document.querySelector(
             '[data-testid="send-button"], button[aria-label*="Send"], form button[type="submit"]'
           ) as any;
-          if (button && !button.disabled) {
+          if (!button) return false;
+
+          const view = button.ownerDocument?.defaultView || window;
+          const KeyboardEventCtor =
+            view.KeyboardEvent || window.KeyboardEvent || Event;
+
+          const attemptClick = () => {
+            if (button.disabled) {
+              return false;
+            }
             button.click();
             return true;
+          };
+
+          if (attemptClick()) return true;
+
+          // As a fallback, synthesize an Enter keypress to trigger send.
+          const enterEvent = new KeyboardEventCtor("keydown", {
+            key: "Enter",
+            code: "Enter",
+            bubbles: true,
+            cancelable: true,
+          });
+          button.dispatchEvent(enterEvent);
+
+          await sleep(50);
+
+          if (!attemptClick() && inputEl) {
+            const inputView = inputEl.ownerDocument?.defaultView || window;
+            const InputKeyboardCtor =
+              inputView.KeyboardEvent || window.KeyboardEvent || Event;
+            const inputEnter = new InputKeyboardCtor("keydown", {
+              key: "Enter",
+              code: "Enter",
+              bubbles: true,
+              cancelable: true,
+            });
+            inputEl.dispatchEvent(inputEnter);
+            await sleep(50);
           }
-          return false;
+
+          return attemptClick();
         };
 
         for (let attempt = 0; attempt < 25; attempt++) {
@@ -346,7 +438,7 @@ const injectPromptIntoChatGPT = async (
               input.focus();
             }
             if (autoSendFlag) {
-              return clickSend() ? "sent" : "filled";
+              return (await clickSend(input)) ? "sent" : "filled";
             }
             return "filled";
           }
