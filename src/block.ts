@@ -51,6 +51,29 @@ const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
   lastNavigatedUrlByTab.set(tabId, normalised);
 };
 
+const getTabNavigatedHttpUrl = (tabId: number): Promise<string | null> =>
+  new Promise((resolve) => {
+    chrome.tabs.get(tabId, (tab: any) => {
+      if (chrome.runtime.lastError) {
+        console.warn(
+          "getTabNavigatedHttpUrl tabs.get failed",
+          chrome.runtime.lastError.message
+        );
+        resolve(null);
+        return;
+      }
+
+      const pending = ensureHttpUrl(tab?.pendingUrl);
+      if (pending) {
+        resolve(pending);
+        return;
+      }
+
+      const current = ensureHttpUrl(tab?.url);
+      resolve(current);
+    });
+  });
+
 chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: any, tab?: any) => {
   if (changeInfo?.pendingUrl) {
     recordLastNavigatedUrl(tabId, changeInfo.pendingUrl);
@@ -71,6 +94,20 @@ chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: any, tab?: any) =>
 chrome.tabs.onRemoved.addListener((tabId: number) => {
   lastNavigatedUrlByTab.delete(tabId);
 });
+
+if (chrome.webNavigation?.onBeforeNavigate) {
+  chrome.webNavigation.onBeforeNavigate.addListener((details: any) => {
+    if (details?.frameId !== 0) return;
+    recordLastNavigatedUrl(details.tabId, details.url);
+  });
+}
+
+if (chrome.webNavigation?.onCommitted) {
+  chrome.webNavigation.onCommitted.addListener((details: any) => {
+    if (details?.frameId !== 0) return;
+    recordLastNavigatedUrl(details.tabId, details.url);
+  });
+}
 
 const getTempAllowMinutes = (): Promise<number> =>
   new Promise((resolve) => {
@@ -1002,16 +1039,22 @@ const handlePeekWithChatGPTRequest = async (
   const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
   const originalUrl = ensureHttpUrl(payload.originalUrl);
   const trimmedOriginal = payload.originalUrl?.trim() || null;
+  const tabNavigationUrl =
+    tabId !== null ? await getTabNavigatedHttpUrl(tabId) : null;
 
-  if (tabId !== null && originalUrl) {
-    lastNavigatedUrlByTab.set(tabId, originalUrl);
+  if (tabId !== null) {
+    if (originalUrl) {
+      lastNavigatedUrlByTab.set(tabId, originalUrl);
+    } else if (tabNavigationUrl) {
+      lastNavigatedUrlByTab.set(tabId, tabNavigationUrl);
+    }
   }
 
   const ledgerUrl = tabId !== null ? lastNavigatedUrlByTab.get(tabId) ?? null : null;
   const fallbackSiteUrl = siteForStorage
     ? ensureHttpUrl(`https://${siteForStorage}`)
     : null;
-  const targetUrl = originalUrl || ledgerUrl || fallbackSiteUrl;
+  const targetUrl = originalUrl || ledgerUrl || tabNavigationUrl || fallbackSiteUrl;
   const snapshot = targetUrl ? await fetchSnapshot(targetUrl) : "";
 
   const storageUrl = targetUrl || fallbackSiteUrl || trimmedOriginal;
