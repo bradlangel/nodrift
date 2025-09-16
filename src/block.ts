@@ -1,3 +1,5 @@
+declare const chrome: any;
+
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
   "old.reddit.com",
@@ -9,6 +11,66 @@ const DEFAULT_BLOCKED_SITES = [
 
 let blockedSites = [...DEFAULT_BLOCKED_SITES];
 let tempAllowMinutes: number | null = null;
+
+const EXTENSION_URL_PREFIX = `chrome-extension://${chrome.runtime.id}/`;
+const lastNavigatedUrlByTab = new Map<number, string>();
+
+const ensureHttpUrl = (value?: string | null): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+    return null;
+  } catch {
+    try {
+      const normalised = trimmed.replace(/^https?:\/\//, "");
+      if (!normalised) return null;
+      const parsed = new URL(`https://${normalised}`);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return parsed.toString();
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
+  if (rawUrl && rawUrl.startsWith(EXTENSION_URL_PREFIX)) {
+    return;
+  }
+  const normalised = ensureHttpUrl(rawUrl);
+  if (!normalised) return;
+  lastNavigatedUrlByTab.set(tabId, normalised);
+};
+
+chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: any, tab?: any) => {
+  if (changeInfo?.pendingUrl) {
+    recordLastNavigatedUrl(tabId, changeInfo.pendingUrl);
+  }
+  if (changeInfo?.url) {
+    recordLastNavigatedUrl(tabId, changeInfo.url);
+    return;
+  }
+  if (changeInfo?.status === "complete" && tab?.url) {
+    recordLastNavigatedUrl(tabId, tab.url);
+    return;
+  }
+  if (!changeInfo?.status && tab?.url) {
+    recordLastNavigatedUrl(tabId, tab.url);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId: number) => {
+  lastNavigatedUrlByTab.delete(tabId);
+});
 
 const getTempAllowMinutes = (): Promise<number> =>
   new Promise((resolve) => {
@@ -243,7 +305,7 @@ type PeekWithChatGPTMessage = {
   originalUrl?: string | null;
 };
 
-const parseSiteFromSender = (sender?: chrome.runtime.MessageSender): string | null => {
+const parseSiteFromSender = (sender?: any): string | null => {
   if (!sender?.url) return null;
   try {
     const u = new URL(sender.url);
@@ -259,27 +321,82 @@ const sanitizeSite = (value?: string | null): string | null => {
   return value.replace(/^https?:\/\//, "").replace(/\/+$/, "");
 };
 
-const buildPeekPrompt = (
-  payload: PeekWithChatGPTMessage,
-  sender?: chrome.runtime.MessageSender
-): string => {
-  const siteFromPayload = sanitizeSite(payload.site);
-  const siteFromSender = sanitizeSite(parseSiteFromSender(sender));
-  const site = siteFromPayload || siteFromSender;
-  const attemptedUrl = payload.originalUrl?.trim();
+const stripTags = (value: string): string =>
+  value
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
 
-  const parts: string[] = [
-    "You are my focus-preserving assistant.",
-    site
-      ? `I blocked ${site} so I wouldn't doomscroll, but I still need any essential updates or insights I might miss.`
-      : "I blocked a distracting site so I wouldn't doomscroll, but I still need any essential updates or insights I might miss.",
-    attemptedUrl ? `If it helps, I was heading to: ${attemptedUrl}.` : "",
-    "Respond with at most five short, high-signal bullets focused on actionable takeaways or critical facts.",
-    "If you truly need more detail, ask for up to three specific snippets for me to paste instead of guessing.",
-    "If nothing sounds urgent, remind me in one sentence to return to my priority work.",
-  ].filter(Boolean) as string[];
+const fetchSnapshot = async (url: string): Promise<string> => {
+  try {
+    const response = await fetch(url, {
+      redirect: "follow",
+      credentials: "omit",
+    });
+    const html = await response.text();
 
-  return parts.join(" ");
+    const title =
+      (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || "").trim();
+    const metaDesc =
+      (html.match(
+        /<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["']/i
+      )?.[1] || ""
+      ).trim();
+
+    const headings: string[] = [];
+    const rx = /<h([123])[^>]*>([\s\S]*?)<\/h\1>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = rx.exec(html)) && headings.length < 10) {
+      const text = stripTags(match[2]).trim();
+      if (text) {
+        headings.push(text);
+      }
+    }
+
+    const parts: string[] = [];
+    if (title) parts.push(`Title: ${title}`);
+    if (metaDesc) parts.push(`Description: ${metaDesc}`);
+    if (headings.length) {
+      const compact = headings
+        .slice(0, 8)
+        .map((heading) => heading.replace(/\s+/g, " ").slice(0, 140))
+        .filter(Boolean);
+      if (compact.length) {
+        parts.push(`Top headings:\n- ${compact.join("\n- ")}`);
+      }
+    }
+
+    return parts.join("\n");
+  } catch (error) {
+    console.warn("Failed to fetch snapshot for peek", error);
+    return "";
+  }
+};
+
+const buildPromptForPeek = ({
+  url,
+  snapshot = "",
+}: {
+  url: string;
+  snapshot?: string;
+}): string => {
+  const lines = [
+    "You're my quick-answer assistant.",
+    "Task: Summarize the key information for this page in 5–7 bullets, then list 3 suggested next actions.",
+    `URL: ${url}`,
+    "Use the snapshot below if helpful. Do not ask me to paste content unless the snapshot is insufficient.",
+    "If nothing sounds urgent, remind me to return to my priority work.",
+  ];
+
+  if (snapshot) {
+    lines.push(`\n--- SNAPSHOT START ---\n${snapshot.slice(0, 2000)}\n--- SNAPSHOT END ---`);
+  }
+
+  return lines.join("\n");
 };
 
 const injectPromptIntoChatGPT = async (
@@ -599,7 +716,7 @@ const openChatGPTWithPrompt = async (prompt: string): Promise<PeekInjectionStatu
 
       const handleUpdated = async (
         updatedTabId: number,
-        info: chrome.tabs.TabChangeInfo
+        info: any
       ) => {
         if (finished) return;
         if (updatedTabId === tabId && info.status === "complete") {
@@ -635,18 +752,41 @@ const openChatGPTWithPrompt = async (prompt: string): Promise<PeekInjectionStatu
 
 const handlePeekWithChatGPTRequest = async (
   payload: PeekWithChatGPTMessage,
-  sender?: chrome.runtime.MessageSender
+  sender?: any
 ) => {
-  const prompt = buildPeekPrompt(payload, sender);
-  const siteForStorage = sanitizeSite(
-    payload.site || parseSiteFromSender(sender)
-  );
+  const siteFromPayload = sanitizeSite(payload.site);
+  const siteFromSender = sanitizeSite(parseSiteFromSender(sender));
+  const siteForStorage = siteFromPayload || siteFromSender;
+
+  const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
+  const originalUrl = ensureHttpUrl(payload.originalUrl);
+  const trimmedOriginal = payload.originalUrl?.trim() || null;
+
+  if (tabId !== null && originalUrl) {
+    lastNavigatedUrlByTab.set(tabId, originalUrl);
+  }
+
+  const ledgerUrl = tabId !== null ? lastNavigatedUrlByTab.get(tabId) ?? null : null;
+  const fallbackSiteUrl = siteForStorage
+    ? ensureHttpUrl(`https://${siteForStorage}`)
+    : null;
+  const targetUrl = originalUrl || ledgerUrl || fallbackSiteUrl;
+  const snapshot = targetUrl ? await fetchSnapshot(targetUrl) : "";
+
+  const storageUrl = targetUrl || fallbackSiteUrl || trimmedOriginal;
+
+  const prompt = buildPromptForPeek({
+    url:
+      storageUrl ||
+      (siteForStorage ? `https://${siteForStorage}` : "Unknown URL"),
+    snapshot,
+  });
 
   if (chrome.storage?.session?.set) {
     chrome.storage.session.set({
       lastPeekPrompt: prompt,
       lastPeekSite: siteForStorage,
-      lastPeekUrl: payload.originalUrl ?? null,
+      lastPeekUrl: storageUrl,
     });
   }
 

@@ -30,7 +30,7 @@ if (peekBtn) {
   }
   peekBtn.addEventListener("click", () => {
     peekBtn.disabled = true;
-    peekBtn.textContent = "Opening ChatGPT...";
+    peekBtn.textContent = "Collecting page snapshot...";
 
     chrome.runtime.sendMessage(
       {
@@ -55,12 +55,12 @@ if (peekBtn) {
 
         const status = response?.status;
         if (status === "sent") {
-          reset("Prompt sent to ChatGPT", 800);
+          reset("Prompt + snapshot sent to ChatGPT", 800);
           reset(originalLabel, 2500);
           return;
         }
         if (status === "filled") {
-          reset("Prompt ready — review & send", 800);
+          reset("Snapshot ready — review & send", 800);
           reset(originalLabel, 2500);
           return;
         }
