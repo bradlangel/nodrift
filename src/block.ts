@@ -298,6 +298,8 @@ const injectPromptIntoChatGPT = async (
           new Promise<void>((resolve) => setTimeout(resolve, ms));
 
         const selectors = [
+          "#prompt-textarea",
+          '.ProseMirror[contenteditable="true"]',
           '[data-testid="prompt-textarea"]',
           "form textarea",
           "textarea",
@@ -334,19 +336,126 @@ const injectPromptIntoChatGPT = async (
           const dispatchInputEvents = () => {
             const InputEventCtor = view.InputEvent || window.InputEvent || Event;
             const EventCtor = view.Event || window.Event;
+
+            try {
+              const ClipboardEventCtor =
+                (view as any).ClipboardEvent ||
+                (window as any).ClipboardEvent ||
+                Event;
+              const DataTransferCtor =
+                (view as any).DataTransfer ||
+                (window as any).DataTransfer;
+              if (ClipboardEventCtor && DataTransferCtor) {
+                const dataTransfer = new (DataTransferCtor as any)();
+                if (typeof dataTransfer.setData === "function") {
+                  dataTransfer.setData("text/plain", value);
+                }
+                const pasteEvt = createEvent(ClipboardEventCtor, "paste", {
+                  bubbles: true,
+                  cancelable: true,
+                  clipboardData: dataTransfer,
+                });
+                el.dispatchEvent(pasteEvt);
+              }
+            } catch (clipErr) {
+              console.debug("Peek paste event fallback failed", clipErr);
+            }
+
+            const beforeEvt = createEvent(InputEventCtor, "beforeinput", {
+              bubbles: true,
+              cancelable: true,
+              data: value,
+              inputType: "insertFromPaste",
+            });
+            el.dispatchEvent(beforeEvt);
+
             const inputEvt = createEvent(InputEventCtor, "input", {
-                bubbles: true,
-                cancelable: true,
-                data: value,
-                inputType: "insertText",
-              });
+              bubbles: true,
+              cancelable: true,
+              data: value,
+              inputType: "insertText",
+            });
             el.dispatchEvent(inputEvt);
+
             const changeEvt = createEvent(EventCtor, "change", { bubbles: true });
             el.dispatchEvent(changeEvt);
           };
 
           if (isContentEditable) {
-            el.textContent = value;
+            const proseMirrorView =
+              (el as any).pmView ||
+              (el as any).editorView ||
+              (el as any).__pmView;
+
+            if (
+              proseMirrorView &&
+              typeof proseMirrorView.dispatch === "function" &&
+              proseMirrorView.state?.tr
+            ) {
+              try {
+                const { state } = proseMirrorView;
+                const docSize = state.doc?.content?.size ?? state.doc?.nodeSize ?? 0;
+                const transaction = state.tr.insertText(value, 0, docSize);
+                proseMirrorView.dispatch(transaction);
+                if (typeof proseMirrorView.focus === "function") {
+                  proseMirrorView.focus();
+                } else if (typeof el.focus === "function") {
+                  el.focus({ preventScroll: true });
+                }
+                dispatchInputEvents();
+                return true;
+              } catch (pmError) {
+                console.warn("ProseMirror direct dispatch failed", pmError);
+              }
+            }
+
+            if (typeof el.focus === "function") {
+              try {
+                el.focus({ preventScroll: true });
+              } catch {
+                el.focus();
+              }
+            }
+
+            const selection = ownerDoc.getSelection?.();
+            if (selection && ownerDoc.createRange) {
+              const range = ownerDoc.createRange();
+              range.selectNodeContents(el);
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+
+            let inserted = false;
+            const execCommand = ownerDoc.execCommand?.bind(ownerDoc);
+            if (execCommand) {
+              try {
+                execCommand("insertText", false, value);
+                inserted = true;
+              } catch {
+                inserted = false;
+              }
+            }
+
+            if (!inserted) {
+              while (el.firstChild) {
+                el.removeChild(el.firstChild);
+              }
+              const paragraph = ownerDoc.createElement("p");
+              const lines = String(value).split(/\r?\n/);
+              if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) {
+                paragraph.appendChild(ownerDoc.createElement("br"));
+              } else {
+                lines.forEach((line, idx) => {
+                  if (idx > 0) {
+                    paragraph.appendChild(ownerDoc.createElement("br"));
+                  }
+                  paragraph.appendChild(ownerDoc.createTextNode(line));
+                });
+              }
+              paragraph.removeAttribute?.("data-placeholder");
+              el.appendChild(paragraph);
+            }
+
             dispatchInputEvents();
             return true;
           }
@@ -495,7 +604,7 @@ const openChatGPTWithPrompt = async (prompt: string): Promise<PeekInjectionStatu
         if (finished) return;
         if (updatedTabId === tabId && info.status === "complete") {
           const status = await injectPromptIntoChatGPT(tabId, prompt, {
-            autoSend: true,
+            autoSend: false,
           });
           finalize(status);
         }
@@ -513,7 +622,7 @@ const openChatGPTWithPrompt = async (prompt: string): Promise<PeekInjectionStatu
       safetyTimer = setTimeout(async () => {
         if (finished) return;
         const status = await injectPromptIntoChatGPT(tabId, prompt, {
-          autoSend: true,
+          autoSend: false,
         });
         finalize(status);
       }, 5000);

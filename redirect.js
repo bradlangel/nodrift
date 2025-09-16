@@ -60,7 +60,7 @@ if (peekBtn) {
           return;
         }
         if (status === "filled") {
-          reset("Prompt ready in ChatGPT", 800);
+          reset("Prompt ready — review & send", 800);
           reset(originalLabel, 2500);
           return;
         }
