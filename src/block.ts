@@ -1,5 +1,3 @@
-declare const chrome: any;
-
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
   "old.reddit.com",
