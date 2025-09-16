@@ -331,50 +331,291 @@ const stripTags = (value: string): string =>
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">");
 
-const fetchSnapshot = async (url: string): Promise<string> => {
+type SnapshotItem = { title: string; url?: string };
+
+const uniq = <T, K extends string | number>(arr: T[], by: (item: T) => K): T[] => {
+  const seen = new Set<K>();
+  const out: T[] = [];
+  for (const item of arr) {
+    const key = by(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+};
+
+const absolutize = (href: string, base: string): string => {
   try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      credentials: "omit",
-    });
-    const html = await response.text();
+    return new URL(href, base).toString();
+  } catch {
+    return href;
+  }
+};
 
-    const title =
-      (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || "").trim();
-    const metaDesc =
-      (html.match(
-        /<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["']/i
-      )?.[1] || ""
-      ).trim();
+const NAV_WORDS = new Set([
+  "home",
+  "sections",
+  "top stories",
+  "newsletters",
+  "podcasts",
+  "live",
+  "opinion",
+  "subscribe",
+  "sign in",
+  "account",
+  "help",
+  "about",
+  "menu",
+  "search",
+  "latest",
+  "trending",
+  "more",
+  "privacy",
+  "terms",
+  "contact",
+]);
 
-    const headings: string[] = [];
-    const rx = /<h([123])[^>]*>([\s\S]*?)<\/h\1>/gi;
-    let match: RegExpExecArray | null;
-    while ((match = rx.exec(html)) && headings.length < 10) {
-      const text = stripTags(match[2]).trim();
-      if (text) {
-        headings.push(text);
+const extractFromJSONLD = (html: string, baseUrl: string): SnapshotItem[] => {
+  const results: SnapshotItem[] = [];
+  const rx = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = rx.exec(html))) {
+    const raw = match[1]?.trim();
+    if (!raw) continue;
+
+    const candidates: any[] = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        candidates.push(...parsed);
+      } else {
+        candidates.push(parsed);
       }
+    } catch {
+      continue;
     }
 
+    const pushArticle = (node: any) => {
+      if (!node) return;
+      const headline = node?.headline || node?.name || node?.title;
+      const url = node?.url || node?.mainEntityOfPage?.["@id"] || node?.mainEntityOfPage;
+      if (headline && typeof headline === "string") {
+        results.push({
+          title: headline.trim(),
+          url: url ? absolutize(url, baseUrl) : undefined,
+        });
+      }
+    };
+
+    const walk = (node: any) => {
+      if (!node || typeof node !== "object") return;
+      const type = Array.isArray(node["@type"]) ? node["@type"][0] : node["@type"];
+
+      if (type === "ItemList" && Array.isArray(node.itemListElement)) {
+        for (const element of node.itemListElement) {
+          const item = element?.item || element;
+          if (item) pushArticle(item);
+        }
+      } else if (
+        type === "NewsArticle" ||
+        type === "Article" ||
+        type === "CreativeWork"
+      ) {
+        pushArticle(node);
+      } else if (node["@graph"]) {
+        for (const graphNode of node["@graph"]) {
+          walk(graphNode);
+        }
+      }
+    };
+
+    for (const candidate of candidates) {
+      walk(candidate);
+    }
+  }
+
+  return uniq(results, (item) => `${item.title}|${item.url || ""}`).slice(0, 12);
+};
+
+const discoverFeeds = (html: string, baseUrl: string): string[] => {
+  const feeds: string[] = [];
+  const rx = /<link[^>]+rel=["']alternate["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = rx.exec(html))) {
+    const tag = match[0];
+    const type = (tag.match(/type=["']([^"']+)["']/i)?.[1] || "").toLowerCase();
+    if (!/rss|atom|rdf\+xml|application\/xml/.test(type)) continue;
+    const href = tag.match(/href=["']([^"']+)["']/i)?.[1];
+    if (href) feeds.push(absolutize(href, baseUrl));
+  }
+
+  return uniq(feeds, (feed) => feed);
+};
+
+const parseRSSItems = (xml: string): SnapshotItem[] => {
+  const items: SnapshotItem[] = [];
+
+  const itemRx = /<item>[\s\S]*?<\/item>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = itemRx.exec(xml))) {
+    const block = match[0];
+    const title =
+      (block.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i)?.[1] || "").trim();
+    const link =
+      (block.match(/<link>([\s\S]*?)<\/link>/i)?.[1] ||
+        block.match(/<link\s+[^>]*href=["']([^"']+)["'][^>]*\/?/i)?.[1] ||
+        "").trim();
+    if (title && !NAV_WORDS.has(title.toLowerCase())) {
+      items.push({ title: stripTags(title), url: link || undefined });
+    }
+  }
+
+  if (items.length === 0) {
+    const entryRx = /<entry>[\s\S]*?<\/entry>/gi;
+    while ((match = entryRx.exec(xml))) {
+      const block = match[0];
+      const title =
+        (block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i)?.[1] || "").trim();
+      const link = (block.match(/<link[^>]+href=["']([^"']+)["']/i)?.[1] || "").trim();
+      if (title && !NAV_WORDS.has(title.toLowerCase())) {
+        items.push({ title: stripTags(title), url: link || undefined });
+      }
+    }
+  }
+
+  return uniq(items, (item) => `${item.title}|${item.url || ""}`).slice(0, 12);
+};
+
+const discoverAmp = (html: string, baseUrl: string): string[] => {
+  const candidates: string[] = [];
+
+  const link = html.match(/<link[^>]+rel=["']amphtml["'][^>]*href=["']([^"']+)["']/i)?.[1];
+  if (link) {
+    candidates.push(absolutize(link, baseUrl));
+  }
+
+  try {
+    const parsed = new URL(baseUrl);
+    const ampCandidates = [
+      baseUrl.includes("?") ? `${baseUrl}&amp=1` : `${baseUrl}?amp=1`,
+      baseUrl.includes("?")
+        ? `${baseUrl}&outputType=amp`
+        : `${baseUrl}?outputType=amp`,
+      `${parsed.origin}${parsed.pathname.replace(/\/?$/, "/amp")}${parsed.search || ""}`,
+    ];
+    candidates.push(...ampCandidates);
+  } catch {
+    // ignore URL parsing issues
+  }
+
+  return uniq(candidates, (candidate) => candidate);
+};
+
+const extractAnchorsFromMain = (html: string): SnapshotItem[] => {
+  const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+  const chunk = mainMatch ? mainMatch[1] : html;
+
+  const items: SnapshotItem[] = [];
+  const anchorRx = /<a\s+[^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = anchorRx.exec(chunk))) {
+    const raw = stripTags(match[1]).replace(/\s+/g, " ").trim();
+    if (!raw) continue;
+    const lower = raw.toLowerCase();
+    if (NAV_WORDS.has(lower)) continue;
+    if (raw.length < 25 || raw.length > 160) continue;
+    items.push({ title: raw });
+  }
+
+  return uniq(items, (item) => item.title.toLowerCase()).slice(0, 12);
+};
+
+const fetchText = async (url: string): Promise<string> => {
+  const response = await fetch(url, {
+    redirect: "follow",
+    credentials: "omit",
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+    referrerPolicy: "no-referrer",
+  });
+  return response.text();
+};
+
+const fetchSnapshot = async (url: string): Promise<string> => {
+  const baseUrl = url;
+  let html = "";
+
+  try {
+    html = await fetchText(url);
+  } catch (error) {
+    console.warn("Failed to fetch HTML for snapshot", error);
+  }
+
+  let items: SnapshotItem[] = [];
+
+  if (html) {
+    items = extractFromJSONLD(html, baseUrl);
+  }
+
+  if (items.length < 3 && html) {
+    const feeds = discoverFeeds(html, baseUrl);
+    if (feeds.length) {
+      try {
+        const xml = await fetchText(feeds[0]);
+        const rssItems = parseRSSItems(xml);
+        if (rssItems.length) {
+          items = rssItems;
+        }
+      } catch (error) {
+        console.warn("Failed to fetch RSS feed for snapshot", error);
+      }
+    }
+  }
+
+  if (items.length < 3 && html) {
+    const ampCandidates = discoverAmp(html, baseUrl);
+    for (const ampUrl of ampCandidates) {
+      try {
+        const ampHtml = await fetchText(ampUrl);
+        const ampItems = extractFromJSONLD(ampHtml, ampUrl);
+        items = ampItems.length >= 3 ? ampItems : extractAnchorsFromMain(ampHtml);
+        if (items.length) {
+          break;
+        }
+      } catch (error) {
+        console.warn("Failed to fetch AMP page for snapshot", error);
+      }
+    }
+  }
+
+  if (items.length < 3 && html) {
+    items = extractAnchorsFromMain(html);
+  }
+
+  if (items.length === 0) {
+    const title = (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || "").trim();
+    const metaDesc =
+      (html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] || "").trim();
     const parts: string[] = [];
     if (title) parts.push(`Title: ${title}`);
     if (metaDesc) parts.push(`Description: ${metaDesc}`);
-    if (headings.length) {
-      const compact = headings
-        .slice(0, 8)
-        .map((heading) => heading.replace(/\s+/g, " ").slice(0, 140))
-        .filter(Boolean);
-      if (compact.length) {
-        parts.push(`Top headings:\n- ${compact.join("\n- ")}`);
-      }
-    }
-
     return parts.join("\n");
-  } catch (error) {
-    console.warn("Failed to fetch snapshot for peek", error);
-    return "";
   }
+
+  const bullets = items
+    .map((item) => {
+      const text = item.title.replace(/\s+/g, " ").trim();
+      const targetUrl = item.url ? ` (${item.url})` : "";
+      return `- ${text}${targetUrl}`;
+    })
+    .slice(0, 10)
+    .join("\n");
+
+  return `Top items:\n${bullets}`;
 };
 
 const buildPromptForPeek = ({
