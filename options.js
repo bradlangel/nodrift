@@ -9,6 +9,7 @@ const DEFAULT_BLOCKED_SITES = [
 
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
+const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 
 document.addEventListener('DOMContentLoaded', () => {
   const textarea = document.getElementById('sites');
@@ -16,6 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const minutesInput = document.getElementById('temp-allow-minutes');
   const redirectInput = document.getElementById('redirect-url');
   const btnTextInput = document.getElementById('redirect-btn-text');
+  const grayscaleCheckbox = document.getElementById('grayscale-temp-allow');
+  if (!(grayscaleCheckbox instanceof HTMLInputElement)) {
+    return;
+  }
 
   chrome.storage.sync.get(
     {
@@ -23,12 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
       tempAllowMinutes: 30,
       redirectUrl: DEFAULT_REDIRECT_URL,
       redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT,
+      grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
     },
     (data) => {
       textarea.value = data.blockedSites.join('\n');
       minutesInput.value = String(data.tempAllowMinutes);
       redirectInput.value = data.redirectUrl;
       btnTextInput.value = data.redirectBtnText;
+      grayscaleCheckbox.checked = Boolean(data.grayscaleOnTemporaryAllow);
     }
   );
 
@@ -40,11 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const minutes = parseInt(minutesInput.value, 10) || 30;
     const redirectUrl = redirectInput.value.trim();
     const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;
+    const grayscaleOnTemporaryAllow = Boolean(grayscaleCheckbox.checked);
     chrome.storage.sync.set({
       blockedSites: sites,
       tempAllowMinutes: minutes,
       redirectUrl,
       redirectBtnText,
+      grayscaleOnTemporaryAllow,
     });
   });
 });

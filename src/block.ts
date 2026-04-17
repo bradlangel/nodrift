@@ -10,6 +10,19 @@ const DEFAULT_BLOCKED_SITES = [
 let blockedSites = [...DEFAULT_BLOCKED_SITES];
 let tempAllowMinutes: number | null = null;
 
+const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
+let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
+
+const GRAYSCALE_STORAGE_KEY = "temporarilyAllowedGrayscaleHosts";
+const GRAYSCALE_CSS = "html { filter: grayscale(1) !important; }";
+const grayscaleHosts = new Map<string, number>();
+
+const normalizeHost = (host?: string | null): string | null => {
+  if (!host) return null;
+  const trimmed = host.trim().toLowerCase();
+  return trimmed || null;
+};
+
 const EXTENSION_URL_PREFIX = `chrome-extension://${chrome.runtime.id}/`;
 const lastNavigatedUrlByTab = new Map<number, string>();
 
@@ -104,6 +117,14 @@ if (chrome.webNavigation?.onCommitted) {
   chrome.webNavigation.onCommitted.addListener((details: any) => {
     if (details?.frameId !== 0) return;
     recordLastNavigatedUrl(details.tabId, details.url);
+    maybeApplyGrayscaleForUrl(details.tabId, details.url);
+  });
+}
+
+if (chrome.webNavigation?.onCompleted) {
+  chrome.webNavigation.onCompleted.addListener((details: any) => {
+    if (details?.frameId !== 0) return;
+    maybeApplyGrayscaleForUrl(details.tabId, details.url);
   });
 }
 
@@ -186,6 +207,198 @@ const withLastErrorLog =
     next?.();
   };
 
+const grayscaleStorageGet = (
+  defaults: Record<string, unknown>,
+  callback: (items: Record<string, unknown>) => void
+) => {
+  if (chrome.storage?.session?.get) {
+    chrome.storage.session.get(defaults, callback);
+  } else {
+    chrome.storage.local.get(defaults, callback);
+  }
+};
+
+const grayscaleStorageSet = (
+  items: Record<string, unknown>,
+  callback?: () => void
+) => {
+  if (chrome.storage?.session?.set) {
+    chrome.storage.session.set(items, callback);
+  } else {
+    chrome.storage.local.set(items, callback);
+  }
+};
+
+const persistGrayscaleHosts = () => {
+  const entries = Array.from(grayscaleHosts.entries());
+  grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: entries });
+};
+
+const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
+  const ensured = ensureHttpUrl(rawUrl);
+  if (!ensured) return;
+
+  let host: string;
+  try {
+    host = new URL(ensured).hostname.toLowerCase();
+  } catch {
+    return;
+  }
+
+  const now = Date.now();
+  let shouldApply = false;
+  for (const [storedHost, expiresAt] of grayscaleHosts.entries()) {
+    if (expiresAt <= now) continue;
+    if (host === storedHost || host.endsWith(`.${storedHost}`)) {
+      shouldApply = true;
+      break;
+    }
+  }
+
+  if (!chrome.scripting) return;
+  const target = { tabId, allFrames: true };
+
+  if (shouldApply && chrome.scripting.insertCSS) {
+    chrome.scripting.insertCSS(
+      { target, css: GRAYSCALE_CSS },
+      withLastErrorLog("insertCSS(grayscale)")
+    );
+    return;
+  }
+
+  if (!shouldApply && chrome.scripting.removeCSS) {
+    chrome.scripting.removeCSS(
+      { target, css: GRAYSCALE_CSS },
+      withLastErrorLog("removeCSS(grayscale)")
+    );
+  }
+};
+
+const syncGrayscaleForHostTabs = (host: string) => {
+  if (!chrome.tabs?.query) return;
+  chrome.tabs.query({ url: [`*://${host}/*`, `*://*.${host}/*`] }, (tabs) => {
+    if (chrome.runtime.lastError) {
+      console.warn("[tabs.query(sync grayscale)]", chrome.runtime.lastError.message);
+      return;
+    }
+    tabs.forEach((tab) => {
+      if (typeof tab.id === "number") {
+        syncGrayscaleForUrl(tab.id, tab.url);
+      }
+    });
+  });
+};
+
+const removeGrayscaleFromAllTabs = () => {
+  if (!chrome.tabs?.query || !chrome.scripting?.removeCSS) return;
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+      if (typeof tab.id !== "number") return;
+      chrome.scripting?.removeCSS?.(
+        { target: { tabId: tab.id, allFrames: true }, css: GRAYSCALE_CSS },
+        withLastErrorLog("removeCSS(grayscale all tabs)")
+      );
+    });
+  });
+};
+
+const pruneExpiredGrayscaleHosts = () => {
+  const now = Date.now();
+  let changed = false;
+  for (const [host, expiresAt] of grayscaleHosts.entries()) {
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+      grayscaleHosts.delete(host);
+      syncGrayscaleForHostTabs(host);
+      changed = true;
+    }
+  }
+  if (changed) {
+    persistGrayscaleHosts();
+  }
+};
+
+const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
+  if (!grayscaleOnTemporaryAllow) return;
+  if (hosts.length === 0) return;
+  pruneExpiredGrayscaleHosts();
+  const normalizedMinutes = Number.isFinite(minutes) ? Math.max(minutes, 1) : 1;
+  const durationMs = normalizedMinutes * 60 * 1000;
+  const expiresAt = Date.now() + durationMs;
+  let changed = false;
+  for (const rawHost of hosts) {
+    const host = normalizeHost(rawHost);
+    if (!host) continue;
+    const existing = grayscaleHosts.get(host) ?? 0;
+    if (existing < expiresAt) {
+      grayscaleHosts.set(host, expiresAt);
+      changed = true;
+    }
+    syncGrayscaleForHostTabs(host);
+  }
+  if (changed) {
+    persistGrayscaleHosts();
+  }
+};
+
+const clearGrayscaleHosts = () => {
+  if (grayscaleHosts.size === 0) {
+    removeGrayscaleFromAllTabs();
+    return;
+  }
+  grayscaleHosts.clear();
+  persistGrayscaleHosts();
+  removeGrayscaleFromAllTabs();
+};
+
+const loadGrayscalePreference = () => {
+  chrome.storage.sync.get(
+    { grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW },
+    (data) => {
+      grayscaleOnTemporaryAllow = Boolean(data.grayscaleOnTemporaryAllow);
+      if (!grayscaleOnTemporaryAllow) {
+        clearGrayscaleHosts();
+      }
+    }
+  );
+};
+
+const loadGrayscaleHosts = () => {
+  grayscaleStorageGet({ [GRAYSCALE_STORAGE_KEY]: [] }, (items) => {
+    const rawEntries = Array.isArray(items?.[GRAYSCALE_STORAGE_KEY])
+      ? (items[GRAYSCALE_STORAGE_KEY] as unknown[])
+      : [];
+    grayscaleHosts.clear();
+    const now = Date.now();
+    let changed = false;
+    for (const entry of rawEntries) {
+      if (!Array.isArray(entry) || entry.length !== 2) {
+        changed = true;
+        continue;
+      }
+      const [rawHost, expiresAt] = entry as [unknown, unknown];
+      const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
+      if (!host || typeof expiresAt !== "number") {
+        changed = true;
+        continue;
+      }
+      if (expiresAt > now) {
+        grayscaleHosts.set(host, expiresAt);
+      } else {
+        changed = true;
+      }
+    }
+    if (changed) {
+      persistGrayscaleHosts();
+    }
+  });
+};
+
+const maybeApplyGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
+  if (!grayscaleOnTemporaryAllow) return;
+  pruneExpiredGrayscaleHosts();
+  syncGrayscaleForUrl(tabId, rawUrl);
+};
+
 const refreshRules = () => {
   chrome.declarativeNetRequest.getDynamicRules((rules) => {
     const ids = rules.map((r) => r.id);
@@ -214,6 +427,8 @@ const loadBlockedSites = () => {
 
 loadBlockedSites();
 getTempAllowMinutes();
+loadGrayscalePreference();
+loadGrayscaleHosts();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
@@ -225,12 +440,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (changes.tempAllowMinutes) {
       tempAllowMinutes = changes.tempAllowMinutes.newValue;
     }
+    if (changes.grayscaleOnTemporaryAllow) {
+      grayscaleOnTemporaryAllow = Boolean(
+        changes.grayscaleOnTemporaryAllow.newValue
+      );
+      if (!grayscaleOnTemporaryAllow) {
+        clearGrayscaleHosts();
+      }
+    }
   }
 });
 
 // Temporarily allow one or more rules (removes rules & sets timers to restore).
 const allowRulesTemporarily = (ids: number[], minutes: number) => {
   if (ids.length === 0) return;
+  const hostsForIds = ids
+    .map((id) => blockedSites[id - 1])
+    .filter((host): host is string => typeof host === "string" && !!host);
+  scheduleGrayscaleForHosts(hostsForIds, minutes);
   chrome.declarativeNetRequest.updateDynamicRules(
     { removeRuleIds: ids },
     withLastErrorLog("removeRuleIds")
@@ -267,6 +494,12 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
   chrome.alarms.clear(`restore-${id}`);
   const site = blockedSites[id - 1];
   if (!site) return;
+  const normalizedHost = normalizeHost(site);
+  if (normalizedHost && grayscaleHosts.has(normalizedHost)) {
+    grayscaleHosts.delete(normalizedHost);
+    persistGrayscaleHosts();
+    syncGrayscaleForHostTabs(normalizedHost);
+  }
 
   chrome.declarativeNetRequest.updateDynamicRules(
     { addRules: [buildRule(site, id)] },
@@ -289,6 +522,7 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
 
 // NEW: Re-block ALL sites — clears alarms, clears session storage, and atomically resets every rule.
 const reblockAllNow = (tabId?: number, currentUrl?: string) => {
+  clearGrayscaleHosts();
   chrome.alarms.clearAll(
     withLastErrorLog("alarms.clearAll", () => {
       // Best-effort: clear any session storage keys we may have used.
@@ -1115,6 +1349,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     const id = parseInt(alarm.name.split("-")[1], 10);
     const site = blockedSites[id - 1];
     if (site) {
+      const normalizedHost = normalizeHost(site);
+      if (normalizedHost && grayscaleHosts.has(normalizedHost)) {
+        grayscaleHosts.delete(normalizedHost);
+        persistGrayscaleHosts();
+        syncGrayscaleForHostTabs(normalizedHost);
+      }
       chrome.declarativeNetRequest.updateDynamicRules(
         { addRules: [buildRule(site, id)] },
         withLastErrorLog("alarm addRules")
