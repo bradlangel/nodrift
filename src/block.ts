@@ -341,12 +341,13 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
 };
 
 const clearGrayscaleHosts = () => {
-  if (grayscaleHosts.size === 0) {
-    removeGrayscaleFromAllTabs();
-    return;
-  }
+  const hadHosts = grayscaleHosts.size > 0;
   grayscaleHosts.clear();
-  persistGrayscaleHosts();
+  if (hadHosts) {
+    persistGrayscaleHosts();
+  } else {
+    grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: [] });
+  }
   removeGrayscaleFromAllTabs();
 };
 
