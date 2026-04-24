@@ -9,6 +9,8 @@ const DEFAULT_BLOCKED_SITES = [
 
 let blockedSites = [...DEFAULT_BLOCKED_SITES];
 let tempAllowMinutes: number | null = null;
+let blockedSitesLoaded = false;
+let temporaryAllowStateLoaded = false;
 
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
@@ -198,6 +200,24 @@ const buildRules = (sites: string[]): any[] =>
 
 const allRuleIds = () => blockedSites.map((_, idx) => idx + 1);
 
+const activeTemporaryAllowRuleIds = (): Set<number> => {
+  const ids = new Set<number>();
+  for (let i = 0; i < blockedSites.length; i++) {
+    if (isHostTemporarilyAllowed(blockedSites[i])) {
+      ids.add(i + 1);
+    }
+  }
+  return ids;
+};
+
+const buildRulesForCurrentState = (): any[] => {
+  const allowedIds = activeTemporaryAllowRuleIds();
+  return blockedSites.flatMap((site, idx) => {
+    const id = idx + 1;
+    return allowedIds.has(id) ? [] : [buildRule(site, id)];
+  });
+};
+
 // ---------- Utilities ----------
 
 console.log("Website blocker: Service Worker Loaded");
@@ -368,6 +388,7 @@ const pruneExpiredGrayscaleHosts = () => {
   if (changed) {
     persistGrayscaleHosts();
     refreshBadgeForActiveTab();
+    refreshRulesIfReady();
   }
 };
 
@@ -405,6 +426,7 @@ const clearGrayscaleHosts = () => {
   }
   removeGrayscaleFromAllTabs();
   refreshBadgeForActiveTab();
+  refreshRulesIfReady();
 };
 
 const loadGrayscalePreference = () => {
@@ -447,7 +469,9 @@ const loadGrayscaleHosts = () => {
     if (changed) {
       persistGrayscaleHosts();
     }
+    temporaryAllowStateLoaded = true;
     refreshBadgeForActiveTab();
+    refreshRulesIfReady();
   });
 };
 
@@ -461,24 +485,30 @@ const refreshRules = () => {
   chrome.declarativeNetRequest.getDynamicRules((rules) => {
     const ids = rules.map((r) => r.id);
     chrome.declarativeNetRequest.updateDynamicRules(
-      { removeRuleIds: ids, addRules: buildRules(blockedSites) },
+      { removeRuleIds: ids, addRules: buildRulesForCurrentState() },
       withLastErrorLog("refreshRules")
     );
   });
 };
 
+const refreshRulesIfReady = () => {
+  if (!blockedSitesLoaded || !temporaryAllowStateLoaded) return;
+  refreshRules();
+};
+
 const loadBlockedSites = () => {
   chrome.storage.sync.get({ blockedSites: DEFAULT_BLOCKED_SITES }, (data) => {
     blockedSites = data.blockedSites;
+    blockedSitesLoaded = true;
 
     chrome.storage.local.get({ cachedBlockedSites: null }, (cache) => {
       const cached = cache.cachedBlockedSites;
       const changed =
         !cached || JSON.stringify(cached) !== JSON.stringify(blockedSites);
       if (changed) {
-        refreshRules();
         chrome.storage.local.set({ cachedBlockedSites: blockedSites });
       }
+      refreshRulesIfReady();
     });
   });
 };
@@ -493,6 +523,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
     if (changes.blockedSites) {
       blockedSites = changes.blockedSites.newValue;
+      blockedSitesLoaded = true;
       refreshRules();
       chrome.storage.local.set({ cachedBlockedSites: blockedSites });
     }
@@ -546,6 +577,40 @@ const temporarilyAllowById = async (id: number, minutes?: number) => {
   const site = blockedSites[id - 1];
   if (!site) return;
   await temporarilyAllow(site, minutes);
+};
+
+const getRuleIdFromUrl = (url: URL): number | null => {
+  const rawRuleId = url.searchParams.get("rid");
+  if (!rawRuleId) return null;
+  const ruleId = Number(rawRuleId);
+  return Number.isInteger(ruleId) && ruleId > 0 ? ruleId : null;
+};
+
+const getTemporaryAllowHostFromUrl = (url: URL): string | null => {
+  const siteParam = normalizeHost(url.searchParams.get("site"));
+  if (siteParam) return siteParam;
+  return parseHostnameFromUrl(url.toString());
+};
+
+const temporarilyAllowFromUrl = async (rawUrl?: string | null): Promise<boolean> => {
+  if (!rawUrl) return false;
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+
+  const ruleId = getRuleIdFromUrl(url);
+  if (ruleId !== null) {
+    await temporarilyAllowById(ruleId);
+    return true;
+  }
+
+  const host = getTemporaryAllowHostFromUrl(url);
+  if (!host) return false;
+  await temporarilyAllow(host);
+  return true;
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
@@ -1381,6 +1446,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  if (message?.type === "temporarily-allow-tab") {
+    temporarilyAllowFromUrl(message.url)
+      .then((ok) => sendResponse({ ok }))
+      .catch((error) => {
+        console.warn("temporarily-allow-tab request failed", error);
+        sendResponse({ ok: false, error: error?.message ?? String(error) });
+      });
+    return true;
+  }
+  if (message?.type === "reblock-all-now") {
+    reblockAllNow(message.tabId, message.url);
+    sendResponse({ ok: true });
+    return undefined;
+  }
   return undefined;
 });
 
@@ -1427,16 +1506,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (!tab?.url) return;
 
-  const u = new URL(tab.url);
-
   // Temporarily allow flow (unchanged; still works off rid or hostname fallback).
   if (info.menuItemId === "temporarily-allow") {
-    const rid = Number(u.searchParams.get("rid"));
-    if (Number.isFinite(rid)) {
-      temporarilyAllowById(rid);
-    } else {
-      temporarilyAllow(u.hostname);
-    }
+    temporarilyAllowFromUrl(tab.url);
     return;
   }
 

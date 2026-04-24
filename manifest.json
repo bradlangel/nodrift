@@ -21,6 +21,11 @@
     "service_worker": "dist/block.js"
   },
 
+  "action": {
+    "default_title": "Website Blocker",
+    "default_popup": "popup.html"
+  },
+
   "options_page": "options.html",
 
   "web_accessible_resources": [{
