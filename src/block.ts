@@ -16,6 +16,8 @@ let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
 const GRAYSCALE_STORAGE_KEY = "temporarilyAllowedGrayscaleHosts";
 const GRAYSCALE_CSS = "html { filter: grayscale(1) !important; }";
 const grayscaleHosts = new Map<string, number>();
+const TEMP_ALLOW_BADGE_TEXT = "TEMP";
+const TEMP_ALLOW_BADGE_COLOR = "#f59e0b";
 
 const normalizeHost = (host?: string | null): string | null => {
   if (!host) return null;
@@ -51,6 +53,16 @@ const ensureHttpUrl = (value?: string | null): string | null => {
   }
 
   return null;
+};
+
+const parseHostnameFromUrl = (rawUrl?: string | null): string | null => {
+  const ensured = ensureHttpUrl(rawUrl);
+  if (!ensured) return null;
+  try {
+    return new URL(ensured).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 };
 
 const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
@@ -91,19 +103,27 @@ chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: any, tab?: any) =>
   }
   if (changeInfo?.url) {
     recordLastNavigatedUrl(tabId, changeInfo.url);
+    if (tab?.active) refreshBadgeForActiveTab();
     return;
   }
   if (changeInfo?.status === "complete" && tab?.url) {
     recordLastNavigatedUrl(tabId, tab.url);
+    if (tab?.active) refreshBadgeForActiveTab();
     return;
   }
   if (!changeInfo?.status && tab?.url) {
     recordLastNavigatedUrl(tabId, tab.url);
   }
+  if (tab?.active) refreshBadgeForActiveTab();
 });
 
 chrome.tabs.onRemoved.addListener((tabId: number) => {
   lastNavigatedUrlByTab.delete(tabId);
+  refreshBadgeForActiveTab();
+});
+
+chrome.tabs.onActivated.addListener(() => {
+  refreshBadgeForActiveTab();
 });
 
 if (chrome.webNavigation?.onBeforeNavigate) {
@@ -234,26 +254,59 @@ const persistGrayscaleHosts = () => {
   grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: entries });
 };
 
-const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
-  const ensured = ensureHttpUrl(rawUrl);
-  if (!ensured) return;
-
-  let host: string;
-  try {
-    host = new URL(ensured).hostname.toLowerCase();
-  } catch {
-    return;
-  }
-
+const isHostTemporarilyAllowed = (host: string): boolean => {
   const now = Date.now();
-  let shouldApply = false;
   for (const [storedHost, expiresAt] of grayscaleHosts.entries()) {
     if (expiresAt <= now) continue;
     if (host === storedHost || host.endsWith(`.${storedHost}`)) {
-      shouldApply = true;
-      break;
+      return true;
     }
   }
+  return false;
+};
+
+const setTemporaryAllowBadge = (enabled: boolean, host?: string | null) => {
+  if (!chrome.action?.setBadgeText || !chrome.action?.setTitle) return;
+  if (enabled) {
+    chrome.action.setBadgeText({ text: TEMP_ALLOW_BADGE_TEXT });
+    chrome.action.setBadgeBackgroundColor?.({ color: TEMP_ALLOW_BADGE_COLOR });
+    chrome.action.setTitle({
+      title: host
+        ? `Website Blocker: temporary allow active for ${host}`
+        : "Website Blocker: temporary allow active",
+    });
+    return;
+  }
+
+  chrome.action.setBadgeText({ text: "" });
+  chrome.action.setTitle({ title: "Website Blocker" });
+};
+
+const refreshBadgeForActiveTab = () => {
+  if (!chrome.tabs?.query) return;
+  pruneExpiredGrayscaleHosts();
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+    const activeTab = tabs?.[0];
+    if (!activeTab) {
+      setTemporaryAllowBadge(false);
+      return;
+    }
+
+    const host = parseHostnameFromUrl(activeTab.url);
+    if (!host) {
+      setTemporaryAllowBadge(false);
+      return;
+    }
+
+    setTemporaryAllowBadge(isHostTemporarilyAllowed(host), host);
+  });
+};
+
+const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
+  const host = parseHostnameFromUrl(rawUrl);
+  if (!host) return;
+
+  const shouldApply = isHostTemporarilyAllowed(host);
 
   if (!chrome.scripting) return;
   const target = { tabId, allFrames: true };
@@ -314,6 +367,7 @@ const pruneExpiredGrayscaleHosts = () => {
   }
   if (changed) {
     persistGrayscaleHosts();
+    refreshBadgeForActiveTab();
   }
 };
 
@@ -337,6 +391,7 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
   }
   if (changed) {
     persistGrayscaleHosts();
+    refreshBadgeForActiveTab();
   }
 };
 
@@ -349,6 +404,7 @@ const clearGrayscaleHosts = () => {
     grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: [] });
   }
   removeGrayscaleFromAllTabs();
+  refreshBadgeForActiveTab();
 };
 
 const loadGrayscalePreference = () => {
@@ -391,6 +447,7 @@ const loadGrayscaleHosts = () => {
     if (changed) {
       persistGrayscaleHosts();
     }
+    refreshBadgeForActiveTab();
   });
 };
 
@@ -430,6 +487,7 @@ loadBlockedSites();
 getTempAllowMinutes();
 loadGrayscalePreference();
 loadGrayscaleHosts();
+refreshBadgeForActiveTab();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
