@@ -17,8 +17,12 @@ let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
 
 const GRAYSCALE_STORAGE_KEY = "temporarilyAllowedGrayscaleHosts";
 const GRAYSCALE_CSS = "html { filter: grayscale(1) !important; }";
-const grayscaleHosts = new Map<string, number>();
-const TEMP_ALLOW_BADGE_TEXT = "TEMP";
+type TemporaryAllowWindow = {
+  expiresAt: number;
+  startedAt: number;
+};
+const grayscaleHosts = new Map<string, TemporaryAllowWindow>();
+const BADGE_REFRESH_ALARM = "refresh-temp-allow-badge";
 const TEMP_ALLOW_BADGE_COLOR = "#f59e0b";
 
 const normalizeHost = (host?: string | null): string | null => {
@@ -270,14 +274,18 @@ const grayscaleStorageSet = (
 };
 
 const persistGrayscaleHosts = () => {
-  const entries = Array.from(grayscaleHosts.entries());
+  const entries = Array.from(grayscaleHosts.entries()).map(([host, window]) => [
+    host,
+    window.expiresAt,
+    window.startedAt,
+  ]);
   grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: entries });
 };
 
 const isHostTemporarilyAllowed = (host: string): boolean => {
   const now = Date.now();
-  for (const [storedHost, expiresAt] of grayscaleHosts.entries()) {
-    if (expiresAt <= now) continue;
+  for (const [storedHost, window] of grayscaleHosts.entries()) {
+    if (window.expiresAt <= now) continue;
     if (host === storedHost || host.endsWith(`.${storedHost}`)) {
       return true;
     }
@@ -285,14 +293,38 @@ const isHostTemporarilyAllowed = (host: string): boolean => {
   return false;
 };
 
+const getTemporaryAllowWindowForHost = (
+  host: string
+): TemporaryAllowWindow | null => {
+  const now = Date.now();
+  let bestMatchLength = -1;
+  let bestWindow: TemporaryAllowWindow | null = null;
+  for (const [storedHost, window] of grayscaleHosts.entries()) {
+    if (window.expiresAt <= now) continue;
+    if (host !== storedHost && !host.endsWith(`.${storedHost}`)) continue;
+    if (storedHost.length <= bestMatchLength) continue;
+    bestMatchLength = storedHost.length;
+    bestWindow = window;
+  }
+  return bestWindow;
+};
+
 const setTemporaryAllowBadge = (enabled: boolean, host?: string | null) => {
   if (!chrome.action?.setBadgeText || !chrome.action?.setTitle) return;
   if (enabled) {
-    chrome.action.setBadgeText({ text: TEMP_ALLOW_BADGE_TEXT });
+    const window = host ? getTemporaryAllowWindowForHost(host) : null;
+    const elapsedMinutes = window
+      ? Math.max(Math.floor((Date.now() - window.startedAt) / 60000), 0)
+      : null;
+    chrome.action.setBadgeText({
+      text: elapsedMinutes === null ? "" : String(elapsedMinutes),
+    });
     chrome.action.setBadgeBackgroundColor?.({ color: TEMP_ALLOW_BADGE_COLOR });
     chrome.action.setTitle({
       title: host
-        ? `Website Blocker: temporary allow active for ${host}`
+        ? elapsedMinutes === null
+          ? `Website Blocker: temporary allow active for ${host}`
+          : `Website Blocker: temporary allow active for ${host} (${elapsedMinutes} whole minutes)`
         : "Website Blocker: temporary allow active",
     });
     return;
@@ -378,8 +410,8 @@ const removeGrayscaleFromAllTabs = () => {
 const pruneExpiredGrayscaleHosts = () => {
   const now = Date.now();
   let changed = false;
-  for (const [host, expiresAt] of grayscaleHosts.entries()) {
-    if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+  for (const [host, window] of grayscaleHosts.entries()) {
+    if (!Number.isFinite(window.expiresAt) || window.expiresAt <= now) {
       grayscaleHosts.delete(host);
       syncGrayscaleForHostTabs(host);
       changed = true;
@@ -398,14 +430,15 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
   pruneExpiredGrayscaleHosts();
   const normalizedMinutes = Number.isFinite(minutes) ? Math.max(minutes, 1) : 1;
   const durationMs = normalizedMinutes * 60 * 1000;
-  const expiresAt = Date.now() + durationMs;
+  const startedAt = Date.now();
+  const expiresAt = startedAt + durationMs;
   let changed = false;
   for (const rawHost of hosts) {
     const host = normalizeHost(rawHost);
     if (!host) continue;
-    const existing = grayscaleHosts.get(host) ?? 0;
-    if (existing < expiresAt) {
-      grayscaleHosts.set(host, expiresAt);
+    const existing = grayscaleHosts.get(host);
+    if (!existing || existing.expiresAt < expiresAt) {
+      grayscaleHosts.set(host, { expiresAt, startedAt });
       changed = true;
     }
     syncGrayscaleForHostTabs(host);
@@ -450,18 +483,28 @@ const loadGrayscaleHosts = () => {
     const now = Date.now();
     let changed = false;
     for (const entry of rawEntries) {
-      if (!Array.isArray(entry) || entry.length !== 2) {
+      if (!Array.isArray(entry) || (entry.length !== 2 && entry.length !== 3)) {
         changed = true;
         continue;
       }
-      const [rawHost, expiresAt] = entry as [unknown, unknown];
+      const [rawHost, rawExpiresAt, rawStartedAt] = entry as [
+        unknown,
+        unknown,
+        unknown?
+      ];
       const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
-      if (!host || typeof expiresAt !== "number") {
+      if (!host || typeof rawExpiresAt !== "number") {
         changed = true;
         continue;
       }
+      const expiresAt = rawExpiresAt;
+      const startedAt =
+        typeof rawStartedAt === "number" && Number.isFinite(rawStartedAt)
+          ? rawStartedAt
+          : expiresAt;
       if (expiresAt > now) {
-        grayscaleHosts.set(host, expiresAt);
+        grayscaleHosts.set(host, { expiresAt, startedAt });
+        if (entry.length !== 3) changed = true;
       } else {
         changed = true;
       }
@@ -518,6 +561,7 @@ getTempAllowMinutes();
 loadGrayscalePreference();
 loadGrayscaleHosts();
 refreshBadgeForActiveTab();
+chrome.alarms.create(BADGE_REFRESH_ALARM, { periodInMinutes: 1 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
@@ -623,6 +667,7 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
     grayscaleHosts.delete(normalizedHost);
     persistGrayscaleHosts();
     syncGrayscaleForHostTabs(normalizedHost);
+    refreshBadgeForActiveTab();
   }
 
   chrome.declarativeNetRequest.updateDynamicRules(
@@ -1483,6 +1528,12 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Restore rules when the timer fires.
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === BADGE_REFRESH_ALARM) {
+    pruneExpiredGrayscaleHosts();
+    refreshBadgeForActiveTab();
+    return;
+  }
+
   if (alarm.name.startsWith("restore-")) {
     const id = parseInt(alarm.name.split("-")[1], 10);
     const site = blockedSites[id - 1];
@@ -1492,6 +1543,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         grayscaleHosts.delete(normalizedHost);
         persistGrayscaleHosts();
         syncGrayscaleForHostTabs(normalizedHost);
+        refreshBadgeForActiveTab();
       }
       chrome.declarativeNetRequest.updateDynamicRules(
         { addRules: [buildRule(site, id)] },
