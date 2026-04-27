@@ -70,9 +70,28 @@ const scheduleBadgeRefreshAlarm = () => {
 
 
 const EXTENSION_URL_PREFIX = `chrome-extension://${chrome.runtime.id}/`;
-const lastNavigatedUrlByTab = new Map<number, string>();
+type LastNavigatedUrlEntry = {
+  url: string;
+  updatedAt: number;
+  blockedAttemptRecordedAt: number | null;
+};
+const lastNavigatedUrlByTab = new Map<number, LastNavigatedUrlEntry>();
 
 
+const setLastNavigatedUrlForTab = (
+  tabId: number,
+  url: string,
+  resetBlockedAttempt = true
+) => {
+  const previousEntry = lastNavigatedUrlByTab.get(tabId);
+  lastNavigatedUrlByTab.set(tabId, {
+    url,
+    updatedAt: Date.now(),
+    blockedAttemptRecordedAt: resetBlockedAttempt
+      ? null
+      : previousEntry?.blockedAttemptRecordedAt ?? null,
+  });
+};
 
 const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
   if (rawUrl && rawUrl.startsWith(EXTENSION_URL_PREFIX)) {
@@ -80,7 +99,26 @@ const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
   }
   const normalised = ensureHttpUrl(rawUrl);
   if (!normalised) return;
-  lastNavigatedUrlByTab.set(tabId, normalised);
+  setLastNavigatedUrlForTab(tabId, normalised);
+};
+
+const getLastNavigatedUrlForTab = (tabId: number): string | null =>
+  lastNavigatedUrlByTab.get(tabId)?.url ?? null;
+
+const markBlockedAttemptRecordedForTab = (
+  tabId: number,
+  recordedAt = Date.now()
+): boolean => {
+  const entry = lastNavigatedUrlByTab.get(tabId);
+  if (!entry) return true;
+  if (
+    entry.blockedAttemptRecordedAt !== null &&
+    entry.blockedAttemptRecordedAt >= entry.updatedAt
+  ) {
+    return false;
+  }
+  entry.blockedAttemptRecordedAt = recordedAt;
+  return true;
 };
 
 const getTabNavigatedHttpUrl = (tabId: number): Promise<string | null> =>
@@ -1685,15 +1723,15 @@ const handlePeekWithChatGPTRequest = async (
   const tabNavigationUrl =
     tabId !== null ? await getTabNavigatedHttpUrl(tabId) : null;
 
-  if (tabId !== null) {
+  if (tabId !== null && getLastNavigatedUrlForTab(tabId) === null) {
     if (originalUrl) {
-      lastNavigatedUrlByTab.set(tabId, originalUrl);
+      setLastNavigatedUrlForTab(tabId, originalUrl, false);
     } else if (tabNavigationUrl) {
-      lastNavigatedUrlByTab.set(tabId, tabNavigationUrl);
+      setLastNavigatedUrlForTab(tabId, tabNavigationUrl, false);
     }
   }
 
-  const ledgerUrl = tabId !== null ? lastNavigatedUrlByTab.get(tabId) ?? null : null;
+  const ledgerUrl = tabId !== null ? getLastNavigatedUrlForTab(tabId) : null;
   const fallbackSiteUrl = siteForStorage
     ? ensureHttpUrl(`https://${siteForStorage}`)
     : null;
@@ -1737,8 +1775,13 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     const site = sanitizeSite(payload.site) || sanitizeSite(parseSiteFromSender(sender));
     const ruleId = Number(payload.rid);
     if (Number.isInteger(ruleId) && ruleId > 0) {
+      const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
+      if (tabId !== null && !markBlockedAttemptRecordedForTab(tabId)) {
+        sendResponse({ ok: true, recorded: false });
+        return undefined;
+      }
       updateDailyStats((stats) => withBlockedAttempt(stats, site))
-        .then(() => sendResponse({ ok: true }))
+        .then(() => sendResponse({ ok: true, recorded: true }))
         .catch((error) => {
           console.warn("record-blocked-attempt request failed", error);
           sendResponse({ ok: false, error: error?.message ?? String(error) });
@@ -1774,7 +1817,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
               message as TemporarilyAllowTabMessage,
               sender,
               {
-                getLedgerUrl: (tabId) => lastNavigatedUrlByTab.get(tabId) ?? null,
+                getLedgerUrl: getLastNavigatedUrlForTab,
                 getTabNavigatedHttpUrl,
               }
             )
