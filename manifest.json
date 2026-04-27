@@ -18,7 +18,8 @@
   "host_permissions": ["<all_urls>"],
 
   "background": {
-    "service_worker": "dist/block.js"
+    "service_worker": "dist/block.js",
+    "type": "module"
   },
 
   "action": {

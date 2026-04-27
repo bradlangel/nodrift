@@ -1,3 +1,14 @@
+import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants";
+import { getRelatedRuleIdsForHost } from "./site-matching";
+import { getTemporarilyAllowedDestination } from "./temp-allow-destination";
+import {
+  ensureHttpUrl,
+  normalizeHost,
+  parseHostnameFromUrl,
+  parseSiteFromSender,
+  sanitizeSite,
+} from "./url-domain";
+
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
   "old.reddit.com",
@@ -15,65 +26,24 @@ let temporaryAllowStateLoaded = false;
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
 
-const GRAYSCALE_STORAGE_KEY = "temporarilyAllowedGrayscaleHosts";
 const GRAYSCALE_CSS = "html { filter: grayscale(1) !important; }";
 type TemporaryAllowWindow = {
   expiresAt: number;
   startedAt: number;
 };
 const grayscaleHosts = new Map<string, TemporaryAllowWindow>();
-const BADGE_REFRESH_ALARM = "refresh-temp-allow-badge";
+
 const TEMP_ALLOW_BADGE_COLOR = "#f59e0b";
 
 const scheduleBadgeRefreshAlarm = () => {
-  chrome.alarms.create(BADGE_REFRESH_ALARM, { periodInMinutes: 1 });
+  chrome.alarms.create(ALARM_NAMES.badgeRefresh, { periodInMinutes: 1 });
 };
 
-const normalizeHost = (host?: string | null): string | null => {
-  if (!host) return null;
-  const trimmed = host.trim().toLowerCase();
-  return trimmed || null;
-};
 
 const EXTENSION_URL_PREFIX = `chrome-extension://${chrome.runtime.id}/`;
 const lastNavigatedUrlByTab = new Map<number, string>();
 
-const ensureHttpUrl = (value?: string | null): string | null => {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
 
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return parsed.toString();
-    }
-    return null;
-  } catch {
-    try {
-      const normalised = trimmed.replace(/^https?:\/\//, "");
-      if (!normalised) return null;
-      const parsed = new URL(`https://${normalised}`);
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        return parsed.toString();
-      }
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-};
-
-const parseHostnameFromUrl = (rawUrl?: string | null): string | null => {
-  const ensured = ensureHttpUrl(rawUrl);
-  if (!ensured) return null;
-  try {
-    return new URL(ensured).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-};
 
 const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
   if (rawUrl && rawUrl.startsWith(EXTENSION_URL_PREFIX)) {
@@ -163,8 +133,8 @@ const getTempAllowMinutes = (): Promise<number> =>
     if (tempAllowMinutes !== null) {
       resolve(tempAllowMinutes);
     } else {
-      chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
-        tempAllowMinutes = data.tempAllowMinutes;
+      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: 30 }, (data) => {
+        tempAllowMinutes = data[STORAGE_KEYS.tempAllowMinutes];
         resolve(tempAllowMinutes);
       });
     }
@@ -230,21 +200,6 @@ const buildRulesForCurrentState = (): any[] => {
 
 console.log("Website blocker: Service Worker Loaded");
 
-const findRuleIdByHostname = (host: string): number | null => {
-  // Pick the most specific matching entry (longest match), so subdomain beats base.
-  let bestIdx = -1;
-  let bestLen = -1;
-  for (let i = 0; i < blockedSites.length; i++) {
-    const site = blockedSites[i];
-    if (host === site || host.endsWith("." + site)) {
-      if (site.length > bestLen) {
-        bestLen = site.length;
-        bestIdx = i;
-      }
-    }
-  }
-  return bestIdx === -1 ? null : bestIdx + 1;
-};
 
 const withLastErrorLog =
   (label: string, next?: () => void) =>
@@ -256,7 +211,7 @@ const withLastErrorLog =
   };
 
 const updateDynamicRulesAsync = (
-  options: chrome.declarativeNetRequest.UpdateRuleOptions
+  options: any
 ): Promise<void> =>
   new Promise((resolve, reject) => {
     chrome.declarativeNetRequest.updateDynamicRules(options, () => {
@@ -296,7 +251,7 @@ const persistGrayscaleHosts = () => {
     window.expiresAt,
     window.startedAt,
   ]);
-  grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: entries });
+  grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: entries });
 };
 
 const isHostTemporarilyAllowed = (host: string): boolean => {
@@ -484,7 +439,7 @@ const clearGrayscaleHosts = () => {
   if (hadHosts) {
     persistGrayscaleHosts();
   } else {
-    grayscaleStorageSet({ [GRAYSCALE_STORAGE_KEY]: [] });
+    grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: [] });
   }
   removeGrayscaleFromAllTabs();
   refreshBadgeForActiveTab();
@@ -493,9 +448,9 @@ const clearGrayscaleHosts = () => {
 
 const loadGrayscalePreference = () => {
   chrome.storage.sync.get(
-    { grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW },
+    { [STORAGE_KEYS.grayscaleOnTemporaryAllow]: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW },
     (data) => {
-      grayscaleOnTemporaryAllow = Boolean(data.grayscaleOnTemporaryAllow);
+      grayscaleOnTemporaryAllow = Boolean(data[STORAGE_KEYS.grayscaleOnTemporaryAllow]);
       if (!grayscaleOnTemporaryAllow) {
         clearGrayscaleHosts();
       }
@@ -504,9 +459,9 @@ const loadGrayscalePreference = () => {
 };
 
 const loadGrayscaleHosts = () => {
-  grayscaleStorageGet({ [GRAYSCALE_STORAGE_KEY]: [] }, (items) => {
-    const rawEntries = Array.isArray(items?.[GRAYSCALE_STORAGE_KEY])
-      ? (items[GRAYSCALE_STORAGE_KEY] as unknown[])
+  grayscaleStorageGet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: [] }, (items) => {
+    const rawEntries = Array.isArray(items?.[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts])
+      ? (items[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts] as unknown[])
       : [];
     grayscaleHosts.clear();
     const now = Date.now();
@@ -569,16 +524,16 @@ const refreshRulesIfReady = () => {
 };
 
 const loadBlockedSites = () => {
-  chrome.storage.sync.get({ blockedSites: DEFAULT_BLOCKED_SITES }, (data) => {
-    blockedSites = data.blockedSites;
+  chrome.storage.sync.get({ [STORAGE_KEYS.blockedSites]: DEFAULT_BLOCKED_SITES }, (data) => {
+    blockedSites = data[STORAGE_KEYS.blockedSites];
     blockedSitesLoaded = true;
 
-    chrome.storage.local.get({ cachedBlockedSites: null }, (cache) => {
-      const cached = cache.cachedBlockedSites;
+    chrome.storage.local.get({ [STORAGE_KEYS.cachedBlockedSites]: null }, (cache) => {
+      const cached = cache[STORAGE_KEYS.cachedBlockedSites];
       const changed =
         !cached || JSON.stringify(cached) !== JSON.stringify(blockedSites);
       if (changed) {
-        chrome.storage.local.set({ cachedBlockedSites: blockedSites });
+        chrome.storage.local.set({ [STORAGE_KEYS.cachedBlockedSites]: blockedSites });
       }
       refreshRulesIfReady();
     });
@@ -594,18 +549,18 @@ scheduleBadgeRefreshAlarm();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
-    if (changes.blockedSites) {
-      blockedSites = changes.blockedSites.newValue;
+    if (changes[STORAGE_KEYS.blockedSites]) {
+      blockedSites = changes[STORAGE_KEYS.blockedSites].newValue;
       blockedSitesLoaded = true;
       refreshRules();
-      chrome.storage.local.set({ cachedBlockedSites: blockedSites });
+      chrome.storage.local.set({ [STORAGE_KEYS.cachedBlockedSites]: blockedSites });
     }
-    if (changes.tempAllowMinutes) {
-      tempAllowMinutes = changes.tempAllowMinutes.newValue;
+    if (changes[STORAGE_KEYS.tempAllowMinutes]) {
+      tempAllowMinutes = changes[STORAGE_KEYS.tempAllowMinutes].newValue;
     }
-    if (changes.grayscaleOnTemporaryAllow) {
+    if (changes[STORAGE_KEYS.grayscaleOnTemporaryAllow]) {
       grayscaleOnTemporaryAllow = Boolean(
-        changes.grayscaleOnTemporaryAllow.newValue
+        changes[STORAGE_KEYS.grayscaleOnTemporaryAllow].newValue
       );
       if (!grayscaleOnTemporaryAllow) {
         clearGrayscaleHosts();
@@ -638,15 +593,7 @@ const temporarilyAllow = async (
   minutes?: number
 ): Promise<boolean> => {
   const mins = minutes ?? (await getTempAllowMinutes());
-  const parts = host.split(".");
-  const base = parts.slice(-2).join(".");
-  const ids: number[] = [];
-  for (let i = 0; i < blockedSites.length; i++) {
-    const site = blockedSites[i];
-    if (site === host || site === base || site.endsWith("." + base)) {
-      ids.push(i + 1);
-    }
-  }
+  const ids = getRelatedRuleIdsForHost(host, blockedSites);
   return allowRulesTemporarily(ids, mins);
 };
 
@@ -785,61 +732,6 @@ type TemporarilyAllowTabMessage = {
   tabId?: number | null;
 };
 
-const parseSiteFromSender = (sender?: any): string | null => {
-  if (!sender?.url) return null;
-  try {
-    const u = new URL(sender.url);
-    return u.searchParams.get("site");
-  } catch (err) {
-    console.warn("Failed to parse sender site", err);
-    return null;
-  }
-};
-
-const sanitizeSite = (value?: string | null): string | null => {
-  if (!value) return null;
-  return value.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-};
-
-const parseSiteFromUrl = (rawUrl?: string | null): string | null => {
-  if (!rawUrl) return null;
-  try {
-    return sanitizeSite(new URL(rawUrl).searchParams.get("site"));
-  } catch {
-    return null;
-  }
-};
-
-const httpUrlMatchesSite = (
-  rawUrl?: string | null,
-  site?: string | null
-): boolean => {
-  const host = parseHostnameFromUrl(rawUrl);
-  const normalizedSite = normalizeHost(site);
-  if (!host || !normalizedSite) return false;
-  return host === normalizedSite || host.endsWith(`.${normalizedSite}`);
-};
-
-const getTemporarilyAllowedDestination = async (
-  payload: TemporarilyAllowTabMessage,
-  sender?: any
-): Promise<string | null> => {
-  const tabId =
-    typeof payload.tabId === "number"
-      ? payload.tabId
-      : typeof sender?.tab?.id === "number"
-      ? sender.tab.id
-      : null;
-  const site = parseSiteFromUrl(payload.url) || parseSiteFromSender(sender);
-  const ledgerUrl = tabId !== null ? lastNavigatedUrlByTab.get(tabId) ?? null : null;
-  if (httpUrlMatchesSite(ledgerUrl, site)) return ledgerUrl;
-
-  const tabNavigationUrl =
-    tabId !== null ? await getTabNavigatedHttpUrl(tabId) : null;
-  if (httpUrlMatchesSite(tabNavigationUrl, site)) return tabNavigationUrl;
-
-  return site ? ensureHttpUrl(`https://${site}`) : null;
-};
 
 const stripTags = (value: string): string =>
   value
@@ -1551,9 +1443,9 @@ const handlePeekWithChatGPTRequest = async (
 
   if (chrome.storage?.session?.set) {
     chrome.storage.session.set({
-      lastPeekPrompt: prompt,
-      lastPeekSite: siteForStorage,
-      lastPeekUrl: storageUrl,
+      [STORAGE_KEYS.lastPeekPrompt]: prompt,
+      [STORAGE_KEYS.lastPeekSite]: siteForStorage,
+      [STORAGE_KEYS.lastPeekUrl]: storageUrl,
     });
   }
 
@@ -1580,7 +1472,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         destination: ok
           ? await getTemporarilyAllowedDestination(
               message as TemporarilyAllowTabMessage,
-              sender
+              sender,
+              {
+                getLedgerUrl: (tabId) => lastNavigatedUrlByTab.get(tabId) ?? null,
+                getTabNavigatedHttpUrl,
+              }
             )
           : null,
       }))
@@ -1619,7 +1515,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Restore rules when the timer fires.
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === BADGE_REFRESH_ALARM) {
+  if (alarm.name === ALARM_NAMES.badgeRefresh) {
     pruneExpiredGrayscaleHosts();
     refreshBadgeForActiveTab();
     return;
