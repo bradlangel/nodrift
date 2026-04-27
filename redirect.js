@@ -9,6 +9,19 @@ if (site) {
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 
+const ensureHttpUrl = (raw) => {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString();
+    }
+  } catch {
+    // Ignore invalid URLs.
+  }
+  return null;
+};
+
 chrome.storage.sync.get(
   { redirectUrl: DEFAULT_REDIRECT_URL, redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT },
   (data) => {
@@ -76,6 +89,52 @@ if (peekBtn) {
         }
 
         reset(originalLabel, 400);
+      }
+    );
+  });
+}
+
+const temporaryAllowBtn = document.getElementById("temporarily-allow-btn");
+if (temporaryAllowBtn) {
+  const originalLabel = temporaryAllowBtn.textContent || "Temporarily Allow";
+  temporaryAllowBtn.addEventListener("click", () => {
+    temporaryAllowBtn.disabled = true;
+    temporaryAllowBtn.textContent = "Temporarily allowing...";
+
+    chrome.runtime.sendMessage(
+      {
+        type: "temporarily-allow-tab",
+        url: window.location.href,
+      },
+      (response) => {
+        const reset = (label = originalLabel, delay = 0) => {
+          window.setTimeout(() => {
+            temporaryAllowBtn.disabled = false;
+            temporaryAllowBtn.textContent = label;
+          }, delay);
+        };
+
+        if (chrome.runtime.lastError || !response?.ok) {
+          console.warn(
+            "Temporarily allow failed",
+            chrome.runtime.lastError?.message || response?.error || "Unknown error"
+          );
+          reset("Could not temporarily allow", 0);
+          reset(originalLabel, 2500);
+          return;
+        }
+
+        temporaryAllowBtn.textContent = "Allowed — opening site...";
+        const referrerUrl = ensureHttpUrl(document.referrer);
+        const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
+        const destination = referrerUrl || siteUrl;
+        if (destination) {
+          window.location.href = destination;
+          return;
+        }
+
+        reset("Temporarily allowed", 0);
+        reset(originalLabel, 2500);
       }
     );
   });
