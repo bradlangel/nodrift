@@ -255,6 +255,19 @@ const withLastErrorLog =
     next?.();
   };
 
+const updateDynamicRulesAsync = (
+  options: chrome.declarativeNetRequest.UpdateRuleOptions
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    chrome.declarativeNetRequest.updateDynamicRules(options, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+
 const grayscaleStorageGet = (
   defaults: Record<string, unknown>,
   callback: (items: Record<string, unknown>) => void
@@ -602,24 +615,28 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 // Temporarily allow one or more rules (removes rules & sets timers to restore).
-const allowRulesTemporarily = (ids: number[], minutes: number) => {
-  if (ids.length === 0) return;
+const allowRulesTemporarily = async (
+  ids: number[],
+  minutes: number
+): Promise<boolean> => {
+  if (ids.length === 0) return false;
   const hostsForIds = ids
     .map((id) => blockedSites[id - 1])
     .filter((host): host is string => typeof host === "string" && !!host);
+  await updateDynamicRulesAsync({ removeRuleIds: ids });
   scheduleGrayscaleForHosts(hostsForIds, minutes);
-  chrome.declarativeNetRequest.updateDynamicRules(
-    { removeRuleIds: ids },
-    withLastErrorLog("removeRuleIds")
-  );
   scheduleBadgeRefreshAlarm();
   ids.forEach((id) =>
     chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes })
   );
+  return true;
 };
 
 // Temporarily allow a hostname and any related rules (base domain + subdomains).
-const temporarilyAllow = async (host: string, minutes?: number) => {
+const temporarilyAllow = async (
+  host: string,
+  minutes?: number
+): Promise<boolean> => {
   const mins = minutes ?? (await getTempAllowMinutes());
   const parts = host.split(".");
   const base = parts.slice(-2).join(".");
@@ -630,14 +647,17 @@ const temporarilyAllow = async (host: string, minutes?: number) => {
       ids.push(i + 1);
     }
   }
-  allowRulesTemporarily(ids, mins);
+  return allowRulesTemporarily(ids, mins);
 };
 
 // Entry point when we only know the rule id (e.g., from the block page).
-const temporarilyAllowById = async (id: number, minutes?: number) => {
+const temporarilyAllowById = async (
+  id: number,
+  minutes?: number
+): Promise<boolean> => {
   const site = blockedSites[id - 1];
-  if (!site) return;
-  await temporarilyAllow(site, minutes);
+  if (!site) return false;
+  return temporarilyAllow(site, minutes);
 };
 
 const getRuleIdFromUrl = (url: URL): number | null => {
@@ -664,14 +684,12 @@ const temporarilyAllowFromUrl = async (rawUrl?: string | null): Promise<boolean>
 
   const ruleId = getRuleIdFromUrl(url);
   if (ruleId !== null) {
-    await temporarilyAllowById(ruleId);
-    return true;
+    return temporarilyAllowById(ruleId);
   }
 
   const host = getTemporaryAllowHostFromUrl(url);
   if (!host) return false;
-  await temporarilyAllow(host);
-  return true;
+  return temporarilyAllow(host);
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
@@ -761,6 +779,12 @@ type PeekWithChatGPTMessage = {
   originalUrl?: string | null;
 };
 
+type TemporarilyAllowTabMessage = {
+  type: "temporarily-allow-tab";
+  url?: string | null;
+  tabId?: number | null;
+};
+
 const parseSiteFromSender = (sender?: any): string | null => {
   if (!sender?.url) return null;
   try {
@@ -775,6 +799,46 @@ const parseSiteFromSender = (sender?: any): string | null => {
 const sanitizeSite = (value?: string | null): string | null => {
   if (!value) return null;
   return value.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+};
+
+const parseSiteFromUrl = (rawUrl?: string | null): string | null => {
+  if (!rawUrl) return null;
+  try {
+    return sanitizeSite(new URL(rawUrl).searchParams.get("site"));
+  } catch {
+    return null;
+  }
+};
+
+const httpUrlMatchesSite = (
+  rawUrl?: string | null,
+  site?: string | null
+): boolean => {
+  const host = parseHostnameFromUrl(rawUrl);
+  const normalizedSite = normalizeHost(site);
+  if (!host || !normalizedSite) return false;
+  return host === normalizedSite || host.endsWith(`.${normalizedSite}`);
+};
+
+const getTemporarilyAllowedDestination = async (
+  payload: TemporarilyAllowTabMessage,
+  sender?: any
+): Promise<string | null> => {
+  const tabId =
+    typeof payload.tabId === "number"
+      ? payload.tabId
+      : typeof sender?.tab?.id === "number"
+      ? sender.tab.id
+      : null;
+  const site = parseSiteFromUrl(payload.url) || parseSiteFromSender(sender);
+  const ledgerUrl = tabId !== null ? lastNavigatedUrlByTab.get(tabId) ?? null : null;
+  if (httpUrlMatchesSite(ledgerUrl, site)) return ledgerUrl;
+
+  const tabNavigationUrl =
+    tabId !== null ? await getTabNavigatedHttpUrl(tabId) : null;
+  if (httpUrlMatchesSite(tabNavigationUrl, site)) return tabNavigationUrl;
+
+  return site ? ensureHttpUrl(`https://${site}`) : null;
 };
 
 const stripTags = (value: string): string =>
@@ -1511,7 +1575,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === "temporarily-allow-tab") {
     temporarilyAllowFromUrl(message.url)
-      .then((ok) => sendResponse({ ok }))
+      .then(async (ok) => ({
+        ok,
+        destination: ok
+          ? await getTemporarilyAllowedDestination(
+              message as TemporarilyAllowTabMessage,
+              sender
+            )
+          : null,
+      }))
+      .then((response) => sendResponse(response))
       .catch((error) => {
         console.warn("temporarily-allow-tab request failed", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });

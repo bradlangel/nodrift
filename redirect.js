@@ -125,9 +125,10 @@ if (temporaryAllowBtn) {
         }
 
         temporaryAllowBtn.textContent = "Allowed — opening site...";
-        const referrerUrl = ensureHttpUrl(document.referrer);
+        const responseDestination = ensureHttpUrl(response.destination);
         const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
-        const destination = referrerUrl || siteUrl;
+        const referrerUrl = ensureHttpUrl(document.referrer);
+        const destination = responseDestination || siteUrl || referrerUrl;
         if (destination) {
           window.location.href = destination;
           return;
