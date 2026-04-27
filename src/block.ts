@@ -1,13 +1,13 @@
-import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants";
-import { getRelatedRuleIdsForHost } from "./site-matching";
-import { getTemporarilyAllowedDestination } from "./temp-allow-destination";
+import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
+import { getRelatedRuleIdsForHost } from "./site-matching.js";
+import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
 import {
   ensureHttpUrl,
   normalizeHost,
   parseHostnameFromUrl,
   parseSiteFromSender,
   sanitizeSite,
-} from "./url-domain";
+} from "./url-domain.js";
 
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
@@ -17,6 +17,21 @@ const DEFAULT_BLOCKED_SITES = [
   "www.yahoo.com",
   "news.ycombinator.com",
 ];
+
+type ChromeTab = {
+  id?: number;
+  url?: string | null;
+  pendingUrl?: string | null;
+  active?: boolean;
+};
+
+type DynamicRule = {
+  id: number;
+};
+
+type StorageItems = Record<string, any>;
+type StorageChanges = Record<string, { newValue: any; oldValue?: any }>;
+type SendResponse = (response?: any) => void;
 
 let blockedSites = [...DEFAULT_BLOCKED_SITES];
 let tempAllowMinutes: number | null = null;
@@ -133,9 +148,10 @@ const getTempAllowMinutes = (): Promise<number> =>
     if (tempAllowMinutes !== null) {
       resolve(tempAllowMinutes);
     } else {
-      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: 30 }, (data) => {
-        tempAllowMinutes = data[STORAGE_KEYS.tempAllowMinutes];
-        resolve(tempAllowMinutes);
+      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: 30 }, (data: StorageItems) => {
+        const minutes = Number(data[STORAGE_KEYS.tempAllowMinutes]) || 30;
+        tempAllowMinutes = minutes;
+        resolve(minutes);
       });
     }
   });
@@ -321,7 +337,7 @@ const setTemporaryAllowBadge = (enabled: boolean, host?: string | null) => {
 const refreshBadgeForActiveTab = () => {
   if (!chrome.tabs?.query) return;
   pruneExpiredGrayscaleHosts();
-  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs: ChromeTab[]) => {
     const activeTab = tabs?.[0];
     if (!activeTab) {
       setTemporaryAllowBadge(false);
@@ -365,12 +381,12 @@ const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
 
 const syncGrayscaleForHostTabs = (host: string) => {
   if (!chrome.tabs?.query) return;
-  chrome.tabs.query({ url: [`*://${host}/*`, `*://*.${host}/*`] }, (tabs) => {
+  chrome.tabs.query({ url: [`*://${host}/*`, `*://*.${host}/*`] }, (tabs: ChromeTab[]) => {
     if (chrome.runtime.lastError) {
       console.warn("[tabs.query(sync grayscale)]", chrome.runtime.lastError.message);
       return;
     }
-    tabs.forEach((tab) => {
+    tabs.forEach((tab: ChromeTab) => {
       if (typeof tab.id === "number") {
         syncGrayscaleForUrl(tab.id, tab.url);
       }
@@ -380,8 +396,8 @@ const syncGrayscaleForHostTabs = (host: string) => {
 
 const removeGrayscaleFromAllTabs = () => {
   if (!chrome.tabs?.query || !chrome.scripting?.removeCSS) return;
-  chrome.tabs.query({}, (tabs) => {
-    tabs.forEach((tab) => {
+  chrome.tabs.query({}, (tabs: ChromeTab[]) => {
+    tabs.forEach((tab: ChromeTab) => {
       if (typeof tab.id !== "number") return;
       chrome.scripting?.removeCSS?.(
         { target: { tabId: tab.id, allFrames: true }, css: GRAYSCALE_CSS },
@@ -449,7 +465,7 @@ const clearGrayscaleHosts = () => {
 const loadGrayscalePreference = () => {
   chrome.storage.sync.get(
     { [STORAGE_KEYS.grayscaleOnTemporaryAllow]: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW },
-    (data) => {
+    (data: StorageItems) => {
       grayscaleOnTemporaryAllow = Boolean(data[STORAGE_KEYS.grayscaleOnTemporaryAllow]);
       if (!grayscaleOnTemporaryAllow) {
         clearGrayscaleHosts();
@@ -509,8 +525,8 @@ const maybeApplyGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
 };
 
 const refreshRules = () => {
-  chrome.declarativeNetRequest.getDynamicRules((rules) => {
-    const ids = rules.map((r) => r.id);
+  chrome.declarativeNetRequest.getDynamicRules((rules: DynamicRule[]) => {
+    const ids = rules.map((r: DynamicRule) => r.id);
     chrome.declarativeNetRequest.updateDynamicRules(
       { removeRuleIds: ids, addRules: buildRulesForCurrentState() },
       withLastErrorLog("refreshRules")
@@ -524,11 +540,11 @@ const refreshRulesIfReady = () => {
 };
 
 const loadBlockedSites = () => {
-  chrome.storage.sync.get({ [STORAGE_KEYS.blockedSites]: DEFAULT_BLOCKED_SITES }, (data) => {
+  chrome.storage.sync.get({ [STORAGE_KEYS.blockedSites]: DEFAULT_BLOCKED_SITES }, (data: StorageItems) => {
     blockedSites = data[STORAGE_KEYS.blockedSites];
     blockedSitesLoaded = true;
 
-    chrome.storage.local.get({ [STORAGE_KEYS.cachedBlockedSites]: null }, (cache) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.cachedBlockedSites]: null }, (cache: StorageItems) => {
       const cached = cache[STORAGE_KEYS.cachedBlockedSites];
       const changed =
         !cached || JSON.stringify(cached) !== JSON.stringify(blockedSites);
@@ -547,7 +563,7 @@ loadGrayscaleHosts();
 refreshBadgeForActiveTab();
 scheduleBadgeRefreshAlarm();
 
-chrome.storage.onChanged.addListener((changes, area) => {
+chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => {
   if (area === "sync") {
     if (changes[STORAGE_KEYS.blockedSites]) {
       blockedSites = changes[STORAGE_KEYS.blockedSites].newValue;
@@ -697,8 +713,8 @@ const resetAllRulesAndReload = (tabId?: number, currentUrl?: string) => {
     },
     withLastErrorLog("updateDynamicRules(reset all)", () => {
       // Optional: log the current dynamic rules for debugging.
-      chrome.declarativeNetRequest.getDynamicRules((rules) => {
-        console.log("Dynamic rules after reset:", rules.map((r) => r.id));
+      chrome.declarativeNetRequest.getDynamicRules((rules: DynamicRule[]) => {
+        console.log("Dynamic rules after reset:", rules.map((r: DynamicRule) => r.id));
       });
 
       if (!tabId || !currentUrl) return;
@@ -1453,7 +1469,7 @@ const handlePeekWithChatGPTRequest = async (
   return { status, prompt };
 };
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: SendResponse) => {
   if (message?.type === "peek-with-chatgpt") {
     handlePeekWithChatGPTRequest(message as PeekWithChatGPTMessage, sender)
       .then((result) => {
@@ -1514,7 +1530,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 // Restore rules when the timer fires.
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
   if (alarm.name === ALARM_NAMES.badgeRefresh) {
     pruneExpiredGrayscaleHosts();
     refreshBadgeForActiveTab();
@@ -1542,7 +1558,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // ---------- Menu Click Handling ----------
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener((info: { menuItemId?: string | number }, tab?: ChromeTab) => {
   if (!tab?.url) return;
 
   // Temporarily allow flow (unchanged; still works off rid or hostname fallback).

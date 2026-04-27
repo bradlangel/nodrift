@@ -8,10 +8,16 @@ Use the Node version pinned for this extension:
 nvm use
 ```
 
+Install the local development tools:
+
+```sh
+npm install
+```
+
 Compile the TypeScript service worker:
 
 ```sh
-npx tsc
+npm run build
 ```
 
 For an edit loop, run TypeScript in watch mode:

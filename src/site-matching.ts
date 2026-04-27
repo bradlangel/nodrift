@@ -1,4 +1,4 @@
-import { normalizeHost } from "./url-domain";
+import { normalizeHost } from "./url-domain.js";
 
 export const hostMatchesSite = (
   host?: string | null,

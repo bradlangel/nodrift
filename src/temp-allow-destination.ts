@@ -1,10 +1,10 @@
-import { hostMatchesSite } from "./site-matching";
+import { hostMatchesSite } from "./site-matching.js";
 import {
   ensureHttpUrl,
   parseHostnameFromUrl,
   parseSiteFromSender,
   parseSiteFromUrl,
-} from "./url-domain";
+} from "./url-domain.js";
 
 export type TemporarilyAllowDestinationPayload = {
   url?: string | null;
