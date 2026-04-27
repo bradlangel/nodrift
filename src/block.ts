@@ -44,6 +44,7 @@ let blockedSites = [...DEFAULT_BLOCKED_SITES];
 let tempAllowMinutes: number | null = null;
 let blockedSitesLoaded = false;
 let temporaryAllowStateLoaded = false;
+let dailyStatsUpdateQueue: Promise<unknown> = Promise.resolve();
 
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
@@ -235,13 +236,24 @@ const setDailyStats = (stats: DailyBlockerStats): Promise<void> =>
     chrome.storage.local.set({ [STORAGE_KEYS.localDailyStats]: stats }, () => resolve());
   });
 
-const updateDailyStats = async (
+const updateDailyStatsNow = async (
   mutate: (stats: DailyBlockerStats) => DailyBlockerStats
 ): Promise<DailyBlockerStats> => {
   const current = await getDailyStats();
   const updated = normalizeDailyStats(mutate(current));
   await setDailyStats(updated);
   return updated;
+};
+
+const updateDailyStats = async (
+  mutate: (stats: DailyBlockerStats) => DailyBlockerStats
+): Promise<DailyBlockerStats> => {
+  const queued = dailyStatsUpdateQueue.then(
+    () => updateDailyStatsNow(mutate),
+    () => updateDailyStatsNow(mutate)
+  );
+  dailyStatsUpdateQueue = queued.catch(() => undefined);
+  return queued;
 };
 
 // ---------- Rule builder ----------
