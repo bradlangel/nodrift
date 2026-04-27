@@ -313,6 +313,17 @@ const getTemporaryAllowWindowForHost = (
   return bestWindow;
 };
 
+const formatElapsedBadgeText = (elapsedMinutes: number | null): string => {
+  if (elapsedMinutes === null) return "";
+  return elapsedMinutes < 1 ? "<1m" : `${elapsedMinutes}m`;
+};
+
+const formatElapsedTitleText = (elapsedMinutes: number | null): string | null => {
+  if (elapsedMinutes === null) return null;
+  if (elapsedMinutes < 1) return "< 1 minute";
+  return `${elapsedMinutes} ${elapsedMinutes === 1 ? "minute" : "minutes"}`;
+};
+
 const setTemporaryAllowBadge = (enabled: boolean, host?: string | null) => {
   if (!chrome.action?.setBadgeText || !chrome.action?.setTitle) return;
   if (enabled) {
@@ -320,15 +331,16 @@ const setTemporaryAllowBadge = (enabled: boolean, host?: string | null) => {
     const elapsedMinutes = window
       ? Math.max(Math.floor((Date.now() - window.startedAt) / 60000), 0)
       : null;
+    const elapsedTitleText = formatElapsedTitleText(elapsedMinutes);
     chrome.action.setBadgeText({
-      text: elapsedMinutes === null ? "" : String(elapsedMinutes),
+      text: formatElapsedBadgeText(elapsedMinutes),
     });
     chrome.action.setBadgeBackgroundColor?.({ color: TEMP_ALLOW_BADGE_COLOR });
     chrome.action.setTitle({
       title: host
-        ? elapsedMinutes === null
+        ? elapsedTitleText === null
           ? `Website Blocker: temporary allow active for ${host}`
-          : `Website Blocker: temporary allow active for ${host} (${elapsedMinutes} whole minutes)`
+          : `Website Blocker: temporary allow active for ${host} (${elapsedTitleText})`
         : "Website Blocker: temporary allow active",
     });
     return;
