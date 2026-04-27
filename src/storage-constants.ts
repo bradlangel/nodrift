@@ -4,6 +4,7 @@ export const STORAGE_KEYS = {
   tempAllowMinutes: "tempAllowMinutes",
   grayscaleOnTemporaryAllow: "grayscaleOnTemporaryAllow",
   temporarilyAllowedGrayscaleHosts: "temporarilyAllowedGrayscaleHosts",
+  temporaryAllowUsageSession: "temporaryAllowUsageSession",
   lastPeekPrompt: "lastPeekPrompt",
   lastPeekSite: "lastPeekSite",
   lastPeekUrl: "lastPeekUrl",

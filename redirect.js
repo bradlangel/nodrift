@@ -32,18 +32,36 @@ const formatDecisionLabel = (decision) => {
   return "Blocked";
 };
 
+const formatUsedTime = (seconds) => {
+  const value = Number.isFinite(seconds) ? Math.max(seconds, 0) : 0;
+  const totalSeconds = Math.floor(value);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+  return `${remainingSeconds}s`;
+};
+
 const renderStats = (stats) => {
   const statsRoot = document.getElementById("stats");
   if (!statsRoot || !stats) return;
 
   const blockedEl = document.getElementById("stats-blocked-attempts");
   const allowsEl = document.getElementById("stats-temp-allows");
-  const minutesEl = document.getElementById("stats-temp-allow-minutes");
+  const usedMinutesEl = document.getElementById("stats-temp-allow-used-minutes");
   const recentEl = document.getElementById("stats-recent-decisions");
 
   if (blockedEl) blockedEl.textContent = String(stats.blockedAttemptsToday || 0);
   if (allowsEl) allowsEl.textContent = String(stats.temporaryAllowsToday || 0);
-  if (minutesEl) minutesEl.textContent = String(stats.temporaryAllowMinutesToday || 0);
+  if (usedMinutesEl) {
+    usedMinutesEl.textContent = formatUsedTime(stats.temporaryAllowUsedSecondsToday || 0);
+  }
 
   if (!recentEl) return;
   recentEl.innerHTML = "";

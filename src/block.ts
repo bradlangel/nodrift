@@ -5,6 +5,7 @@ import {
   normalizeDailyStats,
   withBlockedAttempt,
   withTemporaryAllow,
+  withTemporaryAllowUsedSeconds,
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
 import {
@@ -55,6 +56,13 @@ type TemporaryAllowWindow = {
 const grayscaleHosts = new Map<string, TemporaryAllowWindow>();
 
 const TEMP_ALLOW_BADGE_COLOR = "#f59e0b";
+type TemporaryAllowUsageSession = {
+  host: string;
+  touchedAt: number;
+};
+let activeTemporaryAllowUsageSession: TemporaryAllowUsageSession | null = null;
+let activeTemporaryAllowUsageSessionLoaded = false;
+let temporaryAllowUsageSessionQueue: Promise<unknown> = Promise.resolve();
 
 const scheduleBadgeRefreshAlarm = () => {
   chrome.alarms.create(ALARM_NAMES.badgeRefresh, { periodInMinutes: 1 });
@@ -105,27 +113,42 @@ chrome.tabs.onUpdated.addListener((tabId: number, changeInfo: any, tab?: any) =>
   if (changeInfo?.url) {
     recordLastNavigatedUrl(tabId, changeInfo.url);
     if (tab?.active) refreshBadgeForActiveTab();
+    if (tab?.active) refreshActiveTemporaryAllowUsage();
     return;
   }
   if (changeInfo?.status === "complete" && tab?.url) {
     recordLastNavigatedUrl(tabId, tab.url);
     if (tab?.active) refreshBadgeForActiveTab();
+    if (tab?.active) refreshActiveTemporaryAllowUsage();
     return;
   }
   if (!changeInfo?.status && tab?.url) {
     recordLastNavigatedUrl(tabId, tab.url);
   }
   if (tab?.active) refreshBadgeForActiveTab();
+  if (tab?.active) refreshActiveTemporaryAllowUsage();
 });
 
 chrome.tabs.onRemoved.addListener((tabId: number) => {
   lastNavigatedUrlByTab.delete(tabId);
   refreshBadgeForActiveTab();
+  refreshActiveTemporaryAllowUsage();
 });
 
 chrome.tabs.onActivated.addListener(() => {
   refreshBadgeForActiveTab();
+  refreshActiveTemporaryAllowUsage();
 });
+
+if (chrome.windows?.onFocusChanged) {
+  chrome.windows.onFocusChanged.addListener((windowId: number) => {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+      void stopActiveTemporaryAllowUsage();
+      return;
+    }
+    refreshActiveTemporaryAllowUsage();
+  });
+}
 
 if (chrome.webNavigation?.onBeforeNavigate) {
   chrome.webNavigation.onBeforeNavigate.addListener((details: any) => {
@@ -308,20 +331,191 @@ const isHostTemporarilyAllowed = (host: string): boolean => {
   return false;
 };
 
-const getTemporaryAllowWindowForHost = (
+const getTemporaryAllowMatchForHost = (
   host: string
-): TemporaryAllowWindow | null => {
+): { host: string; window: TemporaryAllowWindow } | null => {
   const now = Date.now();
   let bestMatchLength = -1;
-  let bestWindow: TemporaryAllowWindow | null = null;
+  let bestMatch: { host: string; window: TemporaryAllowWindow } | null = null;
   for (const [storedHost, window] of grayscaleHosts.entries()) {
     if (window.expiresAt <= now) continue;
     if (host !== storedHost && !host.endsWith(`.${storedHost}`)) continue;
     if (storedHost.length <= bestMatchLength) continue;
     bestMatchLength = storedHost.length;
-    bestWindow = window;
+    bestMatch = { host: storedHost, window };
   }
-  return bestWindow;
+  return bestMatch;
+};
+
+const getTemporaryAllowWindowForHost = (
+  host: string
+): TemporaryAllowWindow | null => getTemporaryAllowMatchForHost(host)?.window ?? null;
+
+const getTemporaryAllowedHostFromUrl = (rawUrl?: string | null): string | null => {
+  const host = parseHostnameFromUrl(rawUrl);
+  if (!host) return null;
+  return getTemporaryAllowMatchForHost(host)?.host ?? null;
+};
+
+const normalizeTemporaryAllowUsageSession = (
+  value: unknown
+): TemporaryAllowUsageSession | null => {
+  if (!value || typeof value !== "object") return null;
+  const maybe = value as Partial<TemporaryAllowUsageSession>;
+  const host = normalizeHost(typeof maybe.host === "string" ? maybe.host : null);
+  if (!host) return null;
+  if (typeof maybe.touchedAt !== "number" || !Number.isFinite(maybe.touchedAt)) {
+    return null;
+  }
+  return { host, touchedAt: maybe.touchedAt };
+};
+
+const getActiveTemporaryAllowUsageSession =
+  (): Promise<TemporaryAllowUsageSession | null> =>
+    new Promise((resolve) => {
+      if (activeTemporaryAllowUsageSessionLoaded) {
+        resolve(activeTemporaryAllowUsageSession);
+        return;
+      }
+
+      grayscaleStorageGet(
+        { [STORAGE_KEYS.temporaryAllowUsageSession]: null },
+        (items) => {
+          activeTemporaryAllowUsageSession = normalizeTemporaryAllowUsageSession(
+            items[STORAGE_KEYS.temporaryAllowUsageSession]
+          );
+          activeTemporaryAllowUsageSessionLoaded = true;
+          resolve(activeTemporaryAllowUsageSession);
+        }
+      );
+    });
+
+const setActiveTemporaryAllowUsageSession = (
+  session: TemporaryAllowUsageSession | null
+): Promise<void> =>
+  new Promise((resolve) => {
+    activeTemporaryAllowUsageSession = session;
+    activeTemporaryAllowUsageSessionLoaded = true;
+    grayscaleStorageSet(
+      { [STORAGE_KEYS.temporaryAllowUsageSession]: session },
+      () => resolve()
+    );
+  });
+
+const queueTemporaryAllowUsageSessionUpdate = <T>(
+  task: () => Promise<T>
+): Promise<T> => {
+  const queued = temporaryAllowUsageSessionQueue.then(task, task);
+  temporaryAllowUsageSessionQueue = queued.catch(() => undefined);
+  return queued;
+};
+
+const recordTemporaryAllowUsedSeconds = (
+  startedAt: number,
+  endedAt = Date.now()
+): Promise<DailyBlockerStats | null> => {
+  const seconds = Math.floor((endedAt - startedAt) / 1000);
+  if (seconds <= 0) return Promise.resolve(null);
+  return updateDailyStats((stats) => withTemporaryAllowUsedSeconds(stats, seconds)).catch(
+    (error) => {
+      console.warn("temporary allow usage stats update failed", error);
+      return null;
+    }
+  );
+};
+
+const setActiveTemporaryAllowUsageHostNow = async (
+  host: string | null,
+  now = Date.now()
+): Promise<void> => {
+  const previousSession = await getActiveTemporaryAllowUsageSession();
+  if (previousSession?.host === host) {
+    if (host && previousSession.touchedAt < now) {
+      await setActiveTemporaryAllowUsageSession({ host, touchedAt: now });
+      await recordTemporaryAllowUsedSeconds(previousSession.touchedAt, now);
+    }
+    return;
+  }
+
+  await setActiveTemporaryAllowUsageSession(host ? { host, touchedAt: now } : null);
+  if (previousSession) {
+    await recordTemporaryAllowUsedSeconds(previousSession.touchedAt, now);
+  }
+};
+
+const setActiveTemporaryAllowUsageHost = (
+  host: string | null,
+  now = Date.now()
+) => {
+  void queueTemporaryAllowUsageSessionUpdate(() =>
+    setActiveTemporaryAllowUsageHostNow(host, now)
+  )
+    .catch((error) => {
+      console.warn("temporary allow usage session update failed", error);
+    });
+};
+
+const refreshActiveTemporaryAllowUsageForUrl = (rawUrl?: string | null) => {
+  if (!temporaryAllowStateLoaded) return;
+  setActiveTemporaryAllowUsageHost(getTemporaryAllowedHostFromUrl(rawUrl));
+};
+
+const refreshActiveTemporaryAllowUsage = () => {
+  if (!temporaryAllowStateLoaded) return;
+  if (!chrome.tabs?.query) return;
+  chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs: ChromeTab[]) => {
+    if (chrome.runtime.lastError) {
+      console.warn("[tabs.query(active temporary allow usage)]", chrome.runtime.lastError.message);
+      void stopActiveTemporaryAllowUsage();
+      return;
+    }
+    const activeTab = tabs?.[0];
+    refreshActiveTemporaryAllowUsageForUrl(activeTab?.url ?? activeTab?.pendingUrl);
+  });
+};
+
+const stopActiveTemporaryAllowUsage = (endedAt = Date.now()) => {
+  return queueTemporaryAllowUsageSessionUpdate(async () => {
+    const previousSession = await getActiveTemporaryAllowUsageSession();
+    await setActiveTemporaryAllowUsageSession(null);
+    return previousSession
+      ? recordTemporaryAllowUsedSeconds(previousSession.touchedAt, endedAt)
+      : null;
+  })
+    .catch((error) => {
+      console.warn("temporary allow usage session stop failed", error);
+      return null;
+    });
+};
+
+const flushActiveTemporaryAllowUsage = (endedAt = Date.now()) => {
+  return queueTemporaryAllowUsageSessionUpdate(async () => {
+    const session = await getActiveTemporaryAllowUsageSession();
+    if (!session) return null;
+    await setActiveTemporaryAllowUsageSession({ ...session, touchedAt: endedAt });
+    return recordTemporaryAllowUsedSeconds(session.touchedAt, endedAt);
+  })
+    .catch((error) => {
+      console.warn("temporary allow usage session flush failed", error);
+      return null;
+    });
+};
+
+const stopActiveTemporaryAllowUsageForHost = (
+  host: string | null,
+  endedAt = Date.now()
+) => {
+  if (!host) return;
+  void queueTemporaryAllowUsageSessionUpdate(async () => {
+    const session = await getActiveTemporaryAllowUsageSession();
+    if (session?.host === host) {
+      await setActiveTemporaryAllowUsageSession(null);
+      await recordTemporaryAllowUsedSeconds(session.touchedAt, endedAt);
+    }
+  })
+    .catch((error) => {
+      console.warn("temporary allow usage host stop failed", error);
+    });
 };
 
 const formatElapsedBadgeText = (elapsedMinutes: number | null): string => {
@@ -440,6 +634,10 @@ const pruneExpiredGrayscaleHosts = () => {
   for (const [host, window] of grayscaleHosts.entries()) {
     if (!Number.isFinite(window.expiresAt) || window.expiresAt <= now) {
       grayscaleHosts.delete(host);
+      stopActiveTemporaryAllowUsageForHost(
+        host,
+        Number.isFinite(window.expiresAt) ? window.expiresAt : now
+      );
       syncGrayscaleForHostTabs(host);
       changed = true;
     }
@@ -452,7 +650,6 @@ const pruneExpiredGrayscaleHosts = () => {
 };
 
 const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
-  if (!grayscaleOnTemporaryAllow) return;
   if (hosts.length === 0) return;
   pruneExpiredGrayscaleHosts();
   const normalizedMinutes = Number.isFinite(minutes) ? Math.max(minutes, 1) : 1;
@@ -468,7 +665,9 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
       grayscaleHosts.set(host, { expiresAt, startedAt });
       changed = true;
     }
-    syncGrayscaleForHostTabs(host);
+    if (grayscaleOnTemporaryAllow) {
+      syncGrayscaleForHostTabs(host);
+    }
   }
   if (changed) {
     persistGrayscaleHosts();
@@ -478,6 +677,7 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
 
 const clearGrayscaleHosts = () => {
   const hadHosts = grayscaleHosts.size > 0;
+  void stopActiveTemporaryAllowUsage();
   grayscaleHosts.clear();
   if (hadHosts) {
     persistGrayscaleHosts();
@@ -495,7 +695,8 @@ const loadGrayscalePreference = () => {
     (data: StorageItems) => {
       grayscaleOnTemporaryAllow = Boolean(data[STORAGE_KEYS.grayscaleOnTemporaryAllow]);
       if (!grayscaleOnTemporaryAllow) {
-        clearGrayscaleHosts();
+        removeGrayscaleFromAllTabs();
+        refreshBadgeForActiveTab();
       }
     }
   );
@@ -541,6 +742,7 @@ const loadGrayscaleHosts = () => {
     }
     temporaryAllowStateLoaded = true;
     refreshBadgeForActiveTab();
+    refreshActiveTemporaryAllowUsage();
     refreshRulesIfReady();
   });
 };
@@ -606,7 +808,10 @@ chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => 
         changes[STORAGE_KEYS.grayscaleOnTemporaryAllow].newValue
       );
       if (!grayscaleOnTemporaryAllow) {
-        clearGrayscaleHosts();
+        removeGrayscaleFromAllTabs();
+        refreshBadgeForActiveTab();
+      } else {
+        grayscaleHosts.forEach((_window, host) => syncGrayscaleForHostTabs(host));
       }
     }
   }
@@ -701,6 +906,7 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
   const site = blockedSites[id - 1];
   if (!site) return;
   const normalizedHost = normalizeHost(site);
+  stopActiveTemporaryAllowUsageForHost(normalizedHost);
   if (normalizedHost && grayscaleHosts.has(normalizedHost)) {
     grayscaleHosts.delete(normalizedHost);
     persistGrayscaleHosts();
@@ -1517,7 +1723,8 @@ const handlePeekWithChatGPTRequest = async (
 
 chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: SendResponse) => {
   if (message?.type === "get-local-stats") {
-    getDailyStats()
+    flushActiveTemporaryAllowUsage()
+      .then(() => getDailyStats())
       .then((stats) => sendResponse({ ok: true, stats }))
       .catch((error) => {
         console.warn("get-local-stats request failed", error);
@@ -1612,6 +1819,7 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
   if (alarm.name === ALARM_NAMES.badgeRefresh) {
     pruneExpiredGrayscaleHosts();
     refreshBadgeForActiveTab();
+    refreshActiveTemporaryAllowUsage();
     return;
   }
 
@@ -1620,6 +1828,13 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
     const site = blockedSites[id - 1];
     if (site) {
       const normalizedHost = normalizeHost(site);
+      const temporaryAllowWindow = normalizedHost
+        ? grayscaleHosts.get(normalizedHost)
+        : null;
+      stopActiveTemporaryAllowUsageForHost(
+        normalizedHost,
+        temporaryAllowWindow?.expiresAt ?? Date.now()
+      );
       if (normalizedHost && grayscaleHosts.has(normalizedHost)) {
         grayscaleHosts.delete(normalizedHost);
         persistGrayscaleHosts();

@@ -30,8 +30,8 @@ then let each feature prove the next boundary.
 1. Light refactor: move shared URL/domain normalization, site matching,
    temporary-allow destination logic, and storage constants into clearer
    modules.
-2. Add local stats for blocked attempts, temporary allows, allowed minutes, and
-   recent decisions.
+2. Add local stats for blocked attempts, temporary allows, used
+   temporary-allow minutes, and recent decisions.
 3. Refactor temporary allow into a decision/apply pipeline while preserving the
    current one-click behavior.
 4. Add exact-URL temporary access to prove the decision pipeline can handle more
@@ -92,7 +92,7 @@ judgment or heavy analytics.
 
 - [x] Blocked attempts today
 - [x] Temporary allows today
-- [x] Total temporary-allow minutes today
+- [x] Approximate temporary-allow time used today
 - [ ] Top blocked domains
 - [x] Recent access decisions
 - [ ] Longest recent streak without temporary access

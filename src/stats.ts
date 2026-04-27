@@ -14,7 +14,7 @@ export type DailyBlockerStats = {
   dayKey: string;
   blockedAttemptsToday: number;
   temporaryAllowsToday: number;
-  temporaryAllowMinutesToday: number;
+  temporaryAllowUsedSecondsToday: number;
   recentDecisions: AccessDecision[];
 };
 
@@ -32,7 +32,7 @@ export const createEmptyDailyStats = (dayKey: string): DailyBlockerStats => ({
   dayKey,
   blockedAttemptsToday: 0,
   temporaryAllowsToday: 0,
-  temporaryAllowMinutesToday: 0,
+  temporaryAllowUsedSecondsToday: 0,
   recentDecisions: [],
 });
 
@@ -96,10 +96,10 @@ export const normalizeDailyStats = (
       typeof maybe.temporaryAllowsToday === "number" && Number.isFinite(maybe.temporaryAllowsToday)
         ? Math.max(Math.floor(maybe.temporaryAllowsToday), 0)
         : 0,
-    temporaryAllowMinutesToday:
-      typeof maybe.temporaryAllowMinutesToday === "number" &&
-      Number.isFinite(maybe.temporaryAllowMinutesToday)
-        ? Math.max(Math.floor(maybe.temporaryAllowMinutesToday), 0)
+    temporaryAllowUsedSecondsToday:
+      typeof maybe.temporaryAllowUsedSecondsToday === "number" &&
+      Number.isFinite(maybe.temporaryAllowUsedSecondsToday)
+        ? Math.max(Math.floor(maybe.temporaryAllowUsedSecondsToday), 0)
         : 0,
     recentDecisions: decisions,
   };
@@ -143,7 +143,6 @@ export const withTemporaryAllow = (
     {
       ...stats,
       temporaryAllowsToday: stats.temporaryAllowsToday + 1,
-      temporaryAllowMinutesToday: stats.temporaryAllowMinutesToday + normalizedMinutes,
     },
     {
       timestamp,
@@ -154,3 +153,12 @@ export const withTemporaryAllow = (
     }
   );
 };
+
+export const withTemporaryAllowUsedSeconds = (
+  stats: DailyBlockerStats,
+  seconds: number
+): DailyBlockerStats => ({
+  ...stats,
+  temporaryAllowUsedSecondsToday:
+    stats.temporaryAllowUsedSecondsToday + Math.max(Math.floor(seconds), 0),
+});
