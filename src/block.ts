@@ -1,5 +1,11 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import { getRelatedRuleIdsForHost } from "./site-matching.js";
+import {
+  DailyBlockerStats,
+  normalizeDailyStats,
+  withBlockedAttempt,
+  withTemporaryAllow,
+} from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
 import {
   ensureHttpUrl,
@@ -155,6 +161,27 @@ const getTempAllowMinutes = (): Promise<number> =>
       });
     }
   });
+
+const getDailyStats = (): Promise<DailyBlockerStats> =>
+  new Promise((resolve) => {
+    chrome.storage.local.get({ [STORAGE_KEYS.localDailyStats]: null }, (items: StorageItems) => {
+      resolve(normalizeDailyStats(items[STORAGE_KEYS.localDailyStats]));
+    });
+  });
+
+const setDailyStats = (stats: DailyBlockerStats): Promise<void> =>
+  new Promise((resolve) => {
+    chrome.storage.local.set({ [STORAGE_KEYS.localDailyStats]: stats }, () => resolve());
+  });
+
+const updateDailyStats = async (
+  mutate: (stats: DailyBlockerStats) => DailyBlockerStats
+): Promise<DailyBlockerStats> => {
+  const current = await getDailyStats();
+  const updated = normalizeDailyStats(mutate(current));
+  await setDailyStats(updated);
+  return updated;
+};
 
 // ---------- Rule builder ----------
 
@@ -603,23 +630,34 @@ const allowRulesTemporarily = async (
   return true;
 };
 
+type TemporaryAllowResult = {
+  ok: boolean;
+  host: string | null;
+  minutes: number;
+};
+
 // Temporarily allow a hostname and any related rules (base domain + subdomains).
 const temporarilyAllow = async (
   host: string,
   minutes?: number
-): Promise<boolean> => {
+): Promise<TemporaryAllowResult> => {
   const mins = minutes ?? (await getTempAllowMinutes());
   const ids = getRelatedRuleIdsForHost(host, blockedSites);
-  return allowRulesTemporarily(ids, mins);
+  const ok = await allowRulesTemporarily(ids, mins);
+  return {
+    ok,
+    host: ok ? normalizeHost(host) : null,
+    minutes: mins,
+  };
 };
 
 // Entry point when we only know the rule id (e.g., from the block page).
 const temporarilyAllowById = async (
   id: number,
   minutes?: number
-): Promise<boolean> => {
+): Promise<TemporaryAllowResult> => {
   const site = blockedSites[id - 1];
-  if (!site) return false;
+  if (!site) return { ok: false, host: null, minutes: 0 };
   return temporarilyAllow(site, minutes);
 };
 
@@ -636,13 +674,15 @@ const getTemporaryAllowHostFromUrl = (url: URL): string | null => {
   return parseHostnameFromUrl(url.toString());
 };
 
-const temporarilyAllowFromUrl = async (rawUrl?: string | null): Promise<boolean> => {
-  if (!rawUrl) return false;
+const temporarilyAllowFromUrl = async (
+  rawUrl?: string | null
+): Promise<TemporaryAllowResult> => {
+  if (!rawUrl) return { ok: false, host: null, minutes: 0 };
   let url: URL;
   try {
     url = new URL(rawUrl);
   } catch {
-    return false;
+    return { ok: false, host: null, minutes: 0 };
   }
 
   const ruleId = getRuleIdFromUrl(url);
@@ -651,7 +691,7 @@ const temporarilyAllowFromUrl = async (rawUrl?: string | null): Promise<boolean>
   }
 
   const host = getTemporaryAllowHostFromUrl(url);
-  if (!host) return false;
+  if (!host) return { ok: false, host: null, minutes: 0 };
   return temporarilyAllow(host);
 };
 
@@ -746,6 +786,12 @@ type TemporarilyAllowTabMessage = {
   type: "temporarily-allow-tab";
   url?: string | null;
   tabId?: number | null;
+};
+
+type RecordBlockedAttemptMessage = {
+  type: "record-blocked-attempt";
+  site?: string | null;
+  rid?: number | null;
 };
 
 
@@ -1470,6 +1516,31 @@ const handlePeekWithChatGPTRequest = async (
 };
 
 chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: SendResponse) => {
+  if (message?.type === "get-local-stats") {
+    getDailyStats()
+      .then((stats) => sendResponse({ ok: true, stats }))
+      .catch((error) => {
+        console.warn("get-local-stats request failed", error);
+        sendResponse({ ok: false, error: error?.message ?? String(error) });
+      });
+    return true;
+  }
+  if (message?.type === "record-blocked-attempt") {
+    const payload = message as RecordBlockedAttemptMessage;
+    const site = sanitizeSite(payload.site) || sanitizeSite(parseSiteFromSender(sender));
+    const ruleId = Number(payload.rid);
+    if (Number.isInteger(ruleId) && ruleId > 0) {
+      updateDailyStats((stats) => withBlockedAttempt(stats, site))
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => {
+          console.warn("record-blocked-attempt request failed", error);
+          sendResponse({ ok: false, error: error?.message ?? String(error) });
+        });
+      return true;
+    }
+    sendResponse({ ok: false, error: "Missing rule id" });
+    return undefined;
+  }
   if (message?.type === "peek-with-chatgpt") {
     handlePeekWithChatGPTRequest(message as PeekWithChatGPTMessage, sender)
       .then((result) => {
@@ -1483,9 +1554,15 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
   }
   if (message?.type === "temporarily-allow-tab") {
     temporarilyAllowFromUrl(message.url)
-      .then(async (ok) => ({
-        ok,
-        destination: ok
+      .then(async (allowResult) => {
+        if (allowResult.ok) {
+          await updateDailyStats((stats) =>
+            withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
+          );
+        }
+        return {
+          ok: allowResult.ok,
+          destination: allowResult.ok
           ? await getTemporarilyAllowedDestination(
               message as TemporarilyAllowTabMessage,
               sender,
@@ -1495,7 +1572,8 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
               }
             )
           : null,
-      }))
+        };
+      })
       .then((response) => sendResponse(response))
       .catch((error) => {
         console.warn("temporarily-allow-tab request failed", error);
@@ -1563,7 +1641,16 @@ chrome.contextMenus.onClicked.addListener((info: { menuItemId?: string | number 
 
   // Temporarily allow flow (unchanged; still works off rid or hostname fallback).
   if (info.menuItemId === "temporarily-allow") {
-    temporarilyAllowFromUrl(tab.url);
+    temporarilyAllowFromUrl(tab.url)
+      .then((allowResult) => {
+        if (!allowResult.ok) return;
+        return updateDailyStats((stats) =>
+          withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
+        );
+      })
+      .catch((error) => {
+        console.warn("context menu temporary allow failed", error);
+      });
     return;
   }
 

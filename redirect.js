@@ -1,6 +1,8 @@
 // Show where we came from (optional)
 const params = new URLSearchParams(location.search);
 const site = params.get("site");
+const rawRuleId = Number(params.get("rid"));
+const ruleId = Number.isInteger(rawRuleId) && rawRuleId > 0 ? rawRuleId : null;
 if (site) {
   const h2 = document.querySelector("h2");
   if (h2) h2.textContent = `🚫 ${site} is blocked!`;
@@ -22,6 +24,80 @@ const ensureHttpUrl = (raw) => {
   return null;
 };
 
+const formatDecisionLabel = (decision) => {
+  if (decision.action === "temporary-allow") {
+    const mins = Number.isFinite(decision.minutes) ? Math.max(decision.minutes, 0) : 0;
+    return mins > 0 ? `Temporarily allowed (${mins}m)` : "Temporarily allowed";
+  }
+  return "Blocked";
+};
+
+const renderStats = (stats) => {
+  const statsRoot = document.getElementById("stats");
+  if (!statsRoot || !stats) return;
+
+  const blockedEl = document.getElementById("stats-blocked-attempts");
+  const allowsEl = document.getElementById("stats-temp-allows");
+  const minutesEl = document.getElementById("stats-temp-allow-minutes");
+  const recentEl = document.getElementById("stats-recent-decisions");
+
+  if (blockedEl) blockedEl.textContent = String(stats.blockedAttemptsToday || 0);
+  if (allowsEl) allowsEl.textContent = String(stats.temporaryAllowsToday || 0);
+  if (minutesEl) minutesEl.textContent = String(stats.temporaryAllowMinutesToday || 0);
+
+  if (!recentEl) return;
+  recentEl.innerHTML = "";
+  const decisions = Array.isArray(stats.recentDecisions) ? stats.recentDecisions.slice(0, 5) : [];
+  if (decisions.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = "No decisions yet today.";
+    recentEl.appendChild(item);
+    return;
+  }
+
+  decisions.forEach((decision) => {
+    const item = document.createElement("li");
+    const time = new Date(decision.timestamp).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const siteLabel = decision.site || "Unknown site";
+    item.textContent = `${time} — ${formatDecisionLabel(decision)} • ${siteLabel}`;
+    recentEl.appendChild(item);
+  });
+};
+
+const refreshStats = () => {
+  chrome.runtime.sendMessage({ type: "get-local-stats" }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.warn("Could not load local stats", chrome.runtime.lastError.message);
+      return;
+    }
+    if (!response?.ok || !response.stats) return;
+    renderStats(response.stats);
+  });
+};
+
+const maybeRecordBlockedAttempt = () => {
+  if (!site || !ruleId) return;
+  const navigationEntry = performance.getEntriesByType("navigation")?.[0];
+  if (navigationEntry?.type === "reload") return;
+  chrome.runtime.sendMessage(
+    {
+      type: "record-blocked-attempt",
+      site,
+      rid: ruleId,
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.warn("Could not record blocked attempt", chrome.runtime.lastError.message);
+        return;
+      }
+      refreshStats();
+    }
+  );
+};
+
 chrome.storage.sync.get(
   { redirectUrl: DEFAULT_REDIRECT_URL, redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT },
   (data) => {
@@ -33,6 +109,9 @@ chrome.storage.sync.get(
     });
   }
 );
+
+refreshStats();
+maybeRecordBlockedAttempt();
 
 const peekBtn = document.getElementById("peek-chatgpt-btn");
 if (peekBtn) {

@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   lastPeekPrompt: "lastPeekPrompt",
   lastPeekSite: "lastPeekSite",
   lastPeekUrl: "lastPeekUrl",
+  localDailyStats: "localDailyStats",
 } as const;
 
 export const ALARM_NAMES = {
