@@ -25,6 +25,10 @@ const grayscaleHosts = new Map<string, TemporaryAllowWindow>();
 const BADGE_REFRESH_ALARM = "refresh-temp-allow-badge";
 const TEMP_ALLOW_BADGE_COLOR = "#f59e0b";
 
+const scheduleBadgeRefreshAlarm = () => {
+  chrome.alarms.create(BADGE_REFRESH_ALARM, { periodInMinutes: 1 });
+};
+
 const normalizeHost = (host?: string | null): string | null => {
   if (!host) return null;
   const trimmed = host.trim().toLowerCase();
@@ -561,7 +565,7 @@ getTempAllowMinutes();
 loadGrayscalePreference();
 loadGrayscaleHosts();
 refreshBadgeForActiveTab();
-chrome.alarms.create(BADGE_REFRESH_ALARM, { periodInMinutes: 1 });
+scheduleBadgeRefreshAlarm();
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "sync") {
@@ -596,6 +600,7 @@ const allowRulesTemporarily = (ids: number[], minutes: number) => {
     { removeRuleIds: ids },
     withLastErrorLog("removeRuleIds")
   );
+  scheduleBadgeRefreshAlarm();
   ids.forEach((id) =>
     chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes })
   );
@@ -694,6 +699,7 @@ const reblockAllNow = (tabId?: number, currentUrl?: string) => {
   clearGrayscaleHosts();
   chrome.alarms.clearAll(
     withLastErrorLog("alarms.clearAll", () => {
+      scheduleBadgeRefreshAlarm();
       // Best-effort: clear any session storage keys we may have used.
       if (chrome.storage?.session?.clear) {
         chrome.storage.session.clear(
