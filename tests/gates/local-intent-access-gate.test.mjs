@@ -38,6 +38,21 @@ test("local intent check asks follow-up for vague request", () => {
   assert.equal(decision.scope, "none");
 });
 
+test("local intent check fails after vague follow-up", () => {
+  const decision = localIntentAccessGate.decide({
+    rawUrl: blockUrl(1, "reddit.com"),
+    blockedSites: ["reddit.com"],
+    defaultMinutes: 20,
+    requestedPurpose: "checking something",
+    requestedMinutes: 10,
+    currentUrl: "https://reddit.com/r/typescript",
+    followUpAnswer: "not sure",
+  });
+
+  assert.equal(decision.decision, "FAIL");
+  assert.equal(decision.scope, "none");
+});
+
 test("local intent check fails obvious autopilot request", () => {
   const decision = localIntentAccessGate.decide({
     rawUrl: blockUrl(1, "reddit.com"),

@@ -185,6 +185,13 @@ export const localIntentAccessGate: AccessGate<LocalIntentAccessRequestContext> 
     const deliberate = containsAny(combinedIntent, DELIBERATE_KEYWORDS) || looksSpecific;
 
     if (!deliberate) {
+      if (followUpAnswer) {
+        return baseFail(
+          minutes,
+          "I still don't have a specific outcome for this access request."
+        );
+      }
+
       return {
         decision: "ASK_FOLLOWUP",
         scope: "none",
