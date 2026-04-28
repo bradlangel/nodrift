@@ -249,4 +249,3 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
 };
 
 wireTemporaryAllowButton("temporarily-allow-btn", "domain", "Temporarily allowing...");
-wireTemporaryAllowButton("temporarily-allow-url-btn", "url", "Allowing this URL...");
