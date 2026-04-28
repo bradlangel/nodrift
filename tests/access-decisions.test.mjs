@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 
 import { buildTemporaryAllowDecision } from "../dist/access-decisions.js";
+import { buildDecisionApplication } from "../dist/decision-application.js";
+import { temporaryAllowGate } from "../dist/temporary-allow-gate.js";
 import {
   findRuleIdByHostname,
   getRelatedRuleIdsForHost,
@@ -143,6 +145,52 @@ test("temporary allow destination ignores parent ledger URLs for subdomain block
   );
 
   assert.equal(destination, "https://music.youtube.com/");
+});
+
+
+test("decision application maps domain pass to allow-domain operation", () => {
+  const application = buildDecisionApplication({
+    decision: "PASS",
+    scope: "domain",
+    minutes: 25,
+    host: "youtube.com",
+    url: null,
+    ruleIds: [1, 2],
+  });
+
+  assert.equal(application.operation, "allow-domain");
+  assert.deepEqual(application.ruleIds, [1, 2]);
+  assert.equal(application.minutes, 25);
+});
+
+test("decision application maps ASK_FOLLOWUP to no-op", () => {
+  const application = buildDecisionApplication({
+    decision: "ASK_FOLLOWUP",
+    scope: "none",
+    minutes: 15,
+    host: null,
+    url: null,
+    ruleIds: [],
+    message: "Need one more detail",
+  });
+
+  assert.equal(application.operation, "none");
+  assert.equal(application.decision, "ASK_FOLLOWUP");
+  assert.equal(application.message, "Need one more detail");
+});
+
+test("temporary allow gate exposes the shared access gate contract", () => {
+  const decision = temporaryAllowGate.decide({
+    rawUrl: blockUrl(1, "youtube.com"),
+    requestedScope: "url",
+    requestedUrl: "https://youtube.com/watch?v=abc",
+    blockedSites: ["youtube.com"],
+    defaultMinutes: 10,
+  });
+
+  assert.equal(temporaryAllowGate.id, "temporary-allow");
+  assert.equal(decision.decision, "PASS");
+  assert.equal(decision.scope, "url");
 });
 
 let failures = 0;

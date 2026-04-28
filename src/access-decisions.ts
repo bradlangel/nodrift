@@ -1,26 +1,13 @@
+import {
+  AccessDecisionScope,
+  AccessRequestContext,
+  AccessGateDecision,
+} from "./access-contracts.js";
 import { getRelatedRuleIdsForHost, hostMatchesSite } from "./site-matching.js";
 import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "./url-domain.js";
 
-export type AccessDecision = "PASS" | "PASS_WITH_LIMIT" | "FAIL" | "ASK_FOLLOWUP";
-export type AccessDecisionScope = "domain" | "url" | "none";
-
-export type TemporaryAccessDecision = {
-  decision: AccessDecision;
-  scope: AccessDecisionScope;
-  minutes: number;
-  host: string | null;
-  url: string | null;
-  ruleIds: number[];
-  message?: string;
-};
-
-type BuildTemporaryAllowDecisionInput = {
-  rawUrl?: string | null;
-  requestedScope?: AccessDecisionScope;
-  requestedUrl?: string | null;
-  blockedSites: string[];
-  defaultMinutes: number;
-};
+export type TemporaryAccessDecision = AccessGateDecision;
+type BuildTemporaryAllowDecisionInput = AccessRequestContext;
 
 const getRuleIdFromUrl = (url: URL): number | null => {
   const rawRuleId = url.searchParams.get("rid");
@@ -39,7 +26,7 @@ export const buildTemporaryAllowDecision = (
   input: BuildTemporaryAllowDecisionInput
 ): TemporaryAccessDecision => {
   const minutes = Math.max(Math.floor(input.defaultMinutes), 0);
-  const fail = (message: string): TemporaryAccessDecision => ({
+  const fail = (message: string): AccessGateDecision => ({
     decision: "FAIL",
     scope: "none",
     minutes,

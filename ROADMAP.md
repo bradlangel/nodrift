@@ -98,7 +98,7 @@ Refactor milestones:
       preserving one simple default action.
 - [ ] Add settings flags for compiled-in modules such as stats, ChatGPT peek,
       and agentic access.
-- [ ] Add a short architecture note explaining how to add a new access gate.
+- [x] Add a short architecture note explaining how to add a new access gate.
 
 ## Local Stats
 

@@ -1,8 +1,8 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
-import {
-  buildTemporaryAllowDecision,
-  TemporaryAccessDecision,
-} from "./access-decisions.js";
+import { TemporaryAccessDecision } from "./access-decisions.js";
+import { temporaryAllowGate } from "./temporary-allow-gate.js";
+import { buildDecisionApplication } from "./decision-application.js";
+import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page-capabilities.js";
 import {
   createEmptyDailyStats,
   DailyBlockerStats,
@@ -1093,35 +1093,39 @@ type TemporaryAllowResult = {
 const applyTemporaryAllowDecision = async (
   decision: TemporaryAccessDecision
 ): Promise<TemporaryAllowResult> => {
-  const shouldApply =
-    (decision.decision === "PASS" || decision.decision === "PASS_WITH_LIMIT") &&
-    decision.scope === "domain";
-  if (!shouldApply) {
-    if (
-      (decision.decision === "PASS" || decision.decision === "PASS_WITH_LIMIT") &&
-      decision.scope === "url" &&
-      decision.url &&
-      decision.host
-    ) {
-      const ok = scheduleTemporaryUrlAllow(decision.url, decision.host, decision.minutes);
-      return {
-        ok,
-        host: ok ? decision.host : null,
-        url: ok ? decision.url : null,
-        scope: "url",
-        minutes: decision.minutes,
-      };
-    }
-    return { ok: false, host: null, url: null, scope: "none", minutes: decision.minutes };
+  const application = buildDecisionApplication(decision);
+  if (application.operation === "allow-url") {
+    const ok = scheduleTemporaryUrlAllow(
+      application.url,
+      application.host,
+      application.minutes
+    );
+    return {
+      ok,
+      host: ok ? application.host : null,
+      url: ok ? application.url : null,
+      scope: "url",
+      minutes: application.minutes,
+    };
   }
 
-  const ok = await allowRulesTemporarily(decision.ruleIds, decision.minutes);
+  if (application.operation === "allow-domain") {
+    const ok = await allowRulesTemporarily(application.ruleIds, application.minutes);
+    return {
+      ok,
+      host: ok ? application.host : null,
+      url: null,
+      scope: "domain",
+      minutes: application.minutes,
+    };
+  }
+
   return {
-    ok,
-    host: ok ? decision.host : null,
+    ok: false,
+    host: null,
     url: null,
-    scope: "domain",
-    minutes: decision.minutes,
+    scope: "none",
+    minutes: application.minutes,
   };
 };
 
@@ -1138,7 +1142,7 @@ const temporarilyAllowFromUrl = async (
           getTabNavigatedHttpUrl,
         })
       : null;
-  const decision = buildTemporaryAllowDecision({
+  const decision = temporaryAllowGate.decide({
     rawUrl: payload.url,
     requestedScope,
     requestedUrl,
@@ -1249,6 +1253,14 @@ type RecordBlockedAttemptMessage = {
   site?: string | null;
   rid?: number | null;
 };
+
+const TEMPORARY_ALLOW_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.type === "temporary-allow")
+    ?.messageType ?? "temporarily-allow-tab";
+
+const CHATGPT_PEEK_MESSAGE_TYPE =
+  OPTIONAL_INTEGRATIONS.find((integration) => integration.id === "chatgpt-peek")
+    ?.messageType ?? "peek-with-chatgpt";
 
 
 const stripTags = (value: string): string =>
@@ -2012,7 +2024,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     sendResponse({ ok: false, error: "Missing rule id" });
     return undefined;
   }
-  if (message?.type === "peek-with-chatgpt") {
+  if (message?.type === CHATGPT_PEEK_MESSAGE_TYPE) {
     handlePeekWithChatGPTRequest(message as PeekWithChatGPTMessage, sender)
       .then((result) => {
         sendResponse({ status: result.status, prompt: result.prompt });
@@ -2023,7 +2035,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       });
     return true;
   }
-  if (message?.type === "temporarily-allow-tab") {
+  if (message?.type === TEMPORARY_ALLOW_MESSAGE_TYPE) {
     temporarilyAllowFromUrl(message as TemporarilyAllowTabMessage, sender)
       .then(async (allowResult) => {
         if (allowResult.ok) {
