@@ -10,6 +10,44 @@ if (site) {
 
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
+const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
+const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
+const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
+
+const BLOCK_PAGE_ACTIONS = [
+  {
+    id: "redirect",
+    type: "redirect",
+    buttonId: "redirect-btn",
+    label: DEFAULT_REDIRECT_BTN_TEXT,
+  },
+  {
+    id: "temporary-allow-domain",
+    type: "temporary-allow",
+    buttonId: "temporarily-allow-btn",
+    label: DEFAULT_TEMPORARY_ALLOW_BTN_TEXT,
+    pendingLabel: DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL,
+    scope: "domain",
+  },
+  {
+    id: "peek-chatgpt",
+    type: "peek-chatgpt",
+    buttonId: "peek-chatgpt-btn",
+    label: DEFAULT_PEEK_CHATGPT_BTN_TEXT,
+    className: "secondary",
+    title:
+      "Opens ChatGPT with your prompt and a quick page snapshot so you can review and send it yourself",
+  },
+  {
+    id: "temporary-allow-url",
+    type: "temporary-allow",
+    buttonId: "temporarily-allow-url-btn",
+    label: "Temporarily Allow This Page",
+    pendingLabel: "Temporarily allowing this page...",
+    scope: "url",
+    visibleByDefault: false,
+  },
+];
 
 const ensureHttpUrl = (raw) => {
   if (!raw) return null;
@@ -102,6 +140,24 @@ const configureStatsLink = () => {
   statsLink.href = chrome.runtime.getURL("stats.html");
 };
 
+const getDefaultVisibleActions = () =>
+  BLOCK_PAGE_ACTIONS.filter((action) => action.visibleByDefault !== false);
+
+const renderActions = (actions) => {
+  const root = document.getElementById("actions");
+  if (!root) return;
+
+  root.innerHTML = "";
+  actions.forEach((action) => {
+    const button = document.createElement("button");
+    button.id = action.buttonId;
+    button.textContent = action.label;
+    if (action.className) button.className = action.className;
+    if (action.title) button.title = action.title;
+    root.appendChild(button);
+  });
+};
+
 const maybeRecordBlockedAttempt = () => {
   if (!site || !ruleId) return;
   const navigationEntry = performance.getEntriesByType("navigation")?.[0];
@@ -122,25 +178,30 @@ const maybeRecordBlockedAttempt = () => {
   );
 };
 
-chrome.storage.sync.get(
-  { redirectUrl: DEFAULT_REDIRECT_URL, redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT },
-  (data) => {
-    const target = data.redirectUrl || DEFAULT_REDIRECT_URL;
-    const btn = document.getElementById("redirect-btn");
-    btn.textContent = data.redirectBtnText || DEFAULT_REDIRECT_BTN_TEXT;
-    btn.addEventListener("click", () => {
-      window.location = target;
-    });
-  }
-);
+const wireRedirectButton = () => {
+  chrome.storage.sync.get(
+    { redirectUrl: DEFAULT_REDIRECT_URL, redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT },
+    (data) => {
+      const target = data.redirectUrl || DEFAULT_REDIRECT_URL;
+      const btn = document.getElementById("redirect-btn");
+      if (!btn) return;
+      btn.textContent = data.redirectBtnText || DEFAULT_REDIRECT_BTN_TEXT;
+      btn.addEventListener("click", () => {
+        window.location = target;
+      });
+    }
+  );
+};
 
 refreshStats();
 maybeRecordBlockedAttempt();
 configureStatsLink();
 
-const peekBtn = document.getElementById("peek-chatgpt-btn");
-if (peekBtn) {
-  const originalLabel = peekBtn.textContent || "Peek with ChatGPT";
+const wirePeekChatGptButton = () => {
+  const peekBtn = document.getElementById("peek-chatgpt-btn");
+  if (!peekBtn) return;
+
+  const originalLabel = peekBtn.textContent || DEFAULT_PEEK_CHATGPT_BTN_TEXT;
   let attemptedUrl = document.referrer || "";
   if (attemptedUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`)) {
     attemptedUrl = "";
@@ -196,12 +257,12 @@ if (peekBtn) {
       }
     );
   });
-}
+};
 
 const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
   const button = document.getElementById(buttonId);
   if (!button) return;
-  const originalLabel = button.textContent || "Temporarily Allow";
+  const originalLabel = button.textContent || DEFAULT_TEMPORARY_ALLOW_BTN_TEXT;
 
   button.addEventListener("click", () => {
     button.disabled = true;
@@ -248,4 +309,26 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
   });
 };
 
-wireTemporaryAllowButton("temporarily-allow-btn", "domain", "Temporarily allowing...");
+const wireActions = (actions) => {
+  actions.forEach((action) => {
+    if (action.type === "redirect") {
+      wireRedirectButton();
+      return;
+    }
+    if (action.type === "peek-chatgpt") {
+      wirePeekChatGptButton();
+      return;
+    }
+    if (action.type === "temporary-allow") {
+      wireTemporaryAllowButton(
+        action.buttonId,
+        action.scope || "domain",
+        action.pendingLabel || DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL
+      );
+    }
+  });
+};
+
+const defaultActions = getDefaultVisibleActions();
+renderActions(defaultActions);
+wireActions(defaultActions);

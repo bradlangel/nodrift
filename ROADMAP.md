@@ -94,7 +94,7 @@ Refactor milestones:
 - [ ] Move shared URL/domain normalization into one utility module.
 - [x] Move temporary-access decisions behind a single decision/apply pipeline.
 - [x] Separate gate decision logic from browser API side effects.
-- [ ] Make the block page render available actions from configuration while
+- [x] Make the block page render available actions from configuration while
       preserving one simple default action.
 - [ ] Add settings flags for compiled-in modules such as stats, ChatGPT peek,
       and agentic access.
