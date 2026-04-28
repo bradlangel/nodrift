@@ -22,7 +22,7 @@ and a body.
   Treat the current heuristic flow as a local intent check or test gate, not a
   real agentic/LLM-reviewed access flow.
 
-- [ ] Move gate-specific tests out of the shared access-control test file.
+- [x] Move gate-specific tests out of the shared access-control test file.
   Keep shared matching, destination, and decision-application tests in the
   common file. Put temporary allow and local intent gate behavior in their own
   gate-specific test files.

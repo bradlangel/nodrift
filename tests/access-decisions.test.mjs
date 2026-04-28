@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 
 import { buildTemporaryAllowDecision } from "../dist/access-decisions.js";
 import { buildDecisionApplication } from "../dist/core/decision-application.js";
-import { temporaryAllowGate } from "../dist/gates/temporary-allow-gate.js";
-import { localIntentAccessGate } from "../dist/gates/local-intent-access-gate.js";
 import {
   findRuleIdByHostname,
   getRelatedRuleIdsForHost,
@@ -176,90 +174,6 @@ test("decision application maps ASK_FOLLOWUP to no-op", () => {
   assert.equal(application.operation, "none");
   assert.equal(application.decision, "ASK_FOLLOWUP");
   assert.equal(application.message, "Need one more detail");
-});
-
-test("temporary allow gate exposes the shared access gate contract", () => {
-  const decision = temporaryAllowGate.decide({
-    rawUrl: blockUrl(1, "youtube.com"),
-    requestedScope: "url",
-    requestedUrl: "https://youtube.com/watch?v=abc",
-    blockedSites: ["youtube.com"],
-    defaultMinutes: 10,
-  });
-
-  assert.equal(temporaryAllowGate.id, "temporary-allow");
-  assert.equal(decision.decision, "PASS");
-  assert.equal(decision.scope, "url");
-});
-
-test("local intent check passes deliberate legitimate request", () => {
-  const decision = localIntentAccessGate.decide({
-    rawUrl: blockUrl(1, "youtube.com"),
-    blockedSites: ["youtube.com"],
-    defaultMinutes: 30,
-    requestedPurpose: "Need to debug an issue using a docs walkthrough",
-    requestedMinutes: 20,
-    currentUrl: "https://youtube.com/watch?v=abc",
-  });
-
-  assert.ok(["PASS", "PASS_WITH_LIMIT"].includes(decision.decision));
-});
-
-test("local intent check asks follow-up for vague request", () => {
-  const decision = localIntentAccessGate.decide({
-    rawUrl: blockUrl(1, "reddit.com"),
-    blockedSites: ["reddit.com"],
-    defaultMinutes: 20,
-    requestedPurpose: "checking something",
-    requestedMinutes: 10,
-    currentUrl: "https://reddit.com/r/typescript",
-  });
-
-  assert.equal(decision.decision, "ASK_FOLLOWUP");
-  assert.equal(decision.scope, "none");
-});
-
-test("local intent check fails obvious autopilot request", () => {
-  const decision = localIntentAccessGate.decide({
-    rawUrl: blockUrl(1, "reddit.com"),
-    blockedSites: ["reddit.com"],
-    defaultMinutes: 20,
-    requestedPurpose: "scroll because I'm bored",
-    requestedMinutes: 10,
-    currentUrl: "https://reddit.com/r/popular",
-  });
-
-  assert.equal(decision.decision, "FAIL");
-  assert.equal(decision.scope, "none");
-});
-
-test("local intent check limits excessive duration", () => {
-  const decision = localIntentAccessGate.decide({
-    rawUrl: blockUrl(1, "reddit.com"),
-    blockedSites: ["reddit.com"],
-    defaultMinutes: 20,
-    requestedPurpose: "planned downtime watching one creator",
-    requestedMinutes: 120,
-    currentUrl: "https://reddit.com/r/videos",
-  });
-
-  assert.equal(decision.decision, "PASS_WITH_LIMIT");
-  assert.equal(decision.minutes, 45);
-});
-
-test("local intent check can grant URL-scoped access for exact-page intent", () => {
-  const decision = localIntentAccessGate.decide({
-    rawUrl: blockUrl(1, "news.ycombinator.com"),
-    blockedSites: ["news.ycombinator.com"],
-    defaultMinutes: 20,
-    requestedPurpose: "Need this specific page article to verify an implementation detail",
-    requestedMinutes: 25,
-    currentUrl: "https://news.ycombinator.com/item?id=123",
-  });
-
-  assert.equal(decision.decision, "PASS_WITH_LIMIT");
-  assert.equal(decision.scope, "url");
-  assert.equal(decision.url, "https://news.ycombinator.com/item?id=123");
 });
 
 let failures = 0;
