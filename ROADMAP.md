@@ -17,7 +17,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add a fuller local stats dashboard page.
 - [ ] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
 - [ ] Support exact-URL temporary access when the user only needs one page.
-- [ ] Refactor toward modular access gates and actions before adding more gate
+- [x] Refactor toward modular access gates and actions before adding more gate
       types.
 - [ ] Improve the options page styling and blocked-site editing experience.
 - [ ] Add Firefox support once the core Chrome flow feels solid.
@@ -78,8 +78,8 @@ Target decision contract:
 Refactor milestones:
 
 - [ ] Move shared URL/domain normalization into one utility module.
-- [ ] Move temporary-access decisions behind a single decision/apply pipeline.
-- [ ] Separate gate decision logic from browser API side effects.
+- [x] Move temporary-access decisions behind a single decision/apply pipeline.
+- [x] Separate gate decision logic from browser API side effects.
 - [ ] Make the block page render available actions from configuration.
 - [ ] Add settings flags for compiled-in modules such as stats, ChatGPT peek,
       and agentic access.

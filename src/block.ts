@@ -1,5 +1,8 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
-import { getRelatedRuleIdsForHost } from "./site-matching.js";
+import {
+  buildTemporaryAllowDecision,
+  TemporaryAccessDecision,
+} from "./access-decisions.js";
 import {
   createEmptyDailyStats,
   DailyBlockerStats,
@@ -894,63 +897,38 @@ type TemporaryAllowResult = {
   minutes: number;
 };
 
-// Temporarily allow a hostname and any related rules (base domain + subdomains).
-const temporarilyAllow = async (
-  host: string,
-  minutes?: number
+const applyTemporaryAllowDecision = async (
+  decision: TemporaryAccessDecision
 ): Promise<TemporaryAllowResult> => {
-  const mins = minutes ?? (await getTempAllowMinutes());
-  const ids = getRelatedRuleIdsForHost(host, blockedSites);
-  const ok = await allowRulesTemporarily(ids, mins);
+  const shouldApply =
+    (decision.decision === "PASS" || decision.decision === "PASS_WITH_LIMIT") &&
+    decision.scope === "domain";
+  if (!shouldApply) {
+    return {
+      ok: false,
+      host: null,
+      minutes: decision.minutes,
+    };
+  }
+
+  const ok = await allowRulesTemporarily(decision.ruleIds, decision.minutes);
   return {
     ok,
-    host: ok ? normalizeHost(host) : null,
-    minutes: mins,
+    host: ok ? decision.host : null,
+    minutes: decision.minutes,
   };
-};
-
-// Entry point when we only know the rule id (e.g., from the block page).
-const temporarilyAllowById = async (
-  id: number,
-  minutes?: number
-): Promise<TemporaryAllowResult> => {
-  const site = blockedSites[id - 1];
-  if (!site) return { ok: false, host: null, minutes: 0 };
-  return temporarilyAllow(site, minutes);
-};
-
-const getRuleIdFromUrl = (url: URL): number | null => {
-  const rawRuleId = url.searchParams.get("rid");
-  if (!rawRuleId) return null;
-  const ruleId = Number(rawRuleId);
-  return Number.isInteger(ruleId) && ruleId > 0 ? ruleId : null;
-};
-
-const getTemporaryAllowHostFromUrl = (url: URL): string | null => {
-  const siteParam = normalizeHost(url.searchParams.get("site"));
-  if (siteParam) return siteParam;
-  return parseHostnameFromUrl(url.toString());
 };
 
 const temporarilyAllowFromUrl = async (
   rawUrl?: string | null
 ): Promise<TemporaryAllowResult> => {
-  if (!rawUrl) return { ok: false, host: null, minutes: 0 };
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return { ok: false, host: null, minutes: 0 };
-  }
-
-  const ruleId = getRuleIdFromUrl(url);
-  if (ruleId !== null) {
-    return temporarilyAllowById(ruleId);
-  }
-
-  const host = getTemporaryAllowHostFromUrl(url);
-  if (!host) return { ok: false, host: null, minutes: 0 };
-  return temporarilyAllow(host);
+  const defaultMinutes = await getTempAllowMinutes();
+  const decision = buildTemporaryAllowDecision({
+    rawUrl,
+    blockedSites,
+    defaultMinutes,
+  });
+  return applyTemporaryAllowDecision(decision);
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
