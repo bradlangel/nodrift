@@ -14,14 +14,19 @@ const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
+const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
+const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
+const REQUEST_LOCAL_INTENT_MESSAGE_TYPE = "request-local-intent-access";
+const REQUEST_LLM_REVIEWED_MESSAGE_TYPE = "request-llm-reviewed-access";
 const ACCESS_GATE_ACTION_IDS = new Set([
   "temporary-allow-domain",
   LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
+  LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
 ]);
 
 const BLOCK_PAGE_ACTIONS = [
@@ -45,6 +50,14 @@ const BLOCK_PAGE_ACTIONS = [
     type: "request-access",
     buttonId: "request-access-gate-btn",
     label: DEFAULT_REQUEST_ACCESS_BTN_TEXT,
+    messageType: REQUEST_LOCAL_INTENT_MESSAGE_TYPE,
+  },
+  {
+    id: "llm-reviewed-request-access",
+    type: "request-access",
+    buttonId: "llm-request-access-gate-btn",
+    label: "LLM-reviewed request",
+    messageType: REQUEST_LLM_REVIEWED_MESSAGE_TYPE,
   },
   {
     id: "peek-chatgpt",
@@ -65,9 +78,6 @@ const BLOCK_PAGE_ACTIONS = [
     visibleByDefault: false,
   },
 ];
-
-
-const REQUEST_ACCESS_MESSAGE_TYPE = "request-local-intent-access";
 
 const normalizeAccessGateActionId = (actionId) =>
   actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID
@@ -182,21 +192,42 @@ const loadConfiguredActions = (callback) => {
       accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
       showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
       showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
+      llmProvider: "openai",
+      openAiModel: "gpt-4o-mini",
     },
     (data) => {
-      const primaryAction = getAccessGateAction(data.accessGateActionId);
-      const secondaryActionIds = [
-        data.showCareerTrackerRedirect !== false ? "redirect" : null,
-        data.showChatGptPeek !== false ? "peek-chatgpt" : null,
-      ];
-      const secondaryActions = secondaryActionIds
-        .map((actionId) =>
-          actionId ? BLOCK_PAGE_ACTIONS.find((action) => action.id === actionId) : null
-        )
-        .filter(Boolean);
-      callback({
-        primaryActions: primaryAction ? [primaryAction] : [],
-        secondaryActions,
+      chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {
+        const llmConfigured =
+          data.llmProvider === "openai" &&
+          typeof data.openAiModel === "string" &&
+          data.openAiModel.trim().length > 0 &&
+          typeof localData.openAiApiKey === "string" &&
+          localData.openAiApiKey.trim().length > 0;
+
+        const primaryAction = getAccessGateAction(data.accessGateActionId);
+        const effectivePrimaryAction =
+          primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID && !llmConfigured
+            ? {
+                ...primaryAction,
+                label: "LLM-reviewed request (setup required)",
+                disabledReason:
+                  "LLM-reviewed request is selected, but OpenAI settings are incomplete. Add model and API key in Options.",
+              }
+            : primaryAction;
+
+        const secondaryActionIds = [
+          data.showCareerTrackerRedirect !== false ? "redirect" : null,
+          data.showChatGptPeek !== false ? "peek-chatgpt" : null,
+        ];
+        const secondaryActions = secondaryActionIds
+          .map((actionId) =>
+            actionId ? BLOCK_PAGE_ACTIONS.find((action) => action.id === actionId) : null
+          )
+          .filter(Boolean);
+        callback({
+          primaryActions: effectivePrimaryAction ? [effectivePrimaryAction] : [],
+          secondaryActions,
+        });
       });
     }
   );
@@ -209,6 +240,12 @@ const renderActionButton = (action, groupClassName = "") => {
   button.dataset.actionId = action.id;
   button.className = [action.className, groupClassName].filter(Boolean).join(" ");
   if (action.title) button.title = action.title;
+  if (action.messageType) button.dataset.messageType = action.messageType;
+  if (action.disabledReason) {
+    button.disabled = true;
+    button.dataset.disabledReason = action.disabledReason;
+    button.classList.add("disabled");
+  }
   return button;
 };
 
@@ -389,6 +426,7 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
 const wireRequestAccessForm = () => {
   const requestSection = document.getElementById("request-access");
   const submitBtn = document.getElementById("request-access-btn");
+  const formTitle = requestSection?.querySelector("h3");
   const purposeEl = document.getElementById("request-purpose");
   const minutesEl = document.getElementById("request-minutes");
   const followUpRow = document.getElementById("follow-up-row");
@@ -403,6 +441,9 @@ const wireRequestAccessForm = () => {
   ) {
     return;
   }
+
+  let activeRequestMessageType = REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+  let followUpCount = 0;
 
   const setResult = (message, tone = "") => {
     if (!resultEl) return;
@@ -422,16 +463,42 @@ const wireRequestAccessForm = () => {
     followUpInput.value = "";
   };
 
-  const openRequestAccess = () => {
-    if (requestSection) requestSection.hidden = false;
-    purposeEl.focus();
-    requestSection?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const setRequestMode = (launcher) => {
+    activeRequestMessageType = launcher?.dataset?.messageType || REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+    const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
+    if (formTitle) {
+      formTitle.textContent = isLlmMode ? "LLM-reviewed request" : "Intent check";
+    }
+    submitBtn.textContent = isLlmMode
+      ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
+      : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
   };
 
-  const launcher = document.getElementById("request-access-gate-btn");
-  if (launcher instanceof HTMLButtonElement) {
-    launcher.addEventListener("click", openRequestAccess);
-  }
+  const openRequestAccess = (launcher) => {
+    setRequestMode(launcher);
+    followUpCount = 0;
+    toggleFollowUp("");
+    setResult("", "");
+
+    if (requestSection) requestSection.hidden = false;
+    requestSection?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+
+    const disabledReason = launcher?.dataset?.disabledReason;
+    if (disabledReason) {
+      submitBtn.disabled = true;
+      setResult(disabledReason, "fail");
+      return;
+    }
+
+    submitBtn.disabled = false;
+    purposeEl.focus();
+  };
+
+  const launchers = document.querySelectorAll('[data-action-id$="request-access"]');
+  launchers.forEach((launcher) => {
+    if (!(launcher instanceof HTMLButtonElement)) return;
+    launcher.addEventListener("click", () => openRequestAccess(launcher));
+  });
 
   submitBtn.addEventListener("click", () => {
     const purpose = purposeEl.value.trim();
@@ -449,17 +516,21 @@ const wireRequestAccessForm = () => {
 
     chrome.runtime.sendMessage(
       {
-        type: REQUEST_ACCESS_MESSAGE_TYPE,
+        type: activeRequestMessageType,
         url: window.location.href,
         currentUrl: document.referrer || null,
         currentSite: site,
         purpose,
         requestedMinutes,
         followUpAnswer: followUpAnswer || null,
+        followUpCount,
       },
       (response) => {
         submitBtn.disabled = false;
-        submitBtn.textContent = DEFAULT_REQUEST_ACCESS_BTN_TEXT;
+        submitBtn.textContent =
+          activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
+            ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
+            : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
 
         if (chrome.runtime.lastError || !response) {
           console.warn(
@@ -473,15 +544,18 @@ const wireRequestAccessForm = () => {
         const decision = response.decision;
         if (!response.ok) {
           if (decision?.decision === "ASK_FOLLOWUP") {
+            followUpCount = 1;
             toggleFollowUp(decision.message || "One quick follow-up");
             setResult("Please add one more detail.", "");
             return;
           }
+          followUpCount = 0;
           toggleFollowUp("");
           setResult(decision?.message || "Staying blocked for now.", "fail");
           return;
         }
 
+        followUpCount = 0;
         toggleFollowUp("");
         setResult(decision?.message || "Approved. Opening now.", "pass");
 

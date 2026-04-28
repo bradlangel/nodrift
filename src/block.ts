@@ -2,6 +2,7 @@ import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import { AccessGateDecision } from "./core/access-contracts.js";
 import { temporaryAllowGate } from "./gates/temporary-allow-gate.js";
 import { localIntentAccessGate } from "./gates/local-intent-access-gate.js";
+import { llmReviewedAccessGate } from "./gates/llm-reviewed-access-gate.js";
 import { buildDecisionApplication } from "./core/decision-application.js";
 import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page/block-page-capabilities.js";
 import {
@@ -14,6 +15,7 @@ import {
   withTemporaryAllowUsedSeconds,
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
+import { hasOpenAiProviderConfig, requestOpenAiAccessReview } from "./integrations/openai-access-review.js";
 import {
   buildExactUrlRegexFilter,
   buildParentDomainUrlFilter,
@@ -1166,6 +1168,22 @@ const requestLocalIntentAccess = async (
   const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
   const stats = await getDailyStats();
 
+  const siteStats = {
+    blockedAttemptsToday: stats.blockedAttemptsToday,
+    temporaryAllowsToday: stats.temporaryAllowsToday,
+    temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
+    recentSiteDecisions: Array.isArray(stats.recentDecisions)
+      ? stats.recentDecisions
+          .filter((entry) => entry.site === currentSite)
+          .slice(0, 5)
+          .map((entry) => ({
+            timestamp: entry.timestamp,
+            decision: entry.action,
+            minutes: entry.minutes ?? undefined,
+          }))
+      : [],
+  };
+
   const decision = localIntentAccessGate.decide({
     rawUrl: payload.url,
     requestedScope: "domain",
@@ -1177,21 +1195,127 @@ const requestLocalIntentAccess = async (
     currentUrl,
     currentSite,
     followUpAnswer: payload.followUpAnswer,
-    stats: {
-      blockedAttemptsToday: stats.blockedAttemptsToday,
-      temporaryAllowsToday: stats.temporaryAllowsToday,
-      temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
-      recentSiteDecisions: Array.isArray(stats.recentDecisions)
-        ? stats.recentDecisions
-            .filter((entry) => entry.site === currentSite)
-            .slice(0, 5)
-            .map((entry) => ({
-              timestamp: entry.timestamp,
-              decision: entry.action,
-              minutes: entry.minutes ?? undefined,
-            }))
-        : [],
-    },
+    stats: siteStats,
+  });
+
+  const allowResult = await applyTemporaryAllowDecision(decision);
+  return {
+    ...allowResult,
+    decision,
+  };
+};
+
+const requestLlmReviewedAccess = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<TemporaryAllowResult & { decision: AccessGateDecision }> => {
+  const defaultMinutes = await getTempAllowMinutes();
+  const maxMinutes = defaultMinutes;
+  const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
+  const fallbackCurrentUrl =
+    tabId !== null ? getLastNavigatedUrlForTab(tabId) || (await getTabNavigatedHttpUrl(tabId)) : null;
+  const currentUrl = ensureHttpUrl(payload.currentUrl) || fallbackCurrentUrl;
+  const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
+  const stats = await getDailyStats();
+
+  const provider = await new Promise<{ provider: string; model: string; apiKey: string }>((resolve) => {
+    chrome.storage.sync.get(
+      { [STORAGE_KEYS.llmProvider]: "openai", [STORAGE_KEYS.openAiModel]: "gpt-4o-mini" },
+      (syncData: StorageItems) => {
+        chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
+          resolve({
+            provider: String(syncData[STORAGE_KEYS.llmProvider] || "openai"),
+            model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-4o-mini"),
+            apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
+          });
+        });
+      }
+    );
+  });
+
+  if (!hasOpenAiProviderConfig(provider)) {
+    return {
+      ok: false,
+      host: null,
+      url: null,
+      scope: "none",
+      minutes: defaultMinutes,
+      decision: {
+        decision: "FAIL",
+        scope: "none",
+        minutes: defaultMinutes,
+        host: null,
+        url: null,
+        ruleIds: [],
+        message: "LLM-reviewed request is selected, but OpenAI model/API key settings are missing.",
+      },
+    };
+  }
+
+  const siteStats = {
+    blockedAttemptsToday: stats.blockedAttemptsToday,
+    temporaryAllowsToday: stats.temporaryAllowsToday,
+    temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
+    recentSiteDecisions: Array.isArray(stats.recentDecisions)
+      ? stats.recentDecisions
+          .filter((entry) => entry.site === currentSite)
+          .slice(0, 5)
+          .map((entry) => ({
+            timestamp: entry.timestamp,
+            decision: entry.action,
+            minutes: entry.minutes ?? undefined,
+          }))
+      : [],
+  };
+
+  let modelDecision: unknown;
+  try {
+    modelDecision = await requestOpenAiAccessReview(provider.apiKey, provider.model, {
+      blockedDomain: currentSite || "unknown",
+      requestedUrl: currentUrl,
+      requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
+      requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
+      followUpAnswer: payload.followUpAnswer,
+      followUpCount: Math.max(0, Number(payload.followUpCount) || 0),
+      currentTimeIso: new Date().toISOString(),
+      dayOfWeek: new Date().toLocaleDateString("en-US", { weekday: "long" }),
+      stats: siteStats,
+    });
+  } catch (error) {
+    console.warn("llm-reviewed-access request failed", error);
+    return {
+      ok: false,
+      host: null,
+      url: null,
+      scope: "none",
+      minutes: defaultMinutes,
+      decision: {
+        decision: "FAIL",
+        scope: "none",
+        minutes: defaultMinutes,
+        host: null,
+        url: null,
+        ruleIds: [],
+        message: "The LLM review is temporarily unavailable. Please try again shortly.",
+      },
+    };
+  }
+
+  const decision = llmReviewedAccessGate.decide({
+    rawUrl: payload.url,
+    requestedScope: "domain",
+    requestedUrl: currentUrl,
+    blockedSites,
+    defaultMinutes,
+    requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
+    requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
+    currentUrl,
+    currentSite,
+    followUpAnswer: payload.followUpAnswer,
+    followUpCount: Math.max(0, Number(payload.followUpCount) || 0),
+    maxMinutes,
+    modelDecision,
+    stats: siteStats,
   });
 
   const allowResult = await applyTemporaryAllowDecision(decision);
@@ -1304,13 +1428,14 @@ type RecordBlockedAttemptMessage = {
 };
 
 type RequestLocalIntentAccessMessage = {
-  type: "request-local-intent-access" | "request-agentic-access";
+  type: "request-local-intent-access" | "request-agentic-access" | "request-llm-reviewed-access";
   url?: string | null;
   currentUrl?: string | null;
   currentSite?: string | null;
   purpose?: string | null;
   requestedMinutes?: number | null;
   followUpAnswer?: string | null;
+  followUpCount?: number | null;
 };
 
 const TEMPORARY_ALLOW_MESSAGE_TYPE =
@@ -1322,9 +1447,13 @@ const CHATGPT_PEEK_MESSAGE_TYPE =
     ?.messageType ?? "peek-with-chatgpt";
 
 
-const REQUEST_ACCESS_MESSAGE_TYPE =
-  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.type === "request-access")
+const REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "local-intent-request-access")
     ?.messageType ?? "request-local-intent-access";
+
+const REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "llm-reviewed-request-access")
+    ?.messageType ?? "request-llm-reviewed-access";
 
 const stripTags = (value: string): string =>
   value
@@ -2132,8 +2261,17 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     return true;
   }
 
-  if (message?.type === REQUEST_ACCESS_MESSAGE_TYPE || message?.type === "request-agentic-access") {
-    requestLocalIntentAccess(message as RequestLocalIntentAccessMessage, sender)
+  if (
+    message?.type === REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE ||
+    message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
+    message?.type === "request-agentic-access"
+  ) {
+    const requestPromise =
+      message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
+        ? requestLlmReviewedAccess(message as RequestLocalIntentAccessMessage, sender)
+        : requestLocalIntentAccess(message as RequestLocalIntentAccessMessage, sender);
+
+    requestPromise
       .then(async ({ decision, ...allowResult }) => {
         if (allowResult.ok) {
           await updateDailyStats((stats) =>
@@ -2167,7 +2305,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       })
       .then((response) => sendResponse(response))
       .catch((error) => {
-        console.warn("request-local-intent-access request failed", error);
+        console.warn("request-access gate request failed", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       });
     return true;

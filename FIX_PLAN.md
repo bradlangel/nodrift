@@ -27,9 +27,9 @@ and a body.
   common file. Put temporary allow and local intent gate behavior in their own
   gate-specific test files.
 
-- [ ] Add a real LLM-backed request gate later behind explicit configuration.
-  This should stay disabled or hidden until a provider is configured and the
-  privacy/user-consent model is clear.
+- [x] Add a real LLM-backed request gate later behind explicit configuration.
+  Added an explicit LLM-reviewed request gate with OpenAI provider settings,
+  local API-key storage, privacy disclosure, and fail-closed validation.
 
 ## Commit Discipline
 

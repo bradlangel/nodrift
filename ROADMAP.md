@@ -18,6 +18,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
 - [x] Add a local intent-check "request access" flow that can pass, fail, or ask one follow-up.
+- [x] Add an explicitly configured LLM-reviewed request gate (OpenAI first), with fail-closed validation and one follow-up maximum.
 - [x] Support URL-scoped temporary access internally for future access gates and
       configuration.
 - [x] Refactor toward modular access gates and actions before adding more gate
@@ -60,7 +61,7 @@ Core responsibilities:
 
 Possible module types:
 
-- Access gates: basic temporary allow, intent prompt, AI gatekeeper, coding
+- Access gates: basic temporary allow, local intent prompt fallback, LLM-reviewed gatekeeper, coding
   challenge proof.
 - Context providers: local stats, current time/day, recent decisions, requested
   URL, blocked domain.

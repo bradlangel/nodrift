@@ -67,6 +67,13 @@
       font-size: 0.9rem;
       margin: 6px 0 0;
     }
+
+    .hint.warning {
+      color: #92400e;
+    }
+    .hint.ok {
+      color: #065f46;
+    }
     button {
       min-height: 44px;
       border: 0;
@@ -120,7 +127,8 @@
         <label for="access-gate-action">Block page action</label>
         <select id="access-gate-action">
           <option value="temporary-allow-domain">One-click temporary allow</option>
-          <option value="local-intent-request-access">Local intent check</option>
+          <option value="local-intent-request-access">Local intent check (fallback/test)</option>
+          <option value="llm-reviewed-request-access">LLM-reviewed request</option>
         </select>
         <p class="hint">The block page shows this as one primary button. The request workflow opens after the button is pressed.</p>
       </div>
@@ -152,6 +160,27 @@
         <span>Show Peek with ChatGPT</span>
       </label>
     </section>
+
+    <section>
+      <h2>LLM provider settings</h2>
+      <p class="hint">Privacy: when enabled, your request purpose, requested URL/domain, requested minutes, time/day, and small local stats context are sent to your provider for review.</p>
+      <div class="field">
+        <label for="llm-provider">Provider</label>
+        <select id="llm-provider">
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="openai-model">OpenAI model</label>
+        <input type="text" id="openai-model" placeholder="gpt-4o-mini" />
+      </div>
+      <div class="field">
+        <label for="openai-api-key">OpenAI API key (stored locally on this browser)</label>
+        <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
+      </div>
+      <p id="llm-config-status" class="hint warning" aria-live="polite"></p>
+    </section>
+
     <div class="save-row">
       <button id="save">Save</button>
       <span id="save-status" aria-live="polite"></span>

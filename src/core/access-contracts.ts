@@ -29,6 +29,18 @@ export type LocalIntentAccessRequestContext = AccessRequestContext & {
   followUpAnswer?: string | null;
 };
 
+export type LlmReviewedAccessRequestContext = AccessRequestContext & {
+  requestedPurpose: string;
+  requestedMinutes: number;
+  currentUrl?: string | null;
+  currentSite?: string | null;
+  stats?: DailyStatsContext;
+  followUpAnswer?: string | null;
+  followUpCount?: number;
+  maxMinutes: number;
+  modelDecision: unknown;
+};
+
 export type AccessGateDecision = {
   decision: AccessDecision;
   scope: AccessDecisionScope;

@@ -11,6 +11,9 @@ service worker bundle. There is no runtime plugin marketplace.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
   `src/gates/temporary-allow-gate.ts`.
 - Local intent request checks live in `src/gates/local-intent-access-gate.ts`.
+- LLM-reviewed request decisions live in `src/gates/llm-reviewed-access-gate.ts` and
+  `src/gates/llm-reviewed-decision.ts`, with provider calls in
+  `src/integrations/openai-access-review.ts`.
 - Decision-to-application planning lives in `src/core/decision-application.ts`.
 - Block-page action capabilities and optional integrations live in
   `src/block-page/block-page-capabilities.ts`.
@@ -35,3 +38,12 @@ service worker bundle. There is no runtime plugin marketplace.
    `OPTIONAL_INTEGRATIONS`.
 4. Handle the corresponding message in `src/block.ts` and keep business logic in
    focused modules where possible.
+
+## LLM-reviewed gate notes
+
+- The LLM-reviewed request gate is selectable as a primary block-page action.
+- It remains unavailable unless provider/model/API-key settings are configured.
+- API keys are stored in local storage, not sync storage.
+- Provider payload is intentionally minimal: blocked domain, requested URL, purpose, requested minutes, local time/day, and compact local stats.
+- Model output is validated and clamped to the extension's configured duration limits, with invalid output failing closed.
+- The flow allows at most one follow-up question before requiring a terminal decision.
