@@ -10,15 +10,19 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - Treat legitimate work, research, errands, and intentional downtime as valid use.
 - Keep usage data local and privacy-preserving.
 - Avoid turning the extension into a full productivity suite.
+- Keep advanced access mechanisms behind configuration or compiled-in modules,
+  not exposed as default block-page clutter.
 
 ## Current Direction
 
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
 - [ ] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
-- [x] Support exact-URL temporary access when the user only needs one page.
+- [x] Support URL-scoped temporary access internally for future access gates and
+      configuration.
 - [x] Refactor toward modular access gates and actions before adding more gate
       types.
+- [x] Keep the default block page to one visible temporary-allow action.
 - [ ] Improve the options page styling and blocked-site editing experience.
 - [ ] Add Firefox support once the core Chrome flow feels solid.
 
@@ -34,8 +38,8 @@ then let each feature prove the next boundary.
    temporary-allow minutes, and recent decisions.
 3. Refactor temporary allow into a decision/apply pipeline while preserving the
    current one-click behavior.
-4. [x] Add exact-URL temporary access to prove the decision pipeline can handle more
-   than domain-wide allows.
+4. [x] Add URL-scoped temporary access under the hood to prove the decision
+   pipeline can handle more than domain-wide allows.
 5. Add the agentic access gate as another decision source.
 6. Polish the options page once the real settings and stats surfaces are known.
 7. Add Firefox support after the core Chrome flow has settled.
@@ -51,7 +55,7 @@ Core responsibilities:
 - Detect and redirect blocked requests.
 - Render the block page state.
 - Store settings and local usage data.
-- Apply allow, deny, re-block, and exact-URL decisions.
+- Apply allow, deny, re-block, and scoped temporary-access decisions.
 - Keep browser API differences contained.
 
 Possible module types:
@@ -60,9 +64,19 @@ Possible module types:
   challenge proof.
 - Context providers: local stats, current time/day, recent decisions, requested
   URL, blocked domain.
-- Actions: peek with ChatGPT, redirect, temporary domain allow, exact-URL allow,
+- Actions: peek with ChatGPT, redirect, temporary allow, scoped allow,
   copy original URL.
 - UI panels: stats summary, request-access form, gate result, options sections.
+
+Default UI boundary:
+
+- The core block page should expose one obvious temporary-access action by
+  default.
+- Scope handling (`url`, `domain`, or `none`) belongs in the access decision and
+  apply pipeline, not in a pair of confusing default buttons.
+- More sophisticated choices, such as exact-page access, intent prompts, shorter
+  limits, or agent-reviewed passes, should come from configuration or access
+  gate modules.
 
 Target decision contract:
 
@@ -80,7 +94,8 @@ Refactor milestones:
 - [ ] Move shared URL/domain normalization into one utility module.
 - [x] Move temporary-access decisions behind a single decision/apply pipeline.
 - [x] Separate gate decision logic from browser API side effects.
-- [ ] Make the block page render available actions from configuration.
+- [ ] Make the block page render available actions from configuration while
+      preserving one simple default action.
 - [ ] Add settings flags for compiled-in modules such as stats, ChatGPT peek,
       and agentic access.
 - [ ] Add a short architecture note explaining how to add a new access gate.
