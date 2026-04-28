@@ -14,7 +14,7 @@ and a body.
   Narrow the default layout, reduce competing panels, make the primary access
   action obvious, and keep stats visually quiet on small screens.
 
-- [ ] Separate primary access gates from secondary alternatives in options.
+- [x] Separate primary access gates from secondary alternatives in options.
   Options should configure the access gate separately from Career Tracker,
   Peek with ChatGPT, and any future alternate actions.
 

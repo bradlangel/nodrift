@@ -15,11 +15,12 @@ const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Request access";
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
+const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
+const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const ACCESS_GATE_ACTION_IDS = new Set([
   "temporary-allow-domain",
   "agentic-request-access",
 ]);
-const SECONDARY_ACTION_IDS = ["redirect", "peek-chatgpt"];
 
 const BLOCK_PAGE_ACTIONS = [
   {
@@ -169,12 +170,22 @@ const getAccessGateAction = (actionId) => {
 
 const loadConfiguredActions = (callback) => {
   chrome.storage.sync.get(
-    { accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID },
+    {
+      accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
+      showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
+      showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
+    },
     (data) => {
       const primaryAction = getAccessGateAction(data.accessGateActionId);
-      const secondaryActions = SECONDARY_ACTION_IDS.map((actionId) =>
-        BLOCK_PAGE_ACTIONS.find((action) => action.id === actionId)
-      ).filter(Boolean);
+      const secondaryActionIds = [
+        data.showCareerTrackerRedirect !== false ? "redirect" : null,
+        data.showChatGptPeek !== false ? "peek-chatgpt" : null,
+      ];
+      const secondaryActions = secondaryActionIds
+        .map((actionId) =>
+          actionId ? BLOCK_PAGE_ACTIONS.find((action) => action.id === actionId) : null
+        )
+        .filter(Boolean);
       callback({
         primaryActions: primaryAction ? [primaryAction] : [],
         secondaryActions,

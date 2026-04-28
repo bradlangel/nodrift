@@ -4,24 +4,159 @@
   <meta charset="UTF-8" />
   <title>Blocked Sites</title>
   <style>
-    body { font-family: sans-serif; margin: 1em; }
-    textarea { width: 100%; height: 200px; }
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      background: #f6f7f9;
+      color: #111827;
+    }
+    main {
+      width: min(760px, calc(100vw - 24px));
+      margin: 0 auto;
+      padding: 24px 0;
+    }
+    h1 {
+      margin: 0 0 18px;
+      font-size: 1.6rem;
+    }
+    section {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      padding: 16px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    textarea,
+    input[type="number"],
+    input[type="text"],
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font: inherit;
+      padding: 9px 10px;
+    }
+    textarea {
+      min-height: 220px;
+      resize: vertical;
+    }
+    .field {
+      margin-bottom: 14px;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-weight: 400;
+    }
+    .checkbox-row input {
+      margin-top: 3px;
+    }
+    .hint {
+      color: #4b5563;
+      font-size: 0.9rem;
+      margin: 6px 0 0;
+    }
+    button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 4px;
+      background: #1d4ed8;
+      color: white;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 10px 16px;
+    }
+    .save-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #save-status {
+      color: #065f46;
+      min-height: 20px;
+    }
+    @media (max-width: 520px) {
+      main {
+        padding: 14px 0;
+      }
+      section {
+        padding: 14px;
+      }
+      .save-row {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      button {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>Blocked Sites</h1>
-  <textarea id="sites"></textarea><br />
-  <label for="temp-allow-minutes">Temporary allow minutes</label>
-  <input type="number" id="temp-allow-minutes" value="30" min="1" /><br />
-  <label for="redirect-url">Redirect URL</label>
-  <input type="text" id="redirect-url" /><br />
-  <label for="redirect-btn-text">Redirect button text</label>
-  <input type="text" id="redirect-btn-text" /><br />
-  <label>
-    <input type="checkbox" id="grayscale-temp-allow" checked />
-    Grayscale sites during temporary allow
-  </label><br />
-  <button id="save">Save</button>
+  <main>
+    <h1>Blocked Sites</h1>
+    <section>
+      <h2>Sites</h2>
+      <div class="field">
+        <label for="sites">Blocked domains</label>
+        <textarea id="sites"></textarea>
+      </div>
+    </section>
+    <section>
+      <h2>Access Gate</h2>
+      <div class="field">
+        <label for="access-gate-action">Block page action</label>
+        <select id="access-gate-action">
+          <option value="temporary-allow-domain">One-click temporary allow</option>
+          <option value="agentic-request-access">Request access workflow</option>
+        </select>
+        <p class="hint">The block page shows this as one primary button. The request workflow opens after the button is pressed.</p>
+      </div>
+      <div class="field">
+        <label for="temp-allow-minutes">Temporary allow minutes</label>
+        <input type="number" id="temp-allow-minutes" value="30" min="1" />
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="grayscale-temp-allow" checked />
+        <span>Grayscale sites during temporary allow</span>
+      </label>
+    </section>
+    <section>
+      <h2>Alternatives</h2>
+      <label class="checkbox-row field">
+        <input type="checkbox" id="show-career-tracker-redirect" checked />
+        <span>Show Career Tracker redirect</span>
+      </label>
+      <div class="field">
+        <label for="redirect-url">Redirect URL</label>
+        <input type="text" id="redirect-url" />
+      </div>
+      <div class="field">
+        <label for="redirect-btn-text">Redirect button text</label>
+        <input type="text" id="redirect-btn-text" />
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="show-chatgpt-peek" checked />
+        <span>Show Peek with ChatGPT</span>
+      </label>
+    </section>
+    <div class="save-row">
+      <button id="save">Save</button>
+      <span id="save-status" aria-live="polite"></span>
+    </div>
+  </main>
   <script src="options.js"></script>
 </body>
 </html>

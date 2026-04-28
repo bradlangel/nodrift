@@ -29,7 +29,9 @@ service worker bundle. There is no runtime plugin marketplace.
 
 1. Add a capability entry to `BLOCK_PAGE_ACTION_CAPABILITIES` with its
    `messageType` and visibility intent.
-2. If it is optional (like ChatGPT peek), register it in
+2. If the action should be selectable as the block page access gate, add it to
+   the options page and store its action id in `accessGateActionId`.
+3. If it is optional (like ChatGPT peek), register it in
    `OPTIONAL_INTEGRATIONS`.
-3. Handle the corresponding message in `src/block.ts` and keep business logic in
+4. Handle the corresponding message in `src/block.ts` and keep business logic in
    focused modules where possible.
