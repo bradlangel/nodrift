@@ -10,7 +10,7 @@ and a body.
   Keep Career Tracker and Peek with ChatGPT available independently from the
   configured primary access gate.
 
-- [ ] Rebuild the block page mobile-first.
+- [x] Rebuild the block page mobile-first.
   Narrow the default layout, reduce competing panels, make the primary access
   action obvious, and keep stats visually quiet on small screens.
 
