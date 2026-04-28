@@ -9,11 +9,11 @@ export const BLOCK_PAGE_ACTION_CAPABILITIES: BlockPageActionCapability[] = [
     description: "Allow the blocked site for the configured duration.",
   },
   {
-    id: "agentic-request-access",
+    id: "local-intent-request-access",
     type: "request-access",
-    messageType: "request-agentic-access",
+    messageType: "request-local-intent-access",
     visibleByDefault: false,
-    description: "Request focused access with purpose and a short duration.",
+    description: "Run a local intent check for focused access.",
   },
   {
     id: "peek-chatgpt",

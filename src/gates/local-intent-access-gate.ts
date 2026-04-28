@@ -1,7 +1,7 @@
 import {
   AccessGate,
   AccessGateDecision,
-  AgenticAccessRequestContext,
+  LocalIntentAccessRequestContext,
 } from "../core/access-contracts.js";
 import { getRelatedRuleIdsForHost, hostMatchesSite } from "../site-matching.js";
 import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "../url-domain.js";
@@ -99,7 +99,7 @@ const baseFail = (minutes: number, message: string): AccessGateDecision => ({
 });
 
 const resolveHostAndRules = (
-  context: AgenticAccessRequestContext
+  context: LocalIntentAccessRequestContext
 ): { host: string | null; ruleIds: number[]; ruleIdHost: string | null } => {
   if (!context.rawUrl) {
     return { host: null, ruleIds: [], ruleIdHost: null };
@@ -120,7 +120,7 @@ const resolveHostAndRules = (
   }
 };
 
-const pickRequestedUrl = (context: AgenticAccessRequestContext): string | null => {
+const pickRequestedUrl = (context: LocalIntentAccessRequestContext): string | null => {
   const currentUrl = ensureHttpUrl(context.currentUrl);
   if (currentUrl) return currentUrl;
   return ensureHttpUrl(context.requestedUrl);
@@ -131,8 +131,8 @@ const minutesFromRequest = (requestedMinutes: number): number => {
   return Math.min(bounded, MINUTES_CEILING);
 };
 
-export const agenticAccessGate: AccessGate<AgenticAccessRequestContext> = {
-  id: "agentic-access",
+export const localIntentAccessGate: AccessGate<LocalIntentAccessRequestContext> = {
+  id: "local-intent-access",
   decide: (context) => {
     const requestedPurpose = normalizeText(context.requestedPurpose);
     const followUpAnswer = normalizeText(context.followUpAnswer);

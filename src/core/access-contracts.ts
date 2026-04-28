@@ -20,7 +20,7 @@ export type AccessRequestContext = {
   defaultMinutes: number;
 };
 
-export type AgenticAccessRequestContext = AccessRequestContext & {
+export type LocalIntentAccessRequestContext = AccessRequestContext & {
   requestedPurpose: string;
   requestedMinutes: number;
   currentUrl?: string | null;

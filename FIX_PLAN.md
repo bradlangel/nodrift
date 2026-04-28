@@ -18,7 +18,7 @@ and a body.
   Options should configure the access gate separately from Career Tracker,
   Peek with ChatGPT, and any future alternate actions.
 
-- [ ] Rename and reposition the current agentic request gate.
+- [x] Rename and reposition the current request gate.
   Treat the current heuristic flow as a local intent check or test gate, not a
   real agentic/LLM-reviewed access flow.
 

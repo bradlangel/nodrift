@@ -10,7 +10,7 @@ service worker bundle. There is no runtime plugin marketplace.
 - Shared access contracts live in `src/core/access-contracts.ts`.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
   `src/gates/temporary-allow-gate.ts`.
-- Agentic request-access intent checks live in `src/gates/agentic-access-gate.ts`.
+- Local intent request checks live in `src/gates/local-intent-access-gate.ts`.
 - Decision-to-application planning lives in `src/core/decision-application.ts`.
 - Block-page action capabilities and optional integrations live in
   `src/block-page/block-page-capabilities.ts`.

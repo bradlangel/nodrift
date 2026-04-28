@@ -17,7 +17,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
-- [x] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
+- [x] Add a local intent-check "request access" flow that can pass, fail, or ask one follow-up.
 - [x] Support URL-scoped temporary access internally for future access gates and
       configuration.
 - [x] Refactor toward modular access gates and actions before adding more gate
@@ -40,7 +40,7 @@ then let each feature prove the next boundary.
    current one-click behavior.
 4. [x] Add URL-scoped temporary access under the hood to prove the decision
    pipeline can handle more than domain-wide allows.
-5. [x] Add the agentic access gate as another decision source.
+5. [x] Add the local intent access gate as another decision source.
 6. Polish the options page once the real settings and stats surfaces are known.
 7. Add Firefox support after the core Chrome flow has settled.
 
@@ -75,7 +75,7 @@ Default UI boundary:
 - Scope handling (`url`, `domain`, or `none`) belongs in the access decision and
   apply pipeline, not in a pair of confusing default buttons.
 - More sophisticated choices, such as exact-page access, intent prompts, shorter
-  limits, or agent-reviewed passes, should come from configuration or access
+  limits, or LLM-reviewed passes, should come from configuration or access
   gate modules.
 
 Target decision contract:
@@ -97,7 +97,7 @@ Refactor milestones:
 - [x] Make the block page render available actions from configuration while
       preserving one simple default action.
 - [ ] Add settings flags for compiled-in modules such as stats, ChatGPT peek,
-      and agentic access.
+      and local intent access.
 - [x] Add a short architecture note explaining how to add a new access gate.
 
 ## Local Stats
@@ -118,17 +118,17 @@ Possible placement:
 - Popup: current site plus today's quick stats.
 - Options page: fuller history, reset/export controls, and per-site totals.
 
-## Agentic Access Gate
+## Local Intent Check Gate
 
-The agent should behave like a thoughtful intent gate, not a scolding parent. It
+The local intent check is a heuristic test gate, not a real LLM-backed agent. It
 should allow specific, plausible, deliberate use, including real downtime.
 
 Initial flow:
 
 1. User clicks "Request access" on the block page.
 2. Extension asks what they are trying to do and how long they need.
-3. Agent receives the request plus local context.
-4. Agent returns a structured decision.
+3. The local gate receives the request plus local context.
+4. The gate returns a structured decision.
 5. Extension applies the decision or shows a follow-up/denial message.
 
 Decision types:
@@ -138,7 +138,7 @@ Decision types:
 - `FAIL`: keep the site blocked and suggest peek/redirect instead.
 - `ASK_FOLLOWUP`: ask one clarifying question before deciding.
 
-Useful local context for the agent:
+Useful local context for the gate:
 
 - Site/domain and attempted URL
 - Current time and day of week

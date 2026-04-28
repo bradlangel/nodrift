@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildTemporaryAllowDecision } from "../dist/access-decisions.js";
 import { buildDecisionApplication } from "../dist/core/decision-application.js";
 import { temporaryAllowGate } from "../dist/gates/temporary-allow-gate.js";
-import { agenticAccessGate } from "../dist/gates/agentic-access-gate.js";
+import { localIntentAccessGate } from "../dist/gates/local-intent-access-gate.js";
 import {
   findRuleIdByHostname,
   getRelatedRuleIdsForHost,
@@ -192,8 +192,8 @@ test("temporary allow gate exposes the shared access gate contract", () => {
   assert.equal(decision.scope, "url");
 });
 
-test("agentic access passes deliberate legitimate request", () => {
-  const decision = agenticAccessGate.decide({
+test("local intent check passes deliberate legitimate request", () => {
+  const decision = localIntentAccessGate.decide({
     rawUrl: blockUrl(1, "youtube.com"),
     blockedSites: ["youtube.com"],
     defaultMinutes: 30,
@@ -205,8 +205,8 @@ test("agentic access passes deliberate legitimate request", () => {
   assert.ok(["PASS", "PASS_WITH_LIMIT"].includes(decision.decision));
 });
 
-test("agentic access asks follow-up for vague request", () => {
-  const decision = agenticAccessGate.decide({
+test("local intent check asks follow-up for vague request", () => {
+  const decision = localIntentAccessGate.decide({
     rawUrl: blockUrl(1, "reddit.com"),
     blockedSites: ["reddit.com"],
     defaultMinutes: 20,
@@ -219,8 +219,8 @@ test("agentic access asks follow-up for vague request", () => {
   assert.equal(decision.scope, "none");
 });
 
-test("agentic access fails obvious autopilot request", () => {
-  const decision = agenticAccessGate.decide({
+test("local intent check fails obvious autopilot request", () => {
+  const decision = localIntentAccessGate.decide({
     rawUrl: blockUrl(1, "reddit.com"),
     blockedSites: ["reddit.com"],
     defaultMinutes: 20,
@@ -233,8 +233,8 @@ test("agentic access fails obvious autopilot request", () => {
   assert.equal(decision.scope, "none");
 });
 
-test("agentic access limits excessive duration", () => {
-  const decision = agenticAccessGate.decide({
+test("local intent check limits excessive duration", () => {
+  const decision = localIntentAccessGate.decide({
     rawUrl: blockUrl(1, "reddit.com"),
     blockedSites: ["reddit.com"],
     defaultMinutes: 20,
@@ -247,8 +247,8 @@ test("agentic access limits excessive duration", () => {
   assert.equal(decision.minutes, 45);
 });
 
-test("agentic access can grant URL-scoped access for exact-page intent", () => {
-  const decision = agenticAccessGate.decide({
+test("local intent check can grant URL-scoped access for exact-page intent", () => {
+  const decision = localIntentAccessGate.decide({
     rawUrl: blockUrl(1, "news.ycombinator.com"),
     blockedSites: ["news.ycombinator.com"],
     defaultMinutes: 20,

@@ -13,13 +13,15 @@ const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
-const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Request access";
+const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
+const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
+const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const ACCESS_GATE_ACTION_IDS = new Set([
   "temporary-allow-domain",
-  "agentic-request-access",
+  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 ]);
 
 const BLOCK_PAGE_ACTIONS = [
@@ -39,7 +41,7 @@ const BLOCK_PAGE_ACTIONS = [
     scope: "domain",
   },
   {
-    id: "agentic-request-access",
+    id: "local-intent-request-access",
     type: "request-access",
     buttonId: "request-access-gate-btn",
     label: DEFAULT_REQUEST_ACCESS_BTN_TEXT,
@@ -65,7 +67,12 @@ const BLOCK_PAGE_ACTIONS = [
 ];
 
 
-const REQUEST_ACCESS_MESSAGE_TYPE = "request-agentic-access";
+const REQUEST_ACCESS_MESSAGE_TYPE = "request-local-intent-access";
+
+const normalizeAccessGateActionId = (actionId) =>
+  actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID
+    ? LOCAL_INTENT_ACCESS_GATE_ACTION_ID
+    : actionId;
 
 const ensureHttpUrl = (raw) => {
   if (!raw) return null;
@@ -159,8 +166,9 @@ const configureStatsLink = () => {
 };
 
 const getAccessGateAction = (actionId) => {
-  const configuredActionId = ACCESS_GATE_ACTION_IDS.has(actionId)
-    ? actionId
+  const normalizedActionId = normalizeAccessGateActionId(actionId);
+  const configuredActionId = ACCESS_GATE_ACTION_IDS.has(normalizedActionId)
+    ? normalizedActionId
     : DEFAULT_ACCESS_GATE_ACTION_ID;
   return (
     BLOCK_PAGE_ACTIONS.find((action) => action.id === configuredActionId) ||

@@ -11,12 +11,19 @@ const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
+const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
+const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const ACCESS_GATE_ACTION_IDS = new Set([
   "temporary-allow-domain",
-  "agentic-request-access",
+  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 ]);
+
+const normalizeAccessGateActionId = (actionId) =>
+  actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID
+    ? LOCAL_INTENT_ACCESS_GATE_ACTION_ID
+    : actionId;
 
 document.addEventListener('DOMContentLoaded', () => {
   const textarea = document.getElementById('sites');
@@ -62,8 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
     (data) => {
       textarea.value = data.blockedSites.join('\n');
       minutesInput.value = String(data.tempAllowMinutes);
-      accessGateSelect.value = ACCESS_GATE_ACTION_IDS.has(data.accessGateActionId)
-        ? data.accessGateActionId
+      const accessGateActionId = normalizeAccessGateActionId(data.accessGateActionId);
+      accessGateSelect.value = ACCESS_GATE_ACTION_IDS.has(accessGateActionId)
+        ? accessGateActionId
         : DEFAULT_ACCESS_GATE_ACTION_ID;
       showRedirectCheckbox.checked = data.showCareerTrackerRedirect !== false;
       showPeekCheckbox.checked = data.showChatGptPeek !== false;
@@ -79,8 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
       .map((s) => s.trim())
       .filter(Boolean);
     const minutes = parseInt(minutesInput.value, 10) || 30;
-    const accessGateActionId = ACCESS_GATE_ACTION_IDS.has(accessGateSelect.value)
-      ? accessGateSelect.value
+    const selectedAccessGateActionId = normalizeAccessGateActionId(accessGateSelect.value);
+    const accessGateActionId = ACCESS_GATE_ACTION_IDS.has(selectedAccessGateActionId)
+      ? selectedAccessGateActionId
       : DEFAULT_ACCESS_GATE_ACTION_ID;
     const redirectUrl = redirectInput.value.trim();
     const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;

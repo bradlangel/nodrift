@@ -1,7 +1,7 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import { AccessGateDecision } from "./core/access-contracts.js";
 import { temporaryAllowGate } from "./gates/temporary-allow-gate.js";
-import { agenticAccessGate } from "./gates/agentic-access-gate.js";
+import { localIntentAccessGate } from "./gates/local-intent-access-gate.js";
 import { buildDecisionApplication } from "./core/decision-application.js";
 import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page/block-page-capabilities.js";
 import {
@@ -1154,8 +1154,8 @@ const temporarilyAllowFromUrl = async (
 };
 
 
-const requestAgenticAccess = async (
-  payload: RequestAgenticAccessMessage,
+const requestLocalIntentAccess = async (
+  payload: RequestLocalIntentAccessMessage,
   sender?: any
 ): Promise<TemporaryAllowResult & { decision: AccessGateDecision }> => {
   const defaultMinutes = await getTempAllowMinutes();
@@ -1166,7 +1166,7 @@ const requestAgenticAccess = async (
   const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
   const stats = await getDailyStats();
 
-  const decision = agenticAccessGate.decide({
+  const decision = localIntentAccessGate.decide({
     rawUrl: payload.url,
     requestedScope: "domain",
     requestedUrl: currentUrl,
@@ -1303,8 +1303,8 @@ type RecordBlockedAttemptMessage = {
   rid?: number | null;
 };
 
-type RequestAgenticAccessMessage = {
-  type: "request-agentic-access";
+type RequestLocalIntentAccessMessage = {
+  type: "request-local-intent-access" | "request-agentic-access";
   url?: string | null;
   currentUrl?: string | null;
   currentSite?: string | null;
@@ -1324,7 +1324,7 @@ const CHATGPT_PEEK_MESSAGE_TYPE =
 
 const REQUEST_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.type === "request-access")
-    ?.messageType ?? "request-agentic-access";
+    ?.messageType ?? "request-local-intent-access";
 
 const stripTags = (value: string): string =>
   value
@@ -2132,8 +2132,8 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     return true;
   }
 
-  if (message?.type === REQUEST_ACCESS_MESSAGE_TYPE) {
-    requestAgenticAccess(message as RequestAgenticAccessMessage, sender)
+  if (message?.type === REQUEST_ACCESS_MESSAGE_TYPE || message?.type === "request-agentic-access") {
+    requestLocalIntentAccess(message as RequestLocalIntentAccessMessage, sender)
       .then(async ({ decision, ...allowResult }) => {
         if (allowResult.ok) {
           await updateDailyStats((stats) =>
@@ -2148,7 +2148,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
             ? await getTemporarilyAllowedDestination(
                 {
                   type: TEMPORARY_ALLOW_MESSAGE_TYPE,
-                  url: (message as RequestAgenticAccessMessage)?.url,
+                  url: (message as RequestLocalIntentAccessMessage)?.url,
                   scope: allowResult.scope === "url" ? "url" : "domain",
                 } as TemporarilyAllowTabMessage,
                 sender,
@@ -2167,7 +2167,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       })
       .then((response) => sendResponse(response))
       .catch((error) => {
-        console.warn("request-agentic-access request failed", error);
+        console.warn("request-local-intent-access request failed", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       });
     return true;
