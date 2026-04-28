@@ -1,8 +1,9 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
-import { TemporaryAccessDecision } from "./access-decisions.js";
-import { temporaryAllowGate } from "./temporary-allow-gate.js";
-import { buildDecisionApplication } from "./decision-application.js";
-import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page-capabilities.js";
+import { AccessGateDecision } from "./core/access-contracts.js";
+import { temporaryAllowGate } from "./gates/temporary-allow-gate.js";
+import { agenticAccessGate } from "./gates/agentic-access-gate.js";
+import { buildDecisionApplication } from "./core/decision-application.js";
+import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page/block-page-capabilities.js";
 import {
   createEmptyDailyStats,
   DailyBlockerStats,
@@ -1091,7 +1092,7 @@ type TemporaryAllowResult = {
 };
 
 const applyTemporaryAllowDecision = async (
-  decision: TemporaryAccessDecision
+  decision: AccessGateDecision
 ): Promise<TemporaryAllowResult> => {
   const application = buildDecisionApplication(decision);
   if (application.operation === "allow-url") {
@@ -1150,6 +1151,54 @@ const temporarilyAllowFromUrl = async (
     defaultMinutes,
   });
   return applyTemporaryAllowDecision(decision);
+};
+
+
+const requestAgenticAccess = async (
+  payload: RequestAgenticAccessMessage,
+  sender?: any
+): Promise<TemporaryAllowResult & { decision: AccessGateDecision }> => {
+  const defaultMinutes = await getTempAllowMinutes();
+  const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
+  const fallbackCurrentUrl =
+    tabId !== null ? getLastNavigatedUrlForTab(tabId) || (await getTabNavigatedHttpUrl(tabId)) : null;
+  const currentUrl = ensureHttpUrl(payload.currentUrl) || fallbackCurrentUrl;
+  const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
+  const stats = await getDailyStats();
+
+  const decision = agenticAccessGate.decide({
+    rawUrl: payload.url,
+    requestedScope: "domain",
+    requestedUrl: currentUrl,
+    blockedSites,
+    defaultMinutes,
+    requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
+    requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
+    currentUrl,
+    currentSite,
+    followUpAnswer: payload.followUpAnswer,
+    stats: {
+      blockedAttemptsToday: stats.blockedAttemptsToday,
+      temporaryAllowsToday: stats.temporaryAllowsToday,
+      temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
+      recentSiteDecisions: Array.isArray(stats.recentDecisions)
+        ? stats.recentDecisions
+            .filter((entry) => entry.site === currentSite)
+            .slice(0, 5)
+            .map((entry) => ({
+              timestamp: entry.timestamp,
+              decision: entry.action,
+              minutes: entry.minutes ?? undefined,
+            }))
+        : [],
+    },
+  });
+
+  const allowResult = await applyTemporaryAllowDecision(decision);
+  return {
+    ...allowResult,
+    decision,
+  };
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
@@ -1254,6 +1303,16 @@ type RecordBlockedAttemptMessage = {
   rid?: number | null;
 };
 
+type RequestAgenticAccessMessage = {
+  type: "request-agentic-access";
+  url?: string | null;
+  currentUrl?: string | null;
+  currentSite?: string | null;
+  purpose?: string | null;
+  requestedMinutes?: number | null;
+  followUpAnswer?: string | null;
+};
+
 const TEMPORARY_ALLOW_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.type === "temporary-allow")
     ?.messageType ?? "temporarily-allow-tab";
@@ -1262,6 +1321,10 @@ const CHATGPT_PEEK_MESSAGE_TYPE =
   OPTIONAL_INTEGRATIONS.find((integration) => integration.id === "chatgpt-peek")
     ?.messageType ?? "peek-with-chatgpt";
 
+
+const REQUEST_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.type === "request-access")
+    ?.messageType ?? "request-agentic-access";
 
 const stripTags = (value: string): string =>
   value
@@ -2064,6 +2127,47 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       .then((response) => sendResponse(response))
       .catch((error) => {
         console.warn("temporarily-allow-tab request failed", error);
+        sendResponse({ ok: false, error: error?.message ?? String(error) });
+      });
+    return true;
+  }
+
+  if (message?.type === REQUEST_ACCESS_MESSAGE_TYPE) {
+    requestAgenticAccess(message as RequestAgenticAccessMessage, sender)
+      .then(async ({ decision, ...allowResult }) => {
+        if (allowResult.ok) {
+          await updateDailyStats((stats) =>
+            withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
+          );
+        }
+
+        const destination =
+          allowResult.ok && allowResult.scope === "url"
+            ? allowResult.url
+            : allowResult.ok
+            ? await getTemporarilyAllowedDestination(
+                {
+                  type: TEMPORARY_ALLOW_MESSAGE_TYPE,
+                  url: (message as RequestAgenticAccessMessage)?.url,
+                  scope: allowResult.scope === "url" ? "url" : "domain",
+                } as TemporarilyAllowTabMessage,
+                sender,
+                {
+                  getLedgerUrl: getLastNavigatedUrlForTab,
+                  getTabNavigatedHttpUrl,
+                }
+              )
+            : null;
+
+        return {
+          ok: allowResult.ok,
+          decision,
+          destination,
+        };
+      })
+      .then((response) => sendResponse(response))
+      .catch((error) => {
+        console.warn("request-agentic-access request failed", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       });
     return true;

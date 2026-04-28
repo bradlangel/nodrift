@@ -17,7 +17,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
-- [ ] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
+- [x] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
 - [x] Support URL-scoped temporary access internally for future access gates and
       configuration.
 - [x] Refactor toward modular access gates and actions before adding more gate
@@ -40,7 +40,7 @@ then let each feature prove the next boundary.
    current one-click behavior.
 4. [x] Add URL-scoped temporary access under the hood to prove the decision
    pipeline can handle more than domain-wide allows.
-5. Add the agentic access gate as another decision source.
+5. [x] Add the agentic access gate as another decision source.
 6. Polish the options page once the real settings and stats surfaces are known.
 7. Add Firefox support after the core Chrome flow has settled.
 

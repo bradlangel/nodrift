@@ -20,6 +20,7 @@
       border-radius: 8px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.2);
       text-align: center;
+      width: min(560px, calc(100vw - 24px));
     }
     ul {
       text-align: left;
@@ -76,6 +77,52 @@
       text-decoration: none;
       font-weight: 600;
     }
+    .request-access {
+      margin-top: 16px;
+      text-align: left;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 12px;
+    }
+    .request-access h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+    .request-access-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .request-access input,
+    .request-access textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .request-access textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+    .request-access-meta {
+      color: #4b5563;
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+    .request-access-result {
+      margin-top: 8px;
+      font-size: 0.9rem;
+      color: #111827;
+      min-height: 20px;
+    }
+    .request-access-result.fail {
+      color: #b91c1c;
+    }
+    .request-access-result.pass {
+      color: #065f46;
+    }
     button.secondary {
       background-color: #2563eb;
     }
@@ -96,6 +143,24 @@
       <li>📝 Improve a skill</li>
     </ul>
     <div id="actions" class="actions"></div>
+    <section class="request-access" aria-label="Request access">
+      <h3>Request access</h3>
+      <p class="request-access-meta">Use this for a specific task or planned downtime.</p>
+      <div class="request-access-row">
+        <label for="request-purpose">What are you trying to do?</label>
+        <textarea id="request-purpose" placeholder="Example: Reply to Alex on a project thread and grab one linked document."></textarea>
+      </div>
+      <div class="request-access-row">
+        <label for="request-minutes">How many minutes?</label>
+        <input id="request-minutes" type="number" min="1" max="180" step="1" value="15" />
+      </div>
+      <div class="request-access-row" id="follow-up-row" hidden>
+        <label for="request-follow-up" id="follow-up-label">One quick follow-up</label>
+        <input id="request-follow-up" type="text" placeholder="Add one specific detail." />
+      </div>
+      <button id="request-access-btn" class="secondary">Request access</button>
+      <div id="request-access-result" class="request-access-result" aria-live="polite"></div>
+    </section>
     <div id="stats" class="stats">
       <div class="stats-grid">
         <div>

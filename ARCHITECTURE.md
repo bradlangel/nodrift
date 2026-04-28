@@ -7,18 +7,20 @@ service worker bundle. There is no runtime plugin marketplace.
 ## Core boundaries
 
 - `src/block.ts` remains the service-worker orchestrator for Chrome APIs.
-- Access gate contracts live in `src/access-contracts.ts`.
+- Shared access contracts live in `src/core/access-contracts.ts`.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
-  `src/temporary-allow-gate.ts`.
-- Decision-to-application planning lives in `src/decision-application.ts`.
+  `src/gates/temporary-allow-gate.ts`.
+- Agentic request-access intent checks live in `src/gates/agentic-access-gate.ts`.
+- Decision-to-application planning lives in `src/core/decision-application.ts`.
 - Block-page action capabilities and optional integrations live in
-  `src/block-page-capabilities.ts`.
+  `src/block-page/block-page-capabilities.ts`.
 
 ## Add a new access gate
 
-1. Implement the `AccessGate` contract from `src/access-contracts.ts`.
-2. Accept an `AccessRequestContext` and return an `AccessGateDecision` with one
-   of `PASS`, `PASS_WITH_LIMIT`, `FAIL`, or `ASK_FOLLOWUP`.
+1. Implement the `AccessGate` contract from `src/core/access-contracts.ts`.
+2. Accept an `AccessRequestContext` (or a richer specialized context) and return
+   an `AccessGateDecision` with one of `PASS`, `PASS_WITH_LIMIT`, `FAIL`, or
+   `ASK_FOLLOWUP`.
 3. Keep browser API calls out of the gate module.
 4. Call the gate from `src/block.ts`, then pass the decision through
    `buildDecisionApplication` to apply side effects.

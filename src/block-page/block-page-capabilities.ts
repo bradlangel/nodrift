@@ -1,4 +1,4 @@
-import { BlockPageActionCapability, OptionalIntegration } from "./access-contracts.js";
+import { BlockPageActionCapability, OptionalIntegration } from "../core/access-contracts.js";
 
 export const BLOCK_PAGE_ACTION_CAPABILITIES: BlockPageActionCapability[] = [
   {
@@ -7,6 +7,13 @@ export const BLOCK_PAGE_ACTION_CAPABILITIES: BlockPageActionCapability[] = [
     messageType: "temporarily-allow-tab",
     visibleByDefault: true,
     description: "Allow the blocked site for the configured duration.",
+  },
+  {
+    id: "agentic-request-access",
+    type: "request-access",
+    messageType: "request-agentic-access",
+    visibleByDefault: false,
+    description: "Request focused access with purpose and a short duration.",
   },
   {
     id: "peek-chatgpt",

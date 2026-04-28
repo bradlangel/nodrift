@@ -2,7 +2,7 @@ import {
   AccessDecisionScope,
   AccessRequestContext,
   AccessGateDecision,
-} from "./access-contracts.js";
+} from "./core/access-contracts.js";
 import { getRelatedRuleIdsForHost, hostMatchesSite } from "./site-matching.js";
 import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "./url-domain.js";
 

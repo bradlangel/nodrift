@@ -13,6 +13,7 @@ const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
+const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Request access";
 
 const BLOCK_PAGE_ACTIONS = [
   {
@@ -48,6 +49,9 @@ const BLOCK_PAGE_ACTIONS = [
     visibleByDefault: false,
   },
 ];
+
+
+const REQUEST_ACCESS_MESSAGE_TYPE = "request-agentic-access";
 
 const ensureHttpUrl = (raw) => {
   if (!raw) return null;
@@ -309,6 +313,105 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
   });
 };
 
+const wireRequestAccessForm = () => {
+  const submitBtn = document.getElementById("request-access-btn");
+  const purposeEl = document.getElementById("request-purpose");
+  const minutesEl = document.getElementById("request-minutes");
+  const followUpRow = document.getElementById("follow-up-row");
+  const followUpLabel = document.getElementById("follow-up-label");
+  const followUpInput = document.getElementById("request-follow-up");
+  const resultEl = document.getElementById("request-access-result");
+  if (
+    !(submitBtn instanceof HTMLButtonElement) ||
+    !(purposeEl instanceof HTMLTextAreaElement) ||
+    !(minutesEl instanceof HTMLInputElement) ||
+    !(followUpInput instanceof HTMLInputElement)
+  ) {
+    return;
+  }
+
+  const setResult = (message, tone = "") => {
+    if (!resultEl) return;
+    resultEl.textContent = message || "";
+    resultEl.className = `request-access-result${tone ? ` ${tone}` : ""}`;
+  };
+
+  const toggleFollowUp = (question) => {
+    if (!followUpRow || !followUpLabel) return;
+    if (question) {
+      followUpRow.hidden = false;
+      followUpLabel.textContent = question;
+      return;
+    }
+    followUpRow.hidden = true;
+    followUpLabel.textContent = "One quick follow-up";
+    followUpInput.value = "";
+  };
+
+  submitBtn.addEventListener("click", () => {
+    const purpose = purposeEl.value.trim();
+    const requestedMinutes = Number(minutesEl.value);
+    const followUpAnswer = followUpInput.value.trim();
+
+    if (!purpose) {
+      setResult("Add a short purpose so we can route this request.", "fail");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Reviewing...";
+    setResult("", "");
+
+    chrome.runtime.sendMessage(
+      {
+        type: REQUEST_ACCESS_MESSAGE_TYPE,
+        url: window.location.href,
+        currentUrl: document.referrer || null,
+        currentSite: site,
+        purpose,
+        requestedMinutes,
+        followUpAnswer: followUpAnswer || null,
+      },
+      (response) => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = DEFAULT_REQUEST_ACCESS_BTN_TEXT;
+
+        if (chrome.runtime.lastError || !response) {
+          console.warn(
+            "Request access failed",
+            chrome.runtime.lastError?.message || response?.error || "Unknown error"
+          );
+          setResult("Could not process this request right now.", "fail");
+          return;
+        }
+
+        const decision = response.decision;
+        if (!response.ok) {
+          if (decision?.decision === "ASK_FOLLOWUP") {
+            toggleFollowUp(decision.message || "One quick follow-up");
+            setResult("Please add one more detail.", "");
+            return;
+          }
+          toggleFollowUp("");
+          setResult(decision?.message || "Staying blocked for now.", "fail");
+          return;
+        }
+
+        toggleFollowUp("");
+        setResult(decision?.message || "Approved. Opening now.", "pass");
+
+        const responseDestination = ensureHttpUrl(response.destination);
+        const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
+        const referrerUrl = ensureHttpUrl(document.referrer);
+        const destination = responseDestination || siteUrl || referrerUrl;
+        if (destination) {
+          window.location.href = destination;
+        }
+      }
+    );
+  });
+};
+
 const wireActions = (actions) => {
   actions.forEach((action) => {
     if (action.type === "redirect") {
@@ -332,3 +435,4 @@ const wireActions = (actions) => {
 const defaultActions = getDefaultVisibleActions();
 renderActions(defaultActions);
 wireActions(defaultActions);
+wireRequestAccessForm();

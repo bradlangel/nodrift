@@ -1,12 +1,32 @@
 export type AccessDecision = "PASS" | "PASS_WITH_LIMIT" | "FAIL" | "ASK_FOLLOWUP";
 export type AccessDecisionScope = "domain" | "url" | "none";
 
+export type DailyStatsContext = {
+  blockedAttemptsToday: number;
+  temporaryAllowsToday: number;
+  temporaryAllowUsedSecondsToday: number;
+  recentSiteDecisions: Array<{
+    timestamp: number;
+    decision: "blocked" | "temporary-allow";
+    minutes?: number;
+  }>;
+};
+
 export type AccessRequestContext = {
   rawUrl?: string | null;
   requestedScope?: AccessDecisionScope;
   requestedUrl?: string | null;
   blockedSites: string[];
   defaultMinutes: number;
+};
+
+export type AgenticAccessRequestContext = AccessRequestContext & {
+  requestedPurpose: string;
+  requestedMinutes: number;
+  currentUrl?: string | null;
+  currentSite?: string | null;
+  stats?: DailyStatsContext;
+  followUpAnswer?: string | null;
 };
 
 export type AccessGateDecision = {
@@ -51,6 +71,7 @@ export type DecisionApplication =
 
 export type BlockPageActionType =
   | "temporary-allow"
+  | "request-access"
   | "peek-chatgpt"
   | "redirect"
   | "custom";
