@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local stats</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: sans-serif;
+      background: #f5f5f5;
+      color: #111827;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f5f5f5;
+    }
+
+    .screen {
+      max-width: 440px;
+      margin: 0 auto;
+      padding: 16px 14px 28px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+
+    .muted {
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+
+    .header-links {
+      display: flex;
+      gap: 12px;
+      margin: 6px 0 12px;
+      flex-wrap: wrap;
+    }
+
+    .header-links a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+      margin-top: 12px;
+    }
+
+    .summary-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .summary-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .summary-item .label {
+      color: #6b7280;
+      display: block;
+      font-size: 0.85rem;
+    }
+
+    .summary-item .value {
+      display: block;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    ul {
+      list-style: none;
+      margin: 10px 0 0;
+      padding: 0;
+    }
+
+    .row {
+      border-bottom: 1px solid #f3f4f6;
+      padding: 9px 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .row:last-child,
+    .decision-row:last-child {
+      border-bottom: none;
+    }
+
+    .row-domain {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.9rem;
+      overflow-wrap: anywhere;
+    }
+
+    .row-empty {
+      color: #6b7280;
+      border-bottom: none;
+      justify-content: flex-start;
+    }
+
+    .decision-row {
+      border-bottom: 1px solid #f3f4f6;
+      padding: 10px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .decision-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    button {
+      margin-top: 10px;
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: #ef4444;
+      color: white;
+      cursor: pointer;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <h1>📊 Local stats</h1>
+    <p class="muted">Today: <span id="summary-date">-</span></p>
+    <nav class="header-links">
+      <a href="options.html">Open settings</a>
+      <a href="block.html">Back to block page</a>
+    </nav>
+
+    <section class="card">
+      <strong>Today summary</strong>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <span class="label">Blocked attempts</span>
+          <span class="value" id="blocked-attempts">0</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Temporary allows</span>
+          <span class="value" id="temporary-allows">0</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Temp access time</span>
+          <span class="value" id="temp-allow-time">0s</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <strong>Top blocked domains</strong>
+      <ul id="top-blocked-domains">
+        <li class="row row-empty">Loading...</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <strong>Top temporary access domains</strong>
+      <ul id="top-temp-access-domains">
+        <li class="row row-empty">Loading...</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <strong>Recent decisions</strong>
+      <ul id="recent-decisions">
+        <li class="row row-empty">Loading...</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <strong>Privacy</strong>
+      <p class="muted" id="status-message">All stats stay on this device.</p>
+      <button id="reset-today">Reset today's stats</button>
+    </section>
+  </main>
+
+  <script type="module" src="dist/stats-dashboard.js"></script>
+</body>
+</html>

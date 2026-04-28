@@ -30,7 +30,7 @@
   "options_page": "options.html",
 
   "web_accessible_resources": [{
-    "resources": ["block.html"],
+    "resources": ["block.html", "stats.html"],
     "matches": ["<all_urls>"]
   }]
 }

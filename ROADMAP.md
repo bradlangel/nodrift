@@ -14,7 +14,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 ## Current Direction
 
 - [x] Add small local stats to the block page.
-- [ ] Add fuller local stats to the options page.
+- [x] Add a fuller local stats dashboard page.
 - [ ] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
 - [ ] Support exact-URL temporary access when the user only needs one page.
 - [ ] Refactor toward modular access gates and actions before adding more gate
@@ -93,7 +93,7 @@ judgment or heavy analytics.
 - [x] Blocked attempts today
 - [x] Temporary allows today
 - [x] Approximate temporary-allow time used today
-- [ ] Top blocked domains
+- [x] Top blocked domains
 - [x] Recent access decisions
 - [ ] Longest recent streak without temporary access
 

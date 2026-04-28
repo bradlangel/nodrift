@@ -96,6 +96,12 @@ const refreshStats = () => {
   });
 };
 
+const configureStatsLink = () => {
+  const statsLink = document.getElementById("stats-more-link");
+  if (!(statsLink instanceof HTMLAnchorElement)) return;
+  statsLink.href = chrome.runtime.getURL("stats.html");
+};
+
 const maybeRecordBlockedAttempt = () => {
   if (!site || !ruleId) return;
   const navigationEntry = performance.getEntriesByType("navigation")?.[0];
@@ -130,6 +136,7 @@ chrome.storage.sync.get(
 
 refreshStats();
 maybeRecordBlockedAttempt();
+configureStatsLink();
 
 const peekBtn = document.getElementById("peek-chatgpt-btn");
 if (peekBtn) {

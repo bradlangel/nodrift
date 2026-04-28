@@ -15,7 +15,14 @@ export type DailyBlockerStats = {
   blockedAttemptsToday: number;
   temporaryAllowsToday: number;
   temporaryAllowUsedSecondsToday: number;
+  siteStatsToday: Record<string, DailySiteStats>;
   recentDecisions: AccessDecision[];
+};
+
+export type DailySiteStats = {
+  blockedAttemptsToday: number;
+  temporaryAllowsToday: number;
+  temporaryAllowUsedSecondsToday: number;
 };
 
 const padDayPart = (value: number): string => String(value).padStart(2, "0");
@@ -33,8 +40,70 @@ export const createEmptyDailyStats = (dayKey: string): DailyBlockerStats => ({
   blockedAttemptsToday: 0,
   temporaryAllowsToday: 0,
   temporaryAllowUsedSecondsToday: 0,
+  siteStatsToday: {},
   recentDecisions: [],
 });
+
+const createEmptyDailySiteStats = (): DailySiteStats => ({
+  blockedAttemptsToday: 0,
+  temporaryAllowsToday: 0,
+  temporaryAllowUsedSecondsToday: 0,
+});
+
+const normalizeSiteKey = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized;
+};
+
+const normalizeDailySiteStats = (value: unknown): DailySiteStats | null => {
+  if (!value || typeof value !== "object") return null;
+  const maybe = value as Partial<DailySiteStats>;
+  const blockedAttemptsToday =
+    typeof maybe.blockedAttemptsToday === "number" && Number.isFinite(maybe.blockedAttemptsToday)
+      ? Math.max(Math.floor(maybe.blockedAttemptsToday), 0)
+      : 0;
+  const temporaryAllowsToday =
+    typeof maybe.temporaryAllowsToday === "number" && Number.isFinite(maybe.temporaryAllowsToday)
+      ? Math.max(Math.floor(maybe.temporaryAllowsToday), 0)
+      : 0;
+  const temporaryAllowUsedSecondsToday =
+    typeof maybe.temporaryAllowUsedSecondsToday === "number" &&
+    Number.isFinite(maybe.temporaryAllowUsedSecondsToday)
+      ? Math.max(Math.floor(maybe.temporaryAllowUsedSecondsToday), 0)
+      : 0;
+  return {
+    blockedAttemptsToday,
+    temporaryAllowsToday,
+    temporaryAllowUsedSecondsToday,
+  };
+};
+
+const normalizeSiteStatsToday = (value: unknown): Record<string, DailySiteStats> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const normalizedEntries: Array<[string, DailySiteStats]> = [];
+  Object.entries(value as Record<string, unknown>).forEach(([rawSite, rawStats]) => {
+    const site = normalizeSiteKey(rawSite);
+    const stats = normalizeDailySiteStats(rawStats);
+    if (!site || !stats) return;
+    normalizedEntries.push([site, stats]);
+  });
+  return Object.fromEntries(normalizedEntries);
+};
+
+const upsertSiteStats = (
+  siteStatsToday: Record<string, DailySiteStats>,
+  site: string | null,
+  mutate: (siteStats: DailySiteStats) => DailySiteStats
+): Record<string, DailySiteStats> => {
+  const normalizedSite = normalizeSiteKey(site);
+  if (!normalizedSite) return siteStatsToday;
+  return {
+    ...siteStatsToday,
+    [normalizedSite]: mutate(siteStatsToday[normalizedSite] ?? createEmptyDailySiteStats()),
+  };
+};
 
 const normalizeRecentDecision = (value: unknown): AccessDecision | null => {
   if (!value || typeof value !== "object") return null;
@@ -101,6 +170,7 @@ export const normalizeDailyStats = (
       Number.isFinite(maybe.temporaryAllowUsedSecondsToday)
         ? Math.max(Math.floor(maybe.temporaryAllowUsedSecondsToday), 0)
         : 0,
+    siteStatsToday: normalizeSiteStatsToday(maybe.siteStatsToday),
     recentDecisions: decisions,
   };
 };
@@ -122,6 +192,10 @@ export const withBlockedAttempt = (
     {
       ...stats,
       blockedAttemptsToday: stats.blockedAttemptsToday + 1,
+      siteStatsToday: upsertSiteStats(stats.siteStatsToday, site, (siteStats) => ({
+        ...siteStats,
+        blockedAttemptsToday: siteStats.blockedAttemptsToday + 1,
+      })),
     },
     {
       timestamp,
@@ -143,6 +217,10 @@ export const withTemporaryAllow = (
     {
       ...stats,
       temporaryAllowsToday: stats.temporaryAllowsToday + 1,
+      siteStatsToday: upsertSiteStats(stats.siteStatsToday, site, (siteStats) => ({
+        ...siteStats,
+        temporaryAllowsToday: siteStats.temporaryAllowsToday + 1,
+      })),
     },
     {
       timestamp,
@@ -156,9 +234,15 @@ export const withTemporaryAllow = (
 
 export const withTemporaryAllowUsedSeconds = (
   stats: DailyBlockerStats,
-  seconds: number
+  seconds: number,
+  site: string | null = null
 ): DailyBlockerStats => ({
   ...stats,
   temporaryAllowUsedSecondsToday:
     stats.temporaryAllowUsedSecondsToday + Math.max(Math.floor(seconds), 0),
+  siteStatsToday: upsertSiteStats(stats.siteStatsToday, site, (siteStats) => ({
+    ...siteStats,
+    temporaryAllowUsedSecondsToday:
+      siteStats.temporaryAllowUsedSecondsToday + Math.max(Math.floor(seconds), 0),
+  })),
 });

@@ -1,7 +1,9 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import { getRelatedRuleIdsForHost } from "./site-matching.js";
 import {
+  createEmptyDailyStats,
   DailyBlockerStats,
+  getLocalDayKey,
   normalizeDailyStats,
   withBlockedAttempt,
   withTemporaryAllow,
@@ -462,11 +464,12 @@ const queueTemporaryAllowUsageSessionUpdate = <T>(
 
 const recordTemporaryAllowUsedSeconds = (
   startedAt: number,
+  host: string | null,
   endedAt = Date.now()
 ): Promise<DailyBlockerStats | null> => {
   const seconds = Math.floor((endedAt - startedAt) / 1000);
   if (seconds <= 0) return Promise.resolve(null);
-  return updateDailyStats((stats) => withTemporaryAllowUsedSeconds(stats, seconds)).catch(
+  return updateDailyStats((stats) => withTemporaryAllowUsedSeconds(stats, seconds, host)).catch(
     (error) => {
       console.warn("temporary allow usage stats update failed", error);
       return null;
@@ -482,14 +485,14 @@ const setActiveTemporaryAllowUsageHostNow = async (
   if (previousSession?.host === host) {
     if (host && previousSession.touchedAt < now) {
       await setActiveTemporaryAllowUsageSession({ host, touchedAt: now });
-      await recordTemporaryAllowUsedSeconds(previousSession.touchedAt, now);
+      await recordTemporaryAllowUsedSeconds(previousSession.touchedAt, previousSession.host, now);
     }
     return;
   }
 
   await setActiveTemporaryAllowUsageSession(host ? { host, touchedAt: now } : null);
   if (previousSession) {
-    await recordTemporaryAllowUsedSeconds(previousSession.touchedAt, now);
+    await recordTemporaryAllowUsedSeconds(previousSession.touchedAt, previousSession.host, now);
   }
 };
 
@@ -529,7 +532,7 @@ const stopActiveTemporaryAllowUsage = (endedAt = Date.now()) => {
     const previousSession = await getActiveTemporaryAllowUsageSession();
     await setActiveTemporaryAllowUsageSession(null);
     return previousSession
-      ? recordTemporaryAllowUsedSeconds(previousSession.touchedAt, endedAt)
+      ? recordTemporaryAllowUsedSeconds(previousSession.touchedAt, previousSession.host, endedAt)
       : null;
   })
     .catch((error) => {
@@ -543,7 +546,7 @@ const flushActiveTemporaryAllowUsage = (endedAt = Date.now()) => {
     const session = await getActiveTemporaryAllowUsageSession();
     if (!session) return null;
     await setActiveTemporaryAllowUsageSession({ ...session, touchedAt: endedAt });
-    return recordTemporaryAllowUsedSeconds(session.touchedAt, endedAt);
+    return recordTemporaryAllowUsedSeconds(session.touchedAt, session.host, endedAt);
   })
     .catch((error) => {
       console.warn("temporary allow usage session flush failed", error);
@@ -560,7 +563,7 @@ const stopActiveTemporaryAllowUsageForHost = (
     const session = await getActiveTemporaryAllowUsageSession();
     if (session?.host === host) {
       await setActiveTemporaryAllowUsageSession(null);
-      await recordTemporaryAllowUsedSeconds(session.touchedAt, endedAt);
+      await recordTemporaryAllowUsedSeconds(session.touchedAt, session.host, endedAt);
     }
   })
     .catch((error) => {
@@ -1778,6 +1781,15 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       .then((stats) => sendResponse({ ok: true, stats }))
       .catch((error) => {
         console.warn("get-local-stats request failed", error);
+        sendResponse({ ok: false, error: error?.message ?? String(error) });
+      });
+    return true;
+  }
+  if (message?.type === "reset-today-local-stats") {
+    updateDailyStats(() => createEmptyDailyStats(getLocalDayKey()))
+      .then((stats) => sendResponse({ ok: true, stats }))
+      .catch((error) => {
+        console.warn("reset-today-local-stats request failed", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       });
     return true;
