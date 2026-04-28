@@ -33,12 +33,16 @@ export const getRelatedRuleIdsForHost = (
   host: string,
   blockedSites: string[]
 ): number[] => {
-  const parts = host.split(".");
+  const normalizedHost = normalizeHost(host);
+  if (!normalizedHost) return [];
+
+  const parts = normalizedHost.split(".");
   const base = parts.slice(-2).join(".");
   const ids: number[] = [];
   for (let i = 0; i < blockedSites.length; i++) {
-    const site = blockedSites[i];
-    if (site === host || site === base || site.endsWith(`.${base}`)) {
+    const site = normalizeHost(blockedSites[i]);
+    if (!site) continue;
+    if (site === normalizedHost || site === base || site.endsWith(`.${base}`)) {
       ids.push(i + 1);
     }
   }
