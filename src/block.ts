@@ -398,13 +398,25 @@ const persistGrayscaleHosts = () => {
   grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: entries });
 };
 
+const normalizeTemporaryAllowUrl = (rawUrl?: string | null): string | null => {
+  const url = ensureHttpUrl(rawUrl);
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
 const normalizeTemporaryUrlAllowEntry = (
   entry: unknown
 ): TemporaryUrlAllowWindow | null => {
   if (!Array.isArray(entry) || entry.length !== 5) return null;
   const [rawId, rawUrl, rawHost, rawExpiresAt, rawStartedAt] = entry;
   if (typeof rawId !== "number" || !Number.isInteger(rawId)) return null;
-  const url = ensureHttpUrl(typeof rawUrl === "string" ? rawUrl : null);
+  const url = normalizeTemporaryAllowUrl(typeof rawUrl === "string" ? rawUrl : null);
   const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
   if (!url || !host) return null;
   if (typeof rawExpiresAt !== "number" || !Number.isFinite(rawExpiresAt)) return null;
@@ -435,6 +447,18 @@ const isHostTemporarilyAllowed = (host: string): boolean => {
   return false;
 };
 
+const isUrlTemporarilyAllowed = (rawUrl?: string | null): boolean => {
+  const url = normalizeTemporaryAllowUrl(rawUrl);
+  if (!url) return false;
+  const now = Date.now();
+  for (const allow of temporarilyAllowedUrls.values()) {
+    if (allow.expiresAt > now && allow.url === url) {
+      return true;
+    }
+  }
+  return false;
+};
+
 const getTemporaryAllowMatchForHost = (
   host: string
 ): { host: string; window: TemporaryAllowWindow } | null => {
@@ -458,7 +482,10 @@ const getTemporaryAllowWindowForHost = (
 const getTemporaryAllowedHostFromUrl = (rawUrl?: string | null): string | null => {
   const host = parseHostnameFromUrl(rawUrl);
   if (!host) return null;
-  return getTemporaryAllowMatchForHost(host)?.host ?? null;
+  return (
+    getTemporaryAllowMatchForHost(host)?.host ??
+    (isUrlTemporarilyAllowed(rawUrl) ? host : null)
+  );
 };
 
 const normalizeTemporaryAllowUsageSession = (
@@ -670,13 +697,17 @@ const refreshBadgeForActiveTab = () => {
       return;
     }
 
-    const host = parseHostnameFromUrl(activeTab.url);
+    const activeUrl = activeTab.url ?? activeTab.pendingUrl;
+    const host = parseHostnameFromUrl(activeUrl);
     if (!host) {
       setTemporaryAllowBadge(false);
       return;
     }
 
-    setTemporaryAllowBadge(isHostTemporarilyAllowed(host), host);
+    setTemporaryAllowBadge(
+      isHostTemporarilyAllowed(host) || isUrlTemporarilyAllowed(activeUrl),
+      host
+    );
   });
 };
 
@@ -684,7 +715,8 @@ const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
   const host = parseHostnameFromUrl(rawUrl);
   if (!host) return;
 
-  const shouldApply = isHostTemporarilyAllowed(host);
+  const shouldApply =
+    isHostTemporarilyAllowed(host) || isUrlTemporarilyAllowed(rawUrl);
 
   if (!chrome.scripting) return;
   const target = { tabId, allFrames: true };
@@ -718,6 +750,12 @@ const syncGrayscaleForHostTabs = (host: string) => {
       }
     });
   });
+};
+
+const syncGrayscaleForTemporaryUrlTabs = () => {
+  const hosts = new Set<string>();
+  temporarilyAllowedUrls.forEach((allow) => hosts.add(allow.host));
+  hosts.forEach((host) => syncGrayscaleForHostTabs(host));
 };
 
 const removeGrayscaleFromAllTabs = () => {
@@ -765,14 +803,19 @@ const getNextTemporaryUrlAllowRuleId = (): number => {
 const pruneExpiredTemporarilyAllowedUrls = () => {
   const now = Date.now();
   let changed = false;
+  const hostsToSync = new Set<string>();
   for (const [id, allow] of temporarilyAllowedUrls.entries()) {
     if (allow.expiresAt > now) continue;
     temporarilyAllowedUrls.delete(id);
+    hostsToSync.add(allow.host);
     chrome.alarms.clear(`restore-url-${id}`);
     changed = true;
   }
   if (changed) {
     persistTemporarilyAllowedUrls();
+    hostsToSync.forEach((host) => syncGrayscaleForHostTabs(host));
+    refreshBadgeForActiveTab();
+    refreshActiveTemporaryAllowUsage();
   }
   return changed;
 };
@@ -808,14 +851,8 @@ const scheduleTemporaryUrlAllow = (
   host: string,
   minutes: number
 ): boolean => {
-  let url = rawUrl;
-  try {
-    const parsed = new URL(rawUrl);
-    parsed.hash = "";
-    url = parsed.toString();
-  } catch {
-    return false;
-  }
+  const url = normalizeTemporaryAllowUrl(rawUrl);
+  if (!url) return false;
   pruneExpiredTemporarilyAllowedUrls();
   const normalizedMinutes = Number.isFinite(minutes) ? Math.max(minutes, 1) : 1;
   const durationMs = normalizedMinutes * 60 * 1000;
@@ -1017,6 +1054,7 @@ chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => 
         refreshBadgeForActiveTab();
       } else {
         grayscaleHosts.forEach((_window, host) => syncGrayscaleForHostTabs(host));
+        syncGrayscaleForTemporaryUrlTabs();
       }
     }
   }
@@ -2053,10 +2091,14 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
 
   if (alarm.name.startsWith("restore-url-")) {
     const id = parseInt(alarm.name.split("-")[2], 10);
-    if (Number.isInteger(id) && temporarilyAllowedUrls.has(id)) {
+    const allow = Number.isInteger(id) ? temporarilyAllowedUrls.get(id) : null;
+    if (allow) {
       temporarilyAllowedUrls.delete(id);
       persistTemporarilyAllowedUrls();
       refreshRulesIfReady();
+      syncGrayscaleForHostTabs(allow.host);
+      refreshBadgeForActiveTab();
+      refreshActiveTemporaryAllowUsage();
     }
     return;
   }
