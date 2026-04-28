@@ -60,6 +60,13 @@ type TemporaryAllowWindow = {
   startedAt: number;
 };
 const grayscaleHosts = new Map<string, TemporaryAllowWindow>();
+type TemporaryUrlAllowWindow = TemporaryAllowWindow & {
+  id: number;
+  url: string;
+  host: string;
+};
+const TEMP_URL_ALLOW_RULE_ID_BASE = 100000;
+const temporarilyAllowedUrls = new Map<number, TemporaryUrlAllowWindow>();
 
 const TEMP_ALLOW_BADGE_COLOR = "#f59e0b";
 type TemporaryAllowUsageSession = {
@@ -294,6 +301,18 @@ const buildRule = (
   },
 });
 
+const buildUrlAllowRule = (id: number, rawUrl: string): any => ({
+  id,
+  priority: 10000,
+  action: {
+    type: chrome.declarativeNetRequest.RuleActionType.ALLOW,
+  },
+  condition: {
+    regexFilter: `^${rawUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
+  },
+});
+
 const buildRules = (sites: string[]): any[] =>
   sites.map((site, idx) => buildRule(site, idx + 1));
 
@@ -311,10 +330,14 @@ const activeTemporaryAllowRuleIds = (): Set<number> => {
 
 const buildRulesForCurrentState = (): any[] => {
   const allowedIds = activeTemporaryAllowRuleIds();
-  return blockedSites.flatMap((site, idx) => {
+  const blockedRules = blockedSites.flatMap((site, idx) => {
     const id = idx + 1;
     return allowedIds.has(id) ? [] : [buildRule(site, id)];
   });
+  const urlAllowRules = Array.from(temporarilyAllowedUrls.values()).map((allow) =>
+    buildUrlAllowRule(allow.id, allow.url)
+  );
+  return [...blockedRules, ...urlAllowRules];
 };
 
 // ---------- Utilities ----------
@@ -373,6 +396,32 @@ const persistGrayscaleHosts = () => {
     window.startedAt,
   ]);
   grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: entries });
+};
+
+const normalizeTemporaryUrlAllowEntry = (
+  entry: unknown
+): TemporaryUrlAllowWindow | null => {
+  if (!Array.isArray(entry) || entry.length !== 5) return null;
+  const [rawId, rawUrl, rawHost, rawExpiresAt, rawStartedAt] = entry;
+  if (typeof rawId !== "number" || !Number.isInteger(rawId)) return null;
+  const url = ensureHttpUrl(typeof rawUrl === "string" ? rawUrl : null);
+  const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
+  if (!url || !host) return null;
+  if (typeof rawExpiresAt !== "number" || !Number.isFinite(rawExpiresAt)) return null;
+  if (typeof rawStartedAt !== "number" || !Number.isFinite(rawStartedAt)) return null;
+  if (rawId < TEMP_URL_ALLOW_RULE_ID_BASE) return null;
+  return { id: rawId, url, host, expiresAt: rawExpiresAt, startedAt: rawStartedAt };
+};
+
+const persistTemporarilyAllowedUrls = () => {
+  const entries = Array.from(temporarilyAllowedUrls.values()).map((allow) => [
+    allow.id,
+    allow.url,
+    allow.host,
+    allow.expiresAt,
+    allow.startedAt,
+  ]);
+  grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedUrls]: entries });
 };
 
 const isHostTemporarilyAllowed = (host: string): boolean => {
@@ -705,6 +754,29 @@ const pruneExpiredGrayscaleHosts = () => {
   }
 };
 
+const getNextTemporaryUrlAllowRuleId = (): number => {
+  let nextId = TEMP_URL_ALLOW_RULE_ID_BASE;
+  while (temporarilyAllowedUrls.has(nextId) || nextId <= blockedSites.length) {
+    nextId += 1;
+  }
+  return nextId;
+};
+
+const pruneExpiredTemporarilyAllowedUrls = () => {
+  const now = Date.now();
+  let changed = false;
+  for (const [id, allow] of temporarilyAllowedUrls.entries()) {
+    if (allow.expiresAt > now) continue;
+    temporarilyAllowedUrls.delete(id);
+    chrome.alarms.clear(`restore-url-${id}`);
+    changed = true;
+  }
+  if (changed) {
+    persistTemporarilyAllowedUrls();
+  }
+  return changed;
+};
+
 const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
   if (hosts.length === 0) return;
   pruneExpiredGrayscaleHosts();
@@ -731,6 +803,46 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
   }
 };
 
+const scheduleTemporaryUrlAllow = (
+  rawUrl: string,
+  host: string,
+  minutes: number
+): boolean => {
+  let url = rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.hash = "";
+    url = parsed.toString();
+  } catch {
+    return false;
+  }
+  pruneExpiredTemporarilyAllowedUrls();
+  const normalizedMinutes = Number.isFinite(minutes) ? Math.max(minutes, 1) : 1;
+  const durationMs = normalizedMinutes * 60 * 1000;
+  const startedAt = Date.now();
+  const expiresAt = startedAt + durationMs;
+  const existing = Array.from(temporarilyAllowedUrls.values()).find(
+    (allow) => allow.url === url
+  );
+  const id = existing?.id ?? getNextTemporaryUrlAllowRuleId();
+  const previous = existing ?? null;
+  temporarilyAllowedUrls.set(id, {
+    id,
+    url,
+    host,
+    startedAt: previous ? previous.startedAt : startedAt,
+    expiresAt,
+  });
+  persistTemporarilyAllowedUrls();
+  refreshRulesIfReady();
+  scheduleBadgeRefreshAlarm();
+  chrome.alarms.create(`restore-url-${id}`, { delayInMinutes: normalizedMinutes });
+  if (grayscaleOnTemporaryAllow) {
+    syncGrayscaleForHostTabs(host);
+  }
+  return true;
+};
+
 const clearGrayscaleHosts = () => {
   const hadHosts = grayscaleHosts.size > 0;
   void stopActiveTemporaryAllowUsage();
@@ -742,6 +854,19 @@ const clearGrayscaleHosts = () => {
   }
   removeGrayscaleFromAllTabs();
   refreshBadgeForActiveTab();
+  refreshRulesIfReady();
+};
+
+const clearTemporaryUrlAllows = () => {
+  if (temporarilyAllowedUrls.size === 0) {
+    grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedUrls]: [] });
+    return;
+  }
+  temporarilyAllowedUrls.forEach((allow) => {
+    chrome.alarms.clear(`restore-url-${allow.id}`);
+  });
+  temporarilyAllowedUrls.clear();
+  persistTemporarilyAllowedUrls();
   refreshRulesIfReady();
 };
 
@@ -759,11 +884,20 @@ const loadGrayscalePreference = () => {
 };
 
 const loadGrayscaleHosts = () => {
-  grayscaleStorageGet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: [] }, (items) => {
+  grayscaleStorageGet(
+    {
+      [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: [],
+      [STORAGE_KEYS.temporarilyAllowedUrls]: [],
+    },
+    (items) => {
     const rawEntries = Array.isArray(items?.[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts])
       ? (items[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts] as unknown[])
       : [];
+    const rawUrlEntries = Array.isArray(items?.[STORAGE_KEYS.temporarilyAllowedUrls])
+      ? (items[STORAGE_KEYS.temporarilyAllowedUrls] as unknown[])
+      : [];
     grayscaleHosts.clear();
+    temporarilyAllowedUrls.clear();
     const now = Date.now();
     let changed = false;
     for (const entry of rawEntries) {
@@ -793,14 +927,28 @@ const loadGrayscaleHosts = () => {
         changed = true;
       }
     }
+    for (const entry of rawUrlEntries) {
+      const normalized = normalizeTemporaryUrlAllowEntry(entry);
+      if (!normalized) {
+        changed = true;
+        continue;
+      }
+      if (normalized.expiresAt <= now) {
+        changed = true;
+        continue;
+      }
+      temporarilyAllowedUrls.set(normalized.id, normalized);
+    }
     if (changed) {
       persistGrayscaleHosts();
+      persistTemporarilyAllowedUrls();
     }
     temporaryAllowStateLoaded = true;
     refreshBadgeForActiveTab();
     refreshActiveTemporaryAllowUsage();
     refreshRulesIfReady();
-  });
+    }
+  );
 };
 
 const maybeApplyGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
@@ -810,6 +958,7 @@ const maybeApplyGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
 };
 
 const refreshRules = () => {
+  pruneExpiredTemporarilyAllowedUrls();
   chrome.declarativeNetRequest.getDynamicRules((rules: DynamicRule[]) => {
     const ids = rules.map((r: DynamicRule) => r.id);
     chrome.declarativeNetRequest.updateDynamicRules(
@@ -894,6 +1043,8 @@ const allowRulesTemporarily = async (
 type TemporaryAllowResult = {
   ok: boolean;
   host: string | null;
+  url: string | null;
+  scope: "domain" | "url" | "none";
   minutes: number;
 };
 
@@ -904,27 +1055,51 @@ const applyTemporaryAllowDecision = async (
     (decision.decision === "PASS" || decision.decision === "PASS_WITH_LIMIT") &&
     decision.scope === "domain";
   if (!shouldApply) {
-    return {
-      ok: false,
-      host: null,
-      minutes: decision.minutes,
-    };
+    if (
+      (decision.decision === "PASS" || decision.decision === "PASS_WITH_LIMIT") &&
+      decision.scope === "url" &&
+      decision.url &&
+      decision.host
+    ) {
+      const ok = scheduleTemporaryUrlAllow(decision.url, decision.host, decision.minutes);
+      return {
+        ok,
+        host: ok ? decision.host : null,
+        url: ok ? decision.url : null,
+        scope: "url",
+        minutes: decision.minutes,
+      };
+    }
+    return { ok: false, host: null, url: null, scope: "none", minutes: decision.minutes };
   }
 
   const ok = await allowRulesTemporarily(decision.ruleIds, decision.minutes);
   return {
     ok,
     host: ok ? decision.host : null,
+    url: null,
+    scope: "domain",
     minutes: decision.minutes,
   };
 };
 
 const temporarilyAllowFromUrl = async (
-  rawUrl?: string | null
+  payload: TemporarilyAllowTabMessage,
+  sender?: any
 ): Promise<TemporaryAllowResult> => {
   const defaultMinutes = await getTempAllowMinutes();
+  const requestedScope = payload.scope === "url" ? "url" : "domain";
+  const requestedUrl =
+    requestedScope === "url"
+      ? await getTemporarilyAllowedDestination(payload, sender, {
+          getLedgerUrl: getLastNavigatedUrlForTab,
+          getTabNavigatedHttpUrl,
+        })
+      : null;
   const decision = buildTemporaryAllowDecision({
-    rawUrl,
+    rawUrl: payload.url,
+    requestedScope,
+    requestedUrl,
     blockedSites,
     defaultMinutes,
   });
@@ -967,6 +1142,7 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
 // NEW: Re-block ALL sites — clears alarms, clears session storage, and atomically resets every rule.
 const reblockAllNow = (tabId?: number, currentUrl?: string) => {
   clearGrayscaleHosts();
+  clearTemporaryUrlAllows();
   chrome.alarms.clearAll(
     withLastErrorLog("alarms.clearAll", () => {
       scheduleBadgeRefreshAlarm();
@@ -1023,6 +1199,7 @@ type TemporarilyAllowTabMessage = {
   type: "temporarily-allow-tab";
   url?: string | null;
   tabId?: number | null;
+  scope?: "domain" | "url";
 };
 
 type RecordBlockedAttemptMessage = {
@@ -1805,25 +1982,29 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     return true;
   }
   if (message?.type === "temporarily-allow-tab") {
-    temporarilyAllowFromUrl(message.url)
+    temporarilyAllowFromUrl(message as TemporarilyAllowTabMessage, sender)
       .then(async (allowResult) => {
         if (allowResult.ok) {
           await updateDailyStats((stats) =>
             withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
           );
         }
+        const destination =
+          allowResult.ok && allowResult.scope === "url"
+            ? allowResult.url
+            : allowResult.ok
+            ? await getTemporarilyAllowedDestination(
+                message as TemporarilyAllowTabMessage,
+                sender,
+                {
+                  getLedgerUrl: getLastNavigatedUrlForTab,
+                  getTabNavigatedHttpUrl,
+                }
+              )
+            : null;
         return {
           ok: allowResult.ok,
-          destination: allowResult.ok
-          ? await getTemporarilyAllowedDestination(
-              message as TemporarilyAllowTabMessage,
-              sender,
-              {
-                getLedgerUrl: getLastNavigatedUrlForTab,
-                getTabNavigatedHttpUrl,
-              }
-            )
-          : null,
+          destination,
         };
       })
       .then((response) => sendResponse(response))
@@ -1863,8 +2044,20 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
   if (alarm.name === ALARM_NAMES.badgeRefresh) {
     pruneExpiredGrayscaleHosts();
+    const prunedTemporaryUrls = pruneExpiredTemporarilyAllowedUrls();
+    if (prunedTemporaryUrls) refreshRulesIfReady();
     refreshBadgeForActiveTab();
     refreshActiveTemporaryAllowUsage();
+    return;
+  }
+
+  if (alarm.name.startsWith("restore-url-")) {
+    const id = parseInt(alarm.name.split("-")[2], 10);
+    if (Number.isInteger(id) && temporarilyAllowedUrls.has(id)) {
+      temporarilyAllowedUrls.delete(id);
+      persistTemporarilyAllowedUrls();
+      refreshRulesIfReady();
+    }
     return;
   }
 
@@ -1901,7 +2094,10 @@ chrome.contextMenus.onClicked.addListener((info: { menuItemId?: string | number 
 
   // Temporarily allow flow (unchanged; still works off rid or hostname fallback).
   if (info.menuItemId === "temporarily-allow") {
-    temporarilyAllowFromUrl(tab.url)
+    temporarilyAllowFromUrl(
+      { type: "temporarily-allow-tab", url: tab.url, scope: "domain" },
+      { tab }
+    )
       .then((allowResult) => {
         if (!allowResult.ok) return;
         return updateDailyStats((stats) =>

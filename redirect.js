@@ -198,23 +198,26 @@ if (peekBtn) {
   });
 }
 
-const temporaryAllowBtn = document.getElementById("temporarily-allow-btn");
-if (temporaryAllowBtn) {
-  const originalLabel = temporaryAllowBtn.textContent || "Temporarily Allow";
-  temporaryAllowBtn.addEventListener("click", () => {
-    temporaryAllowBtn.disabled = true;
-    temporaryAllowBtn.textContent = "Temporarily allowing...";
+const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
+  const button = document.getElementById(buttonId);
+  if (!button) return;
+  const originalLabel = button.textContent || "Temporarily Allow";
+
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    button.textContent = pendingLabel;
 
     chrome.runtime.sendMessage(
       {
         type: "temporarily-allow-tab",
         url: window.location.href,
+        scope,
       },
       (response) => {
         const reset = (label = originalLabel, delay = 0) => {
           window.setTimeout(() => {
-            temporaryAllowBtn.disabled = false;
-            temporaryAllowBtn.textContent = label;
+            button.disabled = false;
+            button.textContent = label;
           }, delay);
         };
 
@@ -228,7 +231,7 @@ if (temporaryAllowBtn) {
           return;
         }
 
-        temporaryAllowBtn.textContent = "Allowed — opening site...";
+        button.textContent = "Allowed — opening site...";
         const responseDestination = ensureHttpUrl(response.destination);
         const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
         const referrerUrl = ensureHttpUrl(document.referrer);
@@ -243,4 +246,7 @@ if (temporaryAllowBtn) {
       }
     );
   });
-}
+};
+
+wireTemporaryAllowButton("temporarily-allow-btn", "domain", "Temporarily allowing...");
+wireTemporaryAllowButton("temporarily-allow-url-btn", "url", "Allowing this URL...");

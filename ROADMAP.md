@@ -16,7 +16,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
 - [ ] Add an agentic "request access" flow that can pass, fail, or ask one follow-up.
-- [ ] Support exact-URL temporary access when the user only needs one page.
+- [x] Support exact-URL temporary access when the user only needs one page.
 - [x] Refactor toward modular access gates and actions before adding more gate
       types.
 - [ ] Improve the options page styling and blocked-site editing experience.
@@ -34,7 +34,7 @@ then let each feature prove the next boundary.
    temporary-allow minutes, and recent decisions.
 3. Refactor temporary allow into a decision/apply pipeline while preserving the
    current one-click behavior.
-4. Add exact-URL temporary access to prove the decision pipeline can handle more
+4. [x] Add exact-URL temporary access to prove the decision pipeline can handle more
    than domain-wide allows.
 5. Add the agentic access gate as another decision source.
 6. Polish the options page once the real settings and stats surfaces are known.
