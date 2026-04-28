@@ -6,7 +6,7 @@ and a body.
 
 ## Fixes
 
-- [ ] Restore block-page secondary alternatives.
+- [x] Restore block-page secondary alternatives.
   Keep Career Tracker and Peek with ChatGPT available independently from the
   configured primary access gate.
 

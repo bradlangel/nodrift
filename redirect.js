@@ -14,6 +14,12 @@ const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Request access";
+const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
+const ACCESS_GATE_ACTION_IDS = new Set([
+  "temporary-allow-domain",
+  "agentic-request-access",
+]);
+const SECONDARY_ACTION_IDS = ["redirect", "peek-chatgpt"];
 
 const BLOCK_PAGE_ACTIONS = [
   {
@@ -21,6 +27,7 @@ const BLOCK_PAGE_ACTIONS = [
     type: "redirect",
     buttonId: "redirect-btn",
     label: DEFAULT_REDIRECT_BTN_TEXT,
+    visibleByDefault: false,
   },
   {
     id: "temporary-allow-domain",
@@ -29,6 +36,12 @@ const BLOCK_PAGE_ACTIONS = [
     label: DEFAULT_TEMPORARY_ALLOW_BTN_TEXT,
     pendingLabel: DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL,
     scope: "domain",
+  },
+  {
+    id: "agentic-request-access",
+    type: "request-access",
+    buttonId: "request-access-gate-btn",
+    label: DEFAULT_REQUEST_ACCESS_BTN_TEXT,
   },
   {
     id: "peek-chatgpt",
@@ -144,22 +157,63 @@ const configureStatsLink = () => {
   statsLink.href = chrome.runtime.getURL("stats.html");
 };
 
-const getDefaultVisibleActions = () =>
-  BLOCK_PAGE_ACTIONS.filter((action) => action.visibleByDefault !== false);
+const getAccessGateAction = (actionId) => {
+  const configuredActionId = ACCESS_GATE_ACTION_IDS.has(actionId)
+    ? actionId
+    : DEFAULT_ACCESS_GATE_ACTION_ID;
+  return (
+    BLOCK_PAGE_ACTIONS.find((action) => action.id === configuredActionId) ||
+    BLOCK_PAGE_ACTIONS.find((action) => action.id === DEFAULT_ACCESS_GATE_ACTION_ID)
+  );
+};
 
-const renderActions = (actions) => {
+const loadConfiguredActions = (callback) => {
+  chrome.storage.sync.get(
+    { accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID },
+    (data) => {
+      const primaryAction = getAccessGateAction(data.accessGateActionId);
+      const secondaryActions = SECONDARY_ACTION_IDS.map((actionId) =>
+        BLOCK_PAGE_ACTIONS.find((action) => action.id === actionId)
+      ).filter(Boolean);
+      callback({
+        primaryActions: primaryAction ? [primaryAction] : [],
+        secondaryActions,
+      });
+    }
+  );
+};
+
+const renderActionButton = (action, groupClassName = "") => {
+  const button = document.createElement("button");
+  button.id = action.buttonId;
+  button.textContent = action.label;
+  button.dataset.actionId = action.id;
+  button.className = [action.className, groupClassName].filter(Boolean).join(" ");
+  if (action.title) button.title = action.title;
+  return button;
+};
+
+const renderActions = ({ primaryActions, secondaryActions }) => {
   const root = document.getElementById("actions");
   if (!root) return;
 
   root.innerHTML = "";
-  actions.forEach((action) => {
-    const button = document.createElement("button");
-    button.id = action.buttonId;
-    button.textContent = action.label;
-    if (action.className) button.className = action.className;
-    if (action.title) button.title = action.title;
-    root.appendChild(button);
+
+  const primaryGroup = document.createElement("div");
+  primaryGroup.className = "actions-primary";
+  primaryActions.forEach((action) => {
+    primaryGroup.appendChild(renderActionButton(action));
   });
+  root.appendChild(primaryGroup);
+
+  if (secondaryActions.length === 0) return;
+
+  const secondaryGroup = document.createElement("div");
+  secondaryGroup.className = "actions-secondary";
+  secondaryActions.forEach((action) => {
+    secondaryGroup.appendChild(renderActionButton(action, "secondary-action"));
+  });
+  root.appendChild(secondaryGroup);
 };
 
 const maybeRecordBlockedAttempt = () => {
@@ -314,6 +368,7 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
 };
 
 const wireRequestAccessForm = () => {
+  const requestSection = document.getElementById("request-access");
   const submitBtn = document.getElementById("request-access-btn");
   const purposeEl = document.getElementById("request-purpose");
   const minutesEl = document.getElementById("request-minutes");
@@ -347,6 +402,17 @@ const wireRequestAccessForm = () => {
     followUpLabel.textContent = "One quick follow-up";
     followUpInput.value = "";
   };
+
+  const openRequestAccess = () => {
+    if (requestSection) requestSection.hidden = false;
+    purposeEl.focus();
+    requestSection?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+
+  const launcher = document.getElementById("request-access-gate-btn");
+  if (launcher instanceof HTMLButtonElement) {
+    launcher.addEventListener("click", openRequestAccess);
+  }
 
   submitBtn.addEventListener("click", () => {
     const purpose = purposeEl.value.trim();
@@ -422,6 +488,9 @@ const wireActions = (actions) => {
       wirePeekChatGptButton();
       return;
     }
+    if (action.type === "request-access") {
+      return;
+    }
     if (action.type === "temporary-allow") {
       wireTemporaryAllowButton(
         action.buttonId,
@@ -432,7 +501,8 @@ const wireActions = (actions) => {
   });
 };
 
-const defaultActions = getDefaultVisibleActions();
-renderActions(defaultActions);
-wireActions(defaultActions);
-wireRequestAccessForm();
+loadConfiguredActions((actions) => {
+  renderActions(actions);
+  wireActions([...actions.primaryActions, ...actions.secondaryActions]);
+  wireRequestAccessForm();
+});
