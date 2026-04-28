@@ -14,6 +14,10 @@ import {
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
 import {
+  buildExactUrlRegexFilter,
+  buildParentDomainUrlFilter,
+} from "./url-filters.js";
+import {
   ensureHttpUrl,
   normalizeHost,
   parseHostnameFromUrl,
@@ -296,7 +300,7 @@ const buildRule = (
   },
   condition: {
     // Match at the domain boundary (handles subdomains properly).
-    urlFilter: `||${site}^`,
+    urlFilter: buildParentDomainUrlFilter(site),
     resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
   },
 });
@@ -308,7 +312,7 @@ const buildUrlAllowRule = (id: number, rawUrl: string): any => ({
     type: chrome.declarativeNetRequest.RuleActionType.ALLOW,
   },
   condition: {
-    regexFilter: `^${rawUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+    regexFilter: buildExactUrlRegexFilter(rawUrl),
     resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
   },
 });

@@ -161,6 +161,8 @@ Prompt goals:
 - [ ] Remove duplicate blocked-site entries.
 - [ ] Warn about overlapping entries such as `reddit.com` and
       `old.reddit.com`.
+- [ ] Consider an exception/allowlist mechanism for cases like blocking
+      `youtube.com` while allowing `music.youtube.com`.
 - [ ] Show saved-state feedback after changes.
 - [ ] Group settings into clear sections: blocked sites, temporary access,
       redirect, stats, and advanced settings.

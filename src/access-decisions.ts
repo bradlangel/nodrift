@@ -1,4 +1,4 @@
-import { getRelatedRuleIdsForHost } from "./site-matching.js";
+import { getRelatedRuleIdsForHost, hostMatchesSite } from "./site-matching.js";
 import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "./url-domain.js";
 
 export type AccessDecision = "PASS" | "PASS_WITH_LIMIT" | "FAIL" | "ASK_FOLLOWUP";
@@ -72,7 +72,7 @@ export const buildTemporaryAllowDecision = (
     const requestedUrl = input.requestedUrl ? ensureHttpUrl(input.requestedUrl) : null;
     if (!requestedUrl) return fail("Could not resolve URL for temporary allow.");
     const requestedHost = parseHostnameFromUrl(requestedUrl);
-    if (!requestedHost || requestedHost !== host) {
+    if (!hostMatchesSite(requestedHost, host)) {
       return fail("Requested URL does not match blocked host.");
     }
     return {

@@ -1,8 +1,10 @@
 {
   "name": "no-distractions-chrome-extension",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && node tests/access-decisions.test.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.3"
