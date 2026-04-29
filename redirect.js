@@ -94,6 +94,15 @@ const normalizeAccessGateActionId = (actionId) =>
     ? LOCAL_INTENT_ACCESS_GATE_ACTION_ID
     : actionId;
 
+const formatLlmReviewerLabel = (provider, model) => {
+  if (provider === "chrome-local") {
+    return "Using Chrome local LLM · Gemini Nano";
+  }
+  const modelLabel =
+    typeof model === "string" && model.trim().length > 0 ? model.trim() : "gpt-5-nano";
+  return `Using OpenAI · ${modelLabel}`;
+};
+
 const ensureHttpUrl = (raw) => {
   if (!raw) return null;
   try {
@@ -105,6 +114,43 @@ const ensureHttpUrl = (raw) => {
     // Ignore invalid URLs.
   }
   return null;
+};
+
+let currentTabId = null;
+if (chrome.tabs?.getCurrent) {
+  chrome.tabs.getCurrent((tab) => {
+    if (chrome.runtime.lastError) return;
+    currentTabId = typeof tab?.id === "number" ? tab.id : null;
+  });
+}
+
+const navigateToDestination = (destination) => {
+  const target = ensureHttpUrl(destination);
+  if (!target) return false;
+
+  const navigateInWindow = () => {
+    window.location.assign(target);
+  };
+
+  if (chrome.tabs?.getCurrent && chrome.tabs?.update) {
+    chrome.tabs.getCurrent((tab) => {
+      const tabId = typeof tab?.id === "number" ? tab.id : currentTabId;
+      if (chrome.runtime.lastError || typeof tabId !== "number") {
+        navigateInWindow();
+        return;
+      }
+
+      chrome.tabs.update(tabId, { url: target }, () => {
+        if (chrome.runtime.lastError) {
+          navigateInWindow();
+        }
+      });
+    });
+    return true;
+  }
+
+  navigateInWindow();
+  return true;
 };
 
 const formatDecisionLabel = (decision) => {
@@ -216,14 +262,21 @@ const loadConfiguredActions = (callback) => {
             localData.openAiApiKey.trim().length > 0);
 
         const primaryAction = getAccessGateAction(data.accessGateActionId);
+        const reviewerLabel =
+          primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID
+            ? formatLlmReviewerLabel(data.llmProvider, data.openAiModel)
+            : null;
         const effectivePrimaryAction =
           primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID && !llmConfigured
             ? {
                 ...primaryAction,
+                reviewerLabel,
                 label: "LLM-reviewed request (setup required)",
                 disabledReason:
                   "LLM-reviewed request is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
               }
+            : primaryAction
+            ? { ...primaryAction, reviewerLabel }
             : primaryAction;
 
         const secondaryActionIds = [
@@ -266,21 +319,24 @@ const renderActions = ({ primaryActions, secondaryActions }) => {
 
   root.innerHTML = "";
 
-  const primaryGroup = document.createElement("div");
-  primaryGroup.className = "actions-primary";
-  primaryActions.forEach((action) => {
-    primaryGroup.appendChild(renderActionButton(action));
-  });
-  root.appendChild(primaryGroup);
+  if (secondaryActions.length > 0) {
+    const secondaryGroup = document.createElement("div");
+    secondaryGroup.className = "actions-secondary";
+    secondaryActions.forEach((action) => {
+      secondaryGroup.appendChild(renderActionButton(action, "secondary-action"));
+    });
+    root.appendChild(secondaryGroup);
+  }
 
-  if (secondaryActions.length === 0) return;
-
-  const secondaryGroup = document.createElement("div");
-  secondaryGroup.className = "actions-secondary";
-  secondaryActions.forEach((action) => {
-    secondaryGroup.appendChild(renderActionButton(action, "secondary-action"));
-  });
-  root.appendChild(secondaryGroup);
+  const gateActions = primaryActions.filter((action) => action.type !== "request-access");
+  if (gateActions.length > 0) {
+    const primaryGroup = document.createElement("div");
+    primaryGroup.className = "actions-primary";
+    gateActions.forEach((action) => {
+      primaryGroup.appendChild(renderActionButton(action));
+    });
+    root.appendChild(primaryGroup);
+  }
 };
 
 const maybeRecordBlockedAttempt = () => {
@@ -397,6 +453,7 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
       {
         type: "temporarily-allow-tab",
         url: window.location.href,
+        tabId: currentTabId,
         scope,
       },
       (response) => {
@@ -422,8 +479,7 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
         const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
         const referrerUrl = ensureHttpUrl(document.referrer);
         const destination = responseDestination || siteUrl || referrerUrl;
-        if (destination) {
-          window.location.href = destination;
+        if (navigateToDestination(destination)) {
           return;
         }
 
@@ -434,10 +490,11 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
   });
 };
 
-const wireRequestAccessForm = () => {
+const wireRequestAccessForm = (configuredGateAction = null) => {
   const requestSection = document.getElementById("request-access");
   const submitBtn = document.getElementById("request-access-btn");
   const formTitle = requestSection?.querySelector("h3");
+  const providerEl = document.getElementById("request-access-provider");
   const metaEl = document.getElementById("request-access-meta");
   const purposeEl = document.getElementById("request-purpose");
   const resultEl = document.getElementById("request-access-result");
@@ -459,6 +516,7 @@ const wireRequestAccessForm = () => {
 
   const resetSubmitButton = () => {
     submitBtn.disabled = false;
+    purposeEl.disabled = false;
     submitBtn.textContent =
       activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
         ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
@@ -468,6 +526,7 @@ const wireRequestAccessForm = () => {
   const buildRequestPayload = (purpose) => ({
     type: activeRequestMessageType,
     url: window.location.href,
+    tabId: currentTabId,
     currentUrl: document.referrer || null,
     currentSite: site,
     purpose,
@@ -485,19 +544,21 @@ const wireRequestAccessForm = () => {
 
     const decision = response.decision;
     if (!response.ok) {
-      setResult(decision?.message || response.error || "Staying blocked for now.", "fail");
+      const message = decision?.message || response.error || "No access was granted.";
+      setResult(`Staying blocked. ${message}`, "fail");
       return;
     }
 
-    setResult(decision?.message || "Approved. Opening now.", "pass");
+    setResult("Approved. Opening site...", "pass");
 
     const responseDestination = ensureHttpUrl(response.destination);
     const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
     const referrerUrl = ensureHttpUrl(document.referrer);
     const destination = responseDestination || siteUrl || referrerUrl;
-    if (destination) {
-      window.location.href = destination;
+    if (navigateToDestination(destination)) {
+      return;
     }
+    setResult("Approved, but I could not find a destination to open.", "fail");
   };
 
   const sendRequestAccessWithProgress = (payload) => {
@@ -530,53 +591,74 @@ const wireRequestAccessForm = () => {
     port.postMessage(payload);
   };
 
-  const setRequestMode = (launcher) => {
-    activeRequestMessageType = launcher?.dataset?.messageType || REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+  const getRequestMessageType = (requestAction) =>
+    requestAction?.messageType ||
+    requestAction?.dataset?.messageType ||
+    REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+
+  const getDisabledReason = (requestAction) =>
+    requestAction?.disabledReason || requestAction?.dataset?.disabledReason || "";
+
+  const getReviewerLabel = (requestAction) =>
+    requestAction?.reviewerLabel || requestAction?.dataset?.reviewerLabel || "";
+
+  const setRequestMode = (requestAction) => {
+    activeRequestMessageType = getRequestMessageType(requestAction);
     const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
     if (formTitle) {
-      formTitle.textContent = isLlmMode ? "Ask for access" : "Check intent";
+      formTitle.textContent = isLlmMode ? "Request reviewed access" : "Request focused access";
+    }
+    if (providerEl) {
+      const reviewerLabel = isLlmMode ? getReviewerLabel(requestAction) : "";
+      providerEl.textContent = reviewerLabel;
+      providerEl.hidden = !reviewerLabel;
     }
     if (metaEl) {
-      const minutesText =
-        typeof defaultAccessMinutes === "number" && defaultAccessMinutes > 0
-          ? `Up to ${defaultAccessMinutes} minute${defaultAccessMinutes === 1 ? "" : "s"}.`
-          : "Uses your configured access window.";
-      metaEl.textContent = isLlmMode
-        ? `${minutesText} The reviewer will approve or deny from this note. Local LLMs may take a moment.`
-        : `${minutesText} Add a concrete reason before continuing.`;
+      metaEl.textContent = "";
+      metaEl.hidden = true;
     }
     submitBtn.textContent = isLlmMode
       ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
       : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
   };
 
-  const openRequestAccess = (launcher) => {
-    setRequestMode(launcher);
+  const openRequestAccess = (requestAction, options = {}) => {
+    setRequestMode(requestAction);
     setResult("", "");
 
     if (requestSection) requestSection.hidden = false;
-    requestSection?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (options.scroll) {
+      requestSection?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
 
-    const disabledReason = launcher?.dataset?.disabledReason;
+    const disabledReason = getDisabledReason(requestAction);
     if (disabledReason) {
       submitBtn.disabled = true;
+      if (metaEl) {
+        metaEl.textContent = disabledReason;
+        metaEl.hidden = false;
+      }
       setResult(disabledReason, "fail");
       return;
     }
 
     submitBtn.disabled = false;
-    purposeEl.focus();
+    if (options.focus) purposeEl.focus();
   };
 
   const launchers = document.querySelectorAll('[data-action-id$="request-access"]');
   launchers.forEach((launcher) => {
     if (!(launcher instanceof HTMLButtonElement)) return;
-    launcher.addEventListener("click", () => openRequestAccess(launcher));
+    launcher.addEventListener("click", () => openRequestAccess(launcher, { scroll: true, focus: true }));
   });
 
   chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
     const minutes = Number(data.tempAllowMinutes);
     defaultAccessMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : 30;
+    if (configuredGateAction?.type === "request-access") {
+      openRequestAccess(configuredGateAction);
+      return;
+    }
     setRequestMode(document.querySelector(`[data-message-type="${activeRequestMessageType}"]`));
   });
 
@@ -589,6 +671,7 @@ const wireRequestAccessForm = () => {
     }
 
     submitBtn.disabled = true;
+    purposeEl.disabled = true;
     submitBtn.textContent = "Reviewing...";
     const payload = buildRequestPayload(purpose);
 
@@ -652,5 +735,5 @@ const wireActions = (actions) => {
 loadConfiguredActions((actions) => {
   renderActions(actions);
   wireActions([...actions.primaryActions, ...actions.secondaryActions]);
-  wireRequestAccessForm();
+  wireRequestAccessForm(actions.primaryActions[0] || null);
 });
