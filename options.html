@@ -172,7 +172,16 @@
       </div>
       <div class="field">
         <label for="openai-model">OpenAI model</label>
-        <input type="text" id="openai-model" placeholder="gpt-4o-mini" />
+        <input type="text" id="openai-model" placeholder="gpt-5-nano" />
+      </div>
+      <div class="field">
+        <label for="llm-review-strictness">Review strictness</label>
+        <select id="llm-review-strictness">
+          <option value="balanced">Balanced</option>
+          <option value="strict">Strict</option>
+          <option value="lenient">Lenient</option>
+        </select>
+        <p class="hint">Balanced asks one follow-up for vague requests. Strict rejects vague or casual access. Lenient still requires a concrete plan.</p>
       </div>
       <div class="field">
         <label for="openai-api-key">OpenAI API key (stored locally on this browser)</label>

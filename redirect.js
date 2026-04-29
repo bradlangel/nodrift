@@ -193,7 +193,7 @@ const loadConfiguredActions = (callback) => {
       showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
       showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
       llmProvider: "openai",
-      openAiModel: "gpt-4o-mini",
+      openAiModel: "gpt-5-nano",
     },
     (data) => {
       chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {

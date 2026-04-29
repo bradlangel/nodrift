@@ -1,13 +1,18 @@
 export const MAX_RECENT_DECISIONS = 30;
 
 export type AccessDecisionAction = "blocked" | "temporary-allow";
+export type AccessDecisionSource = "one-click" | "local-intent" | "llm-reviewed";
 
 export type AccessDecision = {
   timestamp: number;
   site: string | null;
   action: AccessDecisionAction;
-  scope: "domain" | "none";
+  scope: "domain" | "url" | "none";
   minutes: number | null;
+  source?: AccessDecisionSource;
+  message?: string | null;
+  purpose?: string | null;
+  url?: string | null;
 };
 
 export type DailyBlockerStats = {
@@ -80,6 +85,13 @@ const normalizeDailySiteStats = (value: unknown): DailySiteStats | null => {
   };
 };
 
+const sanitizeDecisionText = (value: unknown, maxLength = 220): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+};
+
 const normalizeSiteStatsToday = (value: unknown): Record<string, DailySiteStats> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const normalizedEntries: Array<[string, DailySiteStats]> = [];
@@ -115,13 +127,22 @@ const normalizeRecentDecision = (value: unknown): AccessDecision | null => {
     maybe.action === "blocked" || maybe.action === "temporary-allow"
       ? maybe.action
       : null;
-  const scope = maybe.scope === "domain" || maybe.scope === "none" ? maybe.scope : null;
+  const scope =
+    maybe.scope === "domain" || maybe.scope === "url" || maybe.scope === "none"
+      ? maybe.scope
+      : null;
   if (!action || !scope) return null;
 
   const site = typeof maybe.site === "string" && maybe.site.trim() ? maybe.site.trim() : null;
   const minutes = typeof maybe.minutes === "number" && Number.isFinite(maybe.minutes)
     ? Math.max(Math.floor(maybe.minutes), 0)
     : null;
+  const source =
+    maybe.source === "one-click" ||
+    maybe.source === "local-intent" ||
+    maybe.source === "llm-reviewed"
+      ? maybe.source
+      : undefined;
 
   return {
     timestamp: maybe.timestamp,
@@ -129,6 +150,10 @@ const normalizeRecentDecision = (value: unknown): AccessDecision | null => {
     scope,
     site,
     minutes,
+    ...(source ? { source } : {}),
+    message: sanitizeDecisionText(maybe.message),
+    purpose: sanitizeDecisionText(maybe.purpose),
+    url: sanitizeDecisionText(maybe.url, 500),
   };
 };
 
@@ -210,9 +235,14 @@ export const withTemporaryAllow = (
   stats: DailyBlockerStats,
   site: string | null,
   minutes: number,
-  timestamp = Date.now()
+  timestamp = Date.now(),
+  details: Partial<Pick<AccessDecision, "scope" | "source" | "message" | "purpose" | "url">> = {}
 ): DailyBlockerStats => {
   const normalizedMinutes = Math.max(Math.floor(minutes), 0);
+  const scope =
+    details.scope === "url" || details.scope === "domain" || details.scope === "none"
+      ? details.scope
+      : "domain";
   return withRecentDecision(
     {
       ...stats,
@@ -226,8 +256,12 @@ export const withTemporaryAllow = (
       timestamp,
       site,
       action: "temporary-allow",
-      scope: "domain",
+      scope,
       minutes: normalizedMinutes,
+      ...(details.source ? { source: details.source } : {}),
+      message: sanitizeDecisionText(details.message),
+      purpose: sanitizeDecisionText(details.purpose),
+      url: sanitizeDecisionText(details.url, 500),
     }
   );
 };

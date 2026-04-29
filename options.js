@@ -17,7 +17,9 @@ const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const DEFAULT_LLM_PROVIDER = "openai";
-const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+const DEFAULT_LLM_REVIEW_STRICTNESS = "balanced";
+const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
+const LLM_REVIEW_STRICTNESS_VALUES = new Set(["lenient", "balanced", "strict"]);
 const ACCESS_GATE_ACTION_IDS = new Set([
   "temporary-allow-domain",
   LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
@@ -31,6 +33,9 @@ const normalizeAccessGateActionId = (actionId) =>
 
 const normalizeLlmProvider = (provider) =>
   provider === "openai" ? "openai" : DEFAULT_LLM_PROVIDER;
+
+const normalizeLlmReviewStrictness = (strictness) =>
+  LLM_REVIEW_STRICTNESS_VALUES.has(strictness) ? strictness : DEFAULT_LLM_REVIEW_STRICTNESS;
 
 const normalizeOpenAiModel = (model) => {
   const trimmed = typeof model === "string" ? model.trim() : "";
@@ -48,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const showRedirectCheckbox = document.getElementById("show-career-tracker-redirect");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
   const llmProviderSelect = document.getElementById("llm-provider");
+  const llmReviewStrictnessSelect = document.getElementById("llm-review-strictness");
   const openAiModelInput = document.getElementById("openai-model");
   const openAiApiKeyInput = document.getElementById("openai-api-key");
   const llmConfigStatus = document.getElementById("llm-config-status");
@@ -63,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
     !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
     !(llmProviderSelect instanceof HTMLSelectElement) ||
+    !(llmReviewStrictnessSelect instanceof HTMLSelectElement) ||
     !(openAiModelInput instanceof HTMLInputElement) ||
     !(openAiApiKeyInput instanceof HTMLInputElement)
   ) {
@@ -101,6 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
       redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT,
       grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
       llmProvider: DEFAULT_LLM_PROVIDER,
+      llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
       openAiModel: DEFAULT_OPENAI_MODEL,
     },
     (syncData) => {
@@ -118,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
         grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
 
         llmProviderSelect.value = normalizeLlmProvider(syncData.llmProvider);
+        llmReviewStrictnessSelect.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
         openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
         openAiApiKeyInput.value = typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
         updateLlmConfigStatus();
@@ -144,6 +153,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const showCareerTrackerRedirect = Boolean(showRedirectCheckbox.checked);
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
     const llmProvider = normalizeLlmProvider(llmProviderSelect.value);
+    const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessSelect.value);
     const openAiModel = normalizeOpenAiModel(openAiModelInput.value);
     const openAiApiKey = openAiApiKeyInput.value.trim();
 
@@ -158,6 +168,7 @@ document.addEventListener("DOMContentLoaded", () => {
         redirectBtnText,
         grayscaleOnTemporaryAllow,
         llmProvider,
+        llmReviewStrictness,
         openAiModel,
       },
       () => {

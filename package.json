@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node tests/access-decisions.test.mjs && node tests/gates/temporary-allow-gate.test.mjs && node tests/gates/local-intent-access-gate.test.mjs && node tests/gates/llm-reviewed-decision.test.mjs"
+    "test": "npm run build && node tests/access-decisions.test.mjs && node tests/stats.test.mjs && node tests/gates/temporary-allow-gate.test.mjs && node tests/gates/local-intent-access-gate.test.mjs && node tests/gates/llm-reviewed-decision.test.mjs && node tests/integrations/openai-access-review.test.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

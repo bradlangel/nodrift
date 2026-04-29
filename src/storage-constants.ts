@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   showCareerTrackerRedirect: "showCareerTrackerRedirect",
   showChatGptPeek: "showChatGptPeek",
   llmProvider: "llmProvider",
+  llmReviewStrictness: "llmReviewStrictness",
   openAiModel: "openAiModel",
   openAiApiKey: "openAiApiKey",
   grayscaleOnTemporaryAllow: "grayscaleOnTemporaryAllow",

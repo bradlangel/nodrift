@@ -127,6 +127,33 @@ const renderRecentDecisions = (stats: DailyBlockerStats) => {
     top.appendChild(time);
     item.appendChild(top);
     item.appendChild(site);
+
+    if (decision.source || decision.scope === "url") {
+      const meta = document.createElement("div");
+      meta.className = "muted";
+      meta.textContent = [
+        decision.source ? `via ${decision.source}` : null,
+        decision.scope === "url" ? "URL scoped" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      item.appendChild(meta);
+    }
+
+    if (decision.purpose) {
+      const purpose = document.createElement("div");
+      purpose.className = "muted";
+      purpose.textContent = `Purpose: ${decision.purpose}`;
+      item.appendChild(purpose);
+    }
+
+    if (decision.message) {
+      const message = document.createElement("div");
+      message.className = "muted";
+      message.textContent = `Reason: ${decision.message}`;
+      item.appendChild(message);
+    }
+
     root.appendChild(item);
   });
 };

@@ -1218,15 +1218,28 @@ const requestLlmReviewedAccess = async (
   const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
   const stats = await getDailyStats();
 
-  const provider = await new Promise<{ provider: string; model: string; apiKey: string }>((resolve) => {
+  const provider = await new Promise<{
+    provider: string;
+    model: string;
+    apiKey: string;
+    reviewStrictness: "lenient" | "balanced" | "strict";
+  }>((resolve) => {
     chrome.storage.sync.get(
-      { [STORAGE_KEYS.llmProvider]: "openai", [STORAGE_KEYS.openAiModel]: "gpt-4o-mini" },
+      {
+        [STORAGE_KEYS.llmProvider]: "openai",
+        [STORAGE_KEYS.llmReviewStrictness]: "balanced",
+        [STORAGE_KEYS.openAiModel]: "gpt-5-nano",
+      },
       (syncData: StorageItems) => {
         chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
+          const rawStrictness = syncData[STORAGE_KEYS.llmReviewStrictness];
+          const reviewStrictness =
+            rawStrictness === "lenient" || rawStrictness === "strict" ? rawStrictness : "balanced";
           resolve({
             provider: String(syncData[STORAGE_KEYS.llmProvider] || "openai"),
-            model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-4o-mini"),
+            model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-5-nano"),
             apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
+            reviewStrictness,
           });
         });
       }
@@ -1275,6 +1288,7 @@ const requestLlmReviewedAccess = async (
       requestedUrl: currentUrl,
       requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
       requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
+      reviewStrictness: provider.reviewStrictness,
       followUpAnswer: payload.followUpAnswer,
       followUpCount: Math.max(0, Number(payload.followUpCount) || 0),
       currentTimeIso: new Date().toISOString(),
@@ -2232,7 +2246,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       .then(async (allowResult) => {
         if (allowResult.ok) {
           await updateDailyStats((stats) =>
-            withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
+            withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
+              scope: allowResult.scope,
+              source: "one-click",
+              url: allowResult.url,
+            })
           );
         }
         const destination =
@@ -2274,8 +2292,19 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     requestPromise
       .then(async ({ decision, ...allowResult }) => {
         if (allowResult.ok) {
+          const requestMessage = message as RequestLocalIntentAccessMessage;
+          const source =
+            message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
+              ? "llm-reviewed"
+              : "local-intent";
           await updateDailyStats((stats) =>
-            withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
+            withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
+              scope: allowResult.scope,
+              source,
+              message: decision.message,
+              purpose: requestMessage.purpose,
+              url: allowResult.url,
+            })
           );
         }
 
@@ -2401,7 +2430,11 @@ chrome.contextMenus.onClicked.addListener((info: { menuItemId?: string | number 
       .then((allowResult) => {
         if (!allowResult.ok) return;
         return updateDailyStats((stats) =>
-          withTemporaryAllow(stats, allowResult.host, allowResult.minutes)
+          withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
+            scope: allowResult.scope,
+            source: "one-click",
+            url: allowResult.url,
+          })
         );
       })
       .catch((error) => {
