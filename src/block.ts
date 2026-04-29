@@ -1,5 +1,8 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
-import { AccessGateDecision } from "./core/access-contracts.js";
+import {
+  AccessGateDecision,
+  AccessReviewProgressStage,
+} from "./core/access-contracts.js";
 import { temporaryAllowGate } from "./gates/temporary-allow-gate.js";
 import { localIntentAccessGate } from "./gates/local-intent-access-gate.js";
 import { llmReviewedAccessGate } from "./gates/llm-reviewed-access-gate.js";
@@ -1287,8 +1290,10 @@ const requestLocalIntentAccess = async (
 
 const requestLlmReviewedAccess = async (
   payload: RequestLocalIntentAccessMessage,
-  sender?: any
+  sender?: any,
+  onProgress?: (stage: AccessReviewProgressStage) => void
 ): Promise<TemporaryAllowResult & { decision: AccessGateDecision }> => {
+  onProgress?.("preparing");
   const defaultMinutes = await getTempAllowMinutes();
   const maxMinutes = defaultMinutes;
   const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
@@ -1371,8 +1376,12 @@ const requestLlmReviewedAccess = async (
       stats: siteStats,
     };
     modelDecision = hasChromeLocalProviderConfig(provider)
-      ? await requestChromeLocalAccessReview(reviewContext)
-      : await requestOpenAiAccessReview(provider.apiKey, provider.model, reviewContext);
+      ? await requestChromeLocalAccessReview(reviewContext, onProgress)
+      : await (async () => {
+          onProgress?.("reviewing");
+          return requestOpenAiAccessReview(provider.apiKey, provider.model, reviewContext);
+        })();
+    onProgress?.("finalizing");
   } catch (error) {
     console.warn("llm-reviewed-access request failed", error);
     const message =
@@ -1552,6 +1561,7 @@ const REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE =
 const REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "llm-reviewed-request-access")
     ?.messageType ?? "request-llm-reviewed-access";
+const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
 
 const stripTags = (value: string): string =>
   value
@@ -2273,6 +2283,102 @@ const handlePeekWithChatGPTRequest = async (
   return { status, prompt };
 };
 
+const handleRequestAccessMessage = async (
+  message: RequestLocalIntentAccessMessage,
+  sender?: any,
+  onProgress?: (stage: AccessReviewProgressStage) => void
+) => {
+  const source =
+    message.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
+      ? "llm-reviewed"
+      : "local-intent";
+  const requestedSite =
+    sanitizeSite(message.currentSite) || sanitizeSite(parseSiteFromSender(sender));
+  const requestedUrl = ensureHttpUrl(message.currentUrl) || ensureHttpUrl(message.url);
+  const requestResult = await getTempAllowMinutes()
+    .then((defaultMinutes) =>
+      updateDailyStats((stats) =>
+        withAccessRequested(
+          stats,
+          requestedSite,
+          Number(message.requestedMinutes) || defaultMinutes,
+          Date.now(),
+          {
+            scope: "domain",
+            source,
+            purpose: message.purpose,
+            url: requestedUrl,
+          }
+        )
+      )
+    )
+    .then(() =>
+      message.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
+        ? requestLlmReviewedAccess(message, sender, onProgress)
+        : requestLocalIntentAccess(message, sender)
+    );
+
+  const { decision, ...allowResult } = requestResult;
+  if (allowResult.ok) {
+    await updateDailyStats((stats) =>
+      withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
+        scope: allowResult.scope,
+        source,
+        message: decision.message,
+        purpose: message.purpose,
+        url: allowResult.url,
+        provider: allowResult.provider,
+        model: allowResult.model,
+        requestedMinutes: Number(message.requestedMinutes) || undefined,
+      })
+    );
+  } else if (decision.decision === "FAIL" || decision.decision === "ASK_FOLLOWUP") {
+    await updateDailyStats((stats) =>
+      withRequestGateDecision(
+        stats,
+        {
+          site: decision.host || message.currentSite || null,
+          action: decision.decision === "ASK_FOLLOWUP" ? "request-follow-up" : "request-denied",
+          scope: decision.scope,
+          minutes: null,
+          source,
+          message: decision.message,
+          purpose: message.purpose,
+          url: decision.url,
+          provider: allowResult.provider,
+          model: allowResult.model,
+        },
+        Date.now()
+      )
+    );
+  }
+
+  const destination =
+    allowResult.ok && allowResult.scope === "url"
+      ? allowResult.url
+      : allowResult.ok
+      ? await getTemporarilyAllowedDestination(
+          {
+            type: TEMPORARY_ALLOW_MESSAGE_TYPE,
+            url: message.url,
+            scope: allowResult.scope === "url" ? "url" : "domain",
+          } as TemporarilyAllowTabMessage,
+          sender,
+          {
+            getLedgerUrl: getLastNavigatedUrlForTab,
+            getTabNavigatedHttpUrl,
+          }
+        )
+      : null;
+
+  onProgress?.("complete");
+  return {
+    ok: allowResult.ok,
+    decision,
+    destination,
+  };
+};
+
 chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: SendResponse) => {
   if (message?.type === "get-active-temporary-allow") {
     const rawUrl =
@@ -2384,97 +2490,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
     message?.type === "request-agentic-access"
   ) {
-    const requestMessage = message as RequestLocalIntentAccessMessage;
-    const source =
-      message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
-        ? "llm-reviewed"
-        : "local-intent";
-    const requestedSite =
-      sanitizeSite(requestMessage.currentSite) || sanitizeSite(parseSiteFromSender(sender));
-    const requestedUrl = ensureHttpUrl(requestMessage.currentUrl) || ensureHttpUrl(requestMessage.url);
-    const requestPromise = getTempAllowMinutes()
-      .then((defaultMinutes) =>
-        updateDailyStats((stats) =>
-          withAccessRequested(
-            stats,
-            requestedSite,
-            Number(requestMessage.requestedMinutes) || defaultMinutes,
-            Date.now(),
-            {
-              scope: "domain",
-              source,
-              purpose: requestMessage.purpose,
-              url: requestedUrl,
-            }
-          )
-        )
-      )
-      .then(() =>
-        message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
-          ? requestLlmReviewedAccess(requestMessage, sender)
-          : requestLocalIntentAccess(requestMessage, sender)
-      );
-
-    requestPromise
-      .then(async ({ decision, ...allowResult }) => {
-        if (allowResult.ok) {
-          await updateDailyStats((stats) =>
-            withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
-              scope: allowResult.scope,
-              source,
-              message: decision.message,
-              purpose: requestMessage.purpose,
-              url: allowResult.url,
-              provider: allowResult.provider,
-              model: allowResult.model,
-              requestedMinutes: Number(requestMessage.requestedMinutes) || undefined,
-            })
-          );
-        } else if (decision.decision === "FAIL" || decision.decision === "ASK_FOLLOWUP") {
-          await updateDailyStats((stats) =>
-            withRequestGateDecision(
-              stats,
-              {
-                site: decision.host || requestMessage.currentSite || null,
-                action: decision.decision === "ASK_FOLLOWUP" ? "request-follow-up" : "request-denied",
-                scope: decision.scope,
-                minutes: null,
-                source,
-                message: decision.message,
-                purpose: requestMessage.purpose,
-                url: decision.url,
-                provider: allowResult.provider,
-                model: allowResult.model,
-              },
-              Date.now()
-            )
-          );
-        }
-
-        const destination =
-          allowResult.ok && allowResult.scope === "url"
-            ? allowResult.url
-            : allowResult.ok
-            ? await getTemporarilyAllowedDestination(
-                {
-                  type: TEMPORARY_ALLOW_MESSAGE_TYPE,
-                  url: (message as RequestLocalIntentAccessMessage)?.url,
-                  scope: allowResult.scope === "url" ? "url" : "domain",
-                } as TemporarilyAllowTabMessage,
-                sender,
-                {
-                  getLedgerUrl: getLastNavigatedUrlForTab,
-                  getTabNavigatedHttpUrl,
-                }
-              )
-            : null;
-
-        return {
-          ok: allowResult.ok,
-          decision,
-          destination,
-        };
-      })
+    handleRequestAccessMessage(message as RequestLocalIntentAccessMessage, sender)
       .then((response) => sendResponse(response))
       .catch((error) => {
         console.warn("request-access gate request failed", error);
@@ -2489,6 +2505,51 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
   }
   return undefined;
 });
+
+if (chrome.runtime.onConnect) {
+  chrome.runtime.onConnect.addListener((port: any) => {
+    if (port?.name !== ACCESS_REVIEW_PROGRESS_PORT) return;
+
+    let disconnected = false;
+    port.onDisconnect?.addListener(() => {
+      disconnected = true;
+    });
+
+    const postMessage = (message: unknown) => {
+      if (disconnected) return;
+      try {
+        port.postMessage(message);
+      } catch {
+        disconnected = true;
+      }
+    };
+
+    port.onMessage?.addListener((message: any) => {
+      if (
+        message?.type !== REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE &&
+        message?.type !== REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE &&
+        message?.type !== "request-agentic-access"
+      ) {
+        postMessage({ type: "result", response: { ok: false, error: "Unsupported request type" } });
+        return;
+      }
+
+      handleRequestAccessMessage(
+        message as RequestLocalIntentAccessMessage,
+        port.sender,
+        (stage) => postMessage({ type: "progress", stage })
+      )
+        .then((response) => postMessage({ type: "result", response }))
+        .catch((error) => {
+          console.warn("request-access port request failed", error);
+          postMessage({
+            type: "result",
+            response: { ok: false, error: error?.message ?? String(error) },
+          });
+        });
+    });
+  });
+}
 
 // ---------- Lifecycle & Menus ----------
 

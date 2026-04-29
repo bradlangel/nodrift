@@ -163,6 +163,26 @@
     .request-access-result.pass {
       color: #065f46;
     }
+    .request-access-result.thinking {
+      color: #1f2937;
+      display: inline-block;
+      font-weight: 650;
+      background: linear-gradient(100deg, #374151 0%, #374151 42%, #cbd5e1 50%, #6b7280 58%, #374151 66%, #374151 100%);
+      background-position: 100% 0;
+      background-size: 300% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: thinking-sheen 4.8s linear infinite;
+    }
+    @keyframes thinking-sheen {
+      0% {
+        background-position: 100% 0;
+      }
+      100% {
+        background-position: 0% 0;
+      }
+    }
     button.secondary {
       background-color: #1d4ed8;
     }

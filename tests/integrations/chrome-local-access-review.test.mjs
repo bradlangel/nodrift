@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 
-import { buildChromeLocalPrompt } from "../../dist/integrations/chrome-local-access-review.js";
+import {
+  buildChromeLocalAnalysisPrompt,
+  buildChromeLocalDecisionPrompt,
+  buildChromeLocalPrompt,
+  normalizeChromeLocalRequestAnalysis,
+  requestChromeLocalAccessReview,
+} from "../../dist/integrations/chrome-local-access-review.js";
 
 const tests = [];
 
@@ -65,22 +71,99 @@ test("builds a text-native prompt with strict JSON response instructions", () =>
   assert.match(prompt, /"followUpQuestion":null/);
 });
 
-test("includes shared examples and the live request purpose", () => {
-  const prompt = buildChromeLocalPrompt(baseContext());
+test("builds an analysis prompt with local stats context", () => {
+  const prompt = buildChromeLocalAnalysisPrompt(baseContext());
 
-  assert.match(prompt, /Purpose: "Just for fun but I should be working"/);
-  assert.match(prompt, /"decision":"FAIL"/);
+  assert.match(prompt, /Analyze one temporary access request/);
+  assert.match(prompt, /"category":"unclear"/);
   assert.match(prompt, /"requestedPurpose": "Just for fun but I should be working"/);
-  assert.match(prompt, /Never reuse names, phrases, or reasons from examples/);
-  assert.doesNotMatch(prompt, /bug in library X/);
-});
-
-test("includes richer local stats context in the prompt", () => {
-  const prompt = buildChromeLocalPrompt(baseContext());
-
   assert.match(prompt, /"currentSiteStatsToday": \{/);
   assert.match(prompt, /"categorySummaryToday": \{/);
   assert.match(prompt, /"category": "unplanned-leisure"/);
+});
+
+test("builds a decision prompt from prior analysis and live request", () => {
+  const prompt = buildChromeLocalDecisionPrompt(baseContext(), {
+    category: "unplanned-leisure",
+    specificity: "vague",
+    boundedness: "unbounded",
+    risk: "high",
+    requestEvidence: "Just for fun but I should be working",
+    contextEvidence: "one recent denial for this site",
+  });
+
+  assert.match(prompt, /Decide one temporary access request/);
+  assert.match(prompt, /Prior analysis:/);
+  assert.match(prompt, /"requestedPurpose": "Just for fun but I should be working"/);
+  assert.match(prompt, /"contextEvidence": "one recent denial for this site"/);
+  assert.doesNotMatch(prompt, /bug in library X/);
+});
+
+test("normalizes local request analysis", () => {
+  const analysis = normalizeChromeLocalRequestAnalysis(`{
+    "category": "planned-leisure",
+    "specificity": "specific",
+    "boundedness": "bounded",
+    "risk": "low",
+    "requestEvidence": "one saved article",
+    "contextEvidence": "no recent temporary access for this site"
+  }`);
+
+  assert.equal(analysis.category, "planned-leisure");
+  assert.equal(analysis.specificity, "specific");
+  assert.equal(analysis.boundedness, "bounded");
+  assert.equal(analysis.risk, "low");
+  assert.equal(analysis.requestEvidence, "one saved article");
+  assert.equal(analysis.contextEvidence, "no recent temporary access for this site");
+});
+
+test("rejects invalid local request analysis", () => {
+  assert.equal(normalizeChromeLocalRequestAnalysis('{"category":"work"}'), null);
+});
+
+test("runs local access review as analysis then decision prompts", async () => {
+  const prompts = [];
+  const previousLanguageModel = globalThis.LanguageModel;
+  globalThis.LanguageModel = {
+    availability: async () => "available",
+    create: async () => ({
+      prompt: async (prompt) => {
+        prompts.push(prompt);
+        if (prompts.length === 1) {
+          return JSON.stringify({
+            category: "maintenance",
+            specificity: "specific",
+            boundedness: "bounded",
+            risk: "low",
+            requestEvidence: "test to see if access is granted",
+            contextEvidence: null,
+          });
+        }
+        return JSON.stringify({
+          decision: "PASS_WITH_LIMIT",
+          scope: "domain",
+          minutes: 10,
+          message: "Approved because this is a bounded test of the access flow.",
+          followUpQuestion: null,
+        });
+      },
+      destroy: () => undefined,
+    }),
+  };
+
+  try {
+    const result = await requestChromeLocalAccessReview(baseContext());
+    assert.equal(prompts.length, 2);
+    assert.match(prompts[0], /Analyze one temporary access request/);
+    assert.match(prompts[1], /Decide one temporary access request/);
+    assert.match(prompts[1], /test to see if access is granted/);
+    assert.equal(
+      result,
+      '{"decision":"PASS_WITH_LIMIT","scope":"domain","minutes":10,"message":"Approved because this is a bounded test of the access flow.","followUpQuestion":null}'
+    );
+  } finally {
+    globalThis.LanguageModel = previousLanguageModel;
+  }
 });
 
 let failures = 0;

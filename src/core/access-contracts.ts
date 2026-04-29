@@ -1,5 +1,11 @@
 export type AccessDecision = "PASS" | "PASS_WITH_LIMIT" | "FAIL" | "ASK_FOLLOWUP";
 export type AccessDecisionScope = "domain" | "url" | "none";
+export type AccessReviewProgressStage =
+  | "preparing"
+  | "analyzing"
+  | "reviewing"
+  | "finalizing"
+  | "complete";
 
 export type DailyStatsContext = {
   blockedAttemptsToday: number;

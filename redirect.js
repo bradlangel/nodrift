@@ -15,6 +15,16 @@ const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
+const LLM_REVIEW_WAITING_TEXT =
+  "Reviewing locally. Local LLM responses can take a little while.";
+const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
+const ACCESS_REVIEW_PROGRESS_MESSAGES = {
+  preparing: "Preparing request...",
+  analyzing: "Checking request and local usage stats...",
+  reviewing: "Reviewing access decision...",
+  finalizing: "Applying decision...",
+  complete: "Opening site...",
+};
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
@@ -447,6 +457,79 @@ const wireRequestAccessForm = () => {
     resultEl.className = `request-access-result${tone ? ` ${tone}` : ""}`;
   };
 
+  const resetSubmitButton = () => {
+    submitBtn.disabled = false;
+    submitBtn.textContent =
+      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
+        ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
+        : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
+  };
+
+  const buildRequestPayload = (purpose) => ({
+    type: activeRequestMessageType,
+    url: window.location.href,
+    currentUrl: document.referrer || null,
+    currentSite: site,
+    purpose,
+    followUpAnswer: null,
+    followUpCount: 1,
+  });
+
+  const handleRequestAccessResponse = (response) => {
+    resetSubmitButton();
+
+    if (!response) {
+      setResult("Could not process this request right now.", "fail");
+      return;
+    }
+
+    const decision = response.decision;
+    if (!response.ok) {
+      setResult(decision?.message || response.error || "Staying blocked for now.", "fail");
+      return;
+    }
+
+    setResult(decision?.message || "Approved. Opening now.", "pass");
+
+    const responseDestination = ensureHttpUrl(response.destination);
+    const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
+    const referrerUrl = ensureHttpUrl(document.referrer);
+    const destination = responseDestination || siteUrl || referrerUrl;
+    if (destination) {
+      window.location.href = destination;
+    }
+  };
+
+  const sendRequestAccessWithProgress = (payload) => {
+    const port = chrome.runtime.connect({ name: ACCESS_REVIEW_PROGRESS_PORT });
+    let settled = false;
+
+    port.onMessage.addListener((message) => {
+      if (message?.type === "progress") {
+        setResult(
+          ACCESS_REVIEW_PROGRESS_MESSAGES[message.stage] || LLM_REVIEW_WAITING_TEXT,
+          "thinking"
+        );
+        return;
+      }
+
+      if (message?.type === "result") {
+        settled = true;
+        port.disconnect();
+        handleRequestAccessResponse(message.response);
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      if (settled) return;
+      resetSubmitButton();
+      setResult("The review connection closed before a decision came back.", "fail");
+    });
+
+    setResult(LLM_REVIEW_WAITING_TEXT, "thinking");
+    port.postMessage(payload);
+  };
+
   const setRequestMode = (launcher) => {
     activeRequestMessageType = launcher?.dataset?.messageType || REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
     const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
@@ -459,7 +542,7 @@ const wireRequestAccessForm = () => {
           ? `Up to ${defaultAccessMinutes} minute${defaultAccessMinutes === 1 ? "" : "s"}.`
           : "Uses your configured access window.";
       metaEl.textContent = isLlmMode
-        ? `${minutesText} The reviewer will approve or deny from this note.`
+        ? `${minutesText} The reviewer will approve or deny from this note. Local LLMs may take a moment.`
         : `${minutesText} Add a concrete reason before continuing.`;
     }
     submitBtn.textContent = isLlmMode
@@ -507,49 +590,37 @@ const wireRequestAccessForm = () => {
 
     submitBtn.disabled = true;
     submitBtn.textContent = "Reviewing...";
-    setResult("", "");
+    const payload = buildRequestPayload(purpose);
+
+    if (
+      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE &&
+      chrome.runtime.connect
+    ) {
+      sendRequestAccessWithProgress(payload);
+      return;
+    }
+
+    setResult(
+      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
+        ? LLM_REVIEW_WAITING_TEXT
+        : "",
+      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE ? "thinking" : ""
+    );
 
     chrome.runtime.sendMessage(
-      {
-        type: activeRequestMessageType,
-        url: window.location.href,
-        currentUrl: document.referrer || null,
-        currentSite: site,
-        purpose,
-        followUpAnswer: null,
-        followUpCount: 1,
-      },
+      payload,
       (response) => {
-        submitBtn.disabled = false;
-        submitBtn.textContent =
-          activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
-            ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
-            : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
-
         if (chrome.runtime.lastError || !response) {
           console.warn(
             "Request access failed",
             chrome.runtime.lastError?.message || response?.error || "Unknown error"
           );
+          resetSubmitButton();
           setResult("Could not process this request right now.", "fail");
           return;
         }
 
-        const decision = response.decision;
-        if (!response.ok) {
-          setResult(decision?.message || "Staying blocked for now.", "fail");
-          return;
-        }
-
-        setResult(decision?.message || "Approved. Opening now.", "pass");
-
-        const responseDestination = ensureHttpUrl(response.destination);
-        const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
-        const referrerUrl = ensureHttpUrl(document.referrer);
-        const destination = responseDestination || siteUrl || referrerUrl;
-        if (destination) {
-          window.location.href = destination;
-        }
+        handleRequestAccessResponse(response);
       }
     );
   });
