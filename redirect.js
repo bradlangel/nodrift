@@ -427,23 +427,18 @@ const wireRequestAccessForm = () => {
   const requestSection = document.getElementById("request-access");
   const submitBtn = document.getElementById("request-access-btn");
   const formTitle = requestSection?.querySelector("h3");
+  const metaEl = document.getElementById("request-access-meta");
   const purposeEl = document.getElementById("request-purpose");
-  const minutesEl = document.getElementById("request-minutes");
-  const followUpRow = document.getElementById("follow-up-row");
-  const followUpLabel = document.getElementById("follow-up-label");
-  const followUpInput = document.getElementById("request-follow-up");
   const resultEl = document.getElementById("request-access-result");
   if (
     !(submitBtn instanceof HTMLButtonElement) ||
-    !(purposeEl instanceof HTMLTextAreaElement) ||
-    !(minutesEl instanceof HTMLInputElement) ||
-    !(followUpInput instanceof HTMLInputElement)
+    !(purposeEl instanceof HTMLTextAreaElement)
   ) {
     return;
   }
 
   let activeRequestMessageType = REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
-  let followUpCount = 0;
+  let defaultAccessMinutes = null;
 
   const setResult = (message, tone = "") => {
     if (!resultEl) return;
@@ -451,23 +446,20 @@ const wireRequestAccessForm = () => {
     resultEl.className = `request-access-result${tone ? ` ${tone}` : ""}`;
   };
 
-  const toggleFollowUp = (question) => {
-    if (!followUpRow || !followUpLabel) return;
-    if (question) {
-      followUpRow.hidden = false;
-      followUpLabel.textContent = question;
-      return;
-    }
-    followUpRow.hidden = true;
-    followUpLabel.textContent = "One quick follow-up";
-    followUpInput.value = "";
-  };
-
   const setRequestMode = (launcher) => {
     activeRequestMessageType = launcher?.dataset?.messageType || REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
     const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
     if (formTitle) {
-      formTitle.textContent = isLlmMode ? "LLM-reviewed request" : "Intent check";
+      formTitle.textContent = isLlmMode ? "Ask for access" : "Check intent";
+    }
+    if (metaEl) {
+      const minutesText =
+        typeof defaultAccessMinutes === "number" && defaultAccessMinutes > 0
+          ? `Up to ${defaultAccessMinutes} minute${defaultAccessMinutes === 1 ? "" : "s"}.`
+          : "Uses your configured access window.";
+      metaEl.textContent = isLlmMode
+        ? `${minutesText} The reviewer will approve or deny from this note.`
+        : `${minutesText} Add a concrete reason before continuing.`;
     }
     submitBtn.textContent = isLlmMode
       ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
@@ -476,8 +468,6 @@ const wireRequestAccessForm = () => {
 
   const openRequestAccess = (launcher) => {
     setRequestMode(launcher);
-    followUpCount = 0;
-    toggleFollowUp("");
     setResult("", "");
 
     if (requestSection) requestSection.hidden = false;
@@ -500,10 +490,14 @@ const wireRequestAccessForm = () => {
     launcher.addEventListener("click", () => openRequestAccess(launcher));
   });
 
+  chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
+    const minutes = Number(data.tempAllowMinutes);
+    defaultAccessMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : 30;
+    setRequestMode(document.querySelector(`[data-message-type="${activeRequestMessageType}"]`));
+  });
+
   submitBtn.addEventListener("click", () => {
     const purpose = purposeEl.value.trim();
-    const requestedMinutes = Number(minutesEl.value);
-    const followUpAnswer = followUpInput.value.trim();
 
     if (!purpose) {
       setResult("Add a short purpose so we can route this request.", "fail");
@@ -521,9 +515,8 @@ const wireRequestAccessForm = () => {
         currentUrl: document.referrer || null,
         currentSite: site,
         purpose,
-        requestedMinutes,
-        followUpAnswer: followUpAnswer || null,
-        followUpCount,
+        followUpAnswer: null,
+        followUpCount: 1,
       },
       (response) => {
         submitBtn.disabled = false;
@@ -543,20 +536,10 @@ const wireRequestAccessForm = () => {
 
         const decision = response.decision;
         if (!response.ok) {
-          if (decision?.decision === "ASK_FOLLOWUP") {
-            followUpCount = 1;
-            toggleFollowUp(decision.message || "One quick follow-up");
-            setResult("Please add one more detail.", "");
-            return;
-          }
-          followUpCount = 0;
-          toggleFollowUp("");
           setResult(decision?.message || "Staying blocked for now.", "fail");
           return;
         }
 
-        followUpCount = 0;
-        toggleFollowUp("");
         setResult(decision?.message || "Approved. Opening now.", "pass");
 
         const responseDestination = ensureHttpUrl(response.destination);

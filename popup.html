@@ -24,6 +24,32 @@
       font-size: 12px;
       overflow-wrap: anywhere;
     }
+    .grant {
+      display: none;
+      margin: 0 0 12px;
+      padding: 10px;
+      border: 1px solid #fbbf24;
+      border-radius: 6px;
+      background: #fffbeb;
+      color: #17202a;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .grant.visible {
+      display: block;
+    }
+    .grant strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    .grant-row {
+      margin-top: 4px;
+    }
+    .grant-label {
+      color: #64748b;
+      font-weight: 650;
+    }
     .actions {
       display: grid;
       gap: 8px;
@@ -58,6 +84,7 @@
 <body>
   <h1>Website Blocker</h1>
   <p id="current-site"></p>
+  <section id="active-grant" class="grant" aria-live="polite"></section>
   <div class="actions">
     <button id="temporarily-allow">Temporarily allow</button>
     <button id="reblock-now" class="secondary">Re-block all now</button>

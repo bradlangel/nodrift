@@ -471,6 +471,20 @@ const isUrlTemporarilyAllowed = (rawUrl?: string | null): boolean => {
   return false;
 };
 
+const getTemporaryAllowMatchForUrl = (
+  rawUrl?: string | null
+): TemporaryUrlAllowWindow | null => {
+  const url = normalizeTemporaryAllowUrl(rawUrl);
+  if (!url) return null;
+  const now = Date.now();
+  for (const allow of temporarilyAllowedUrls.values()) {
+    if (allow.expiresAt > now && allow.url === url) {
+      return allow;
+    }
+  }
+  return null;
+};
+
 const getTemporaryAllowMatchForHost = (
   host: string
 ): { host: string; window: TemporaryAllowWindow } | null => {
@@ -490,6 +504,14 @@ const getTemporaryAllowMatchForHost = (
 const getTemporaryAllowWindowForHost = (
   host: string
 ): TemporaryAllowWindow | null => getTemporaryAllowMatchForHost(host)?.window ?? null;
+
+const getTemporaryAllowWindowForUrl = (
+  rawUrl?: string | null
+): TemporaryAllowWindow | null => {
+  const host = parseHostnameFromUrl(rawUrl);
+  const hostWindow = host ? getTemporaryAllowWindowForHost(host) : null;
+  return hostWindow ?? getTemporaryAllowMatchForUrl(rawUrl);
+};
 
 const getTemporaryAllowedHostFromUrl = (rawUrl?: string | null): string | null => {
   const host = parseHostnameFromUrl(rawUrl);
@@ -673,10 +695,14 @@ const formatElapsedTitleText = (elapsedMinutes: number | null): string | null =>
   return `${elapsedMinutes} ${elapsedMinutes === 1 ? "minute" : "minutes"}`;
 };
 
-const setTemporaryAllowBadge = (enabled: boolean, host?: string | null) => {
+const setTemporaryAllowBadge = (
+  enabled: boolean,
+  host?: string | null,
+  rawUrl?: string | null
+) => {
   if (!chrome.action?.setBadgeText || !chrome.action?.setTitle) return;
   if (enabled) {
-    const window = host ? getTemporaryAllowWindowForHost(host) : null;
+    const window = getTemporaryAllowWindowForUrl(rawUrl) ?? (host ? getTemporaryAllowWindowForHost(host) : null);
     const elapsedMinutes = window
       ? Math.max(Math.floor((Date.now() - window.startedAt) / 60000), 0)
       : null;
@@ -718,9 +744,61 @@ const refreshBadgeForActiveTab = () => {
 
     setTemporaryAllowBadge(
       isHostTemporarilyAllowed(host) || isUrlTemporarilyAllowed(activeUrl),
-      host
+      host,
+      activeUrl
     );
   });
+};
+
+const findRecentTemporaryAllowDecision = (
+  stats: DailyBlockerStats,
+  host: string | null,
+  url: string | null
+) => {
+  if (!Array.isArray(stats.recentDecisions)) return null;
+  return (
+    stats.recentDecisions.find((decision) => {
+      if (decision.action !== "temporary-allow") return false;
+      if (url && decision.url === url) return true;
+      return !!host && decision.site === host;
+    }) ?? null
+  );
+};
+
+const getActiveTemporaryAllowDetails = async (rawUrl?: string | null) => {
+  pruneExpiredGrayscaleHosts();
+  pruneExpiredTemporarilyAllowedUrls();
+  const url = normalizeTemporaryAllowUrl(rawUrl);
+  const host = parseHostnameFromUrl(url);
+  if (!host) return { ok: true, active: false };
+
+  const hostMatch = getTemporaryAllowMatchForHost(host);
+  const urlMatch = getTemporaryAllowMatchForUrl(url);
+  const activeWindow = hostMatch?.window ?? urlMatch;
+  if (!activeWindow) return { ok: true, active: false };
+
+  const stats = await getDailyStats();
+  const decision = findRecentTemporaryAllowDecision(
+    stats,
+    hostMatch?.host ?? urlMatch?.host ?? host,
+    urlMatch?.url ?? null
+  );
+  const now = Date.now();
+  return {
+    ok: true,
+    active: true,
+    scope: hostMatch ? "domain" : "url",
+    host: hostMatch?.host ?? urlMatch?.host ?? host,
+    url: urlMatch?.url ?? null,
+    startedAt: activeWindow.startedAt,
+    expiresAt: activeWindow.expiresAt,
+    elapsedSeconds: Math.max(Math.floor((now - activeWindow.startedAt) / 1000), 0),
+    remainingSeconds: Math.max(Math.floor((activeWindow.expiresAt - now) / 1000), 0),
+    minutes: decision?.minutes ?? null,
+    source: decision?.source ?? null,
+    purpose: decision?.purpose ?? null,
+    reason: decision?.message ?? null,
+  };
 };
 
 const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
@@ -884,6 +962,7 @@ const scheduleTemporaryUrlAllow = (
   });
   persistTemporarilyAllowedUrls();
   refreshRulesIfReady();
+  refreshBadgeForActiveTab();
   scheduleBadgeRefreshAlarm();
   chrome.alarms.create(`restore-url-${id}`, { delayInMinutes: normalizedMinutes });
   if (grayscaleOnTemporaryAllow) {
@@ -917,6 +996,7 @@ const clearTemporaryUrlAllows = () => {
   temporarilyAllowedUrls.clear();
   persistTemporarilyAllowedUrls();
   refreshRulesIfReady();
+  refreshBadgeForActiveTab();
 };
 
 const loadGrayscalePreference = () => {
@@ -2199,6 +2279,22 @@ const handlePeekWithChatGPTRequest = async (
 };
 
 chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: SendResponse) => {
+  if (message?.type === "get-active-temporary-allow") {
+    const rawUrl =
+      typeof message?.url === "string"
+        ? message.url
+        : typeof sender?.tab?.url === "string"
+        ? sender.tab.url
+        : null;
+    flushActiveTemporaryAllowUsage()
+      .then(() => getActiveTemporaryAllowDetails(rawUrl))
+      .then((details) => sendResponse(details))
+      .catch((error) => {
+        console.warn("get-active-temporary-allow request failed", error);
+        sendResponse({ ok: false, error: error?.message ?? String(error) });
+      });
+    return true;
+  }
   if (message?.type === "get-local-stats") {
     flushActiveTemporaryAllowUsage()
       .then(() => getDailyStats())

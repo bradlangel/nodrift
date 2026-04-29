@@ -55,13 +55,13 @@ const buildReviewLevelInstructions = (
     "A request should explain what the user will do, why they need this blocked site, and what will count as done.",
     "The message field must explain the concrete reason for your decision in one short sentence.",
     "If you approve, the message must say why the request was specific enough.",
-    "If you deny or ask a follow-up, the message must say what detail is missing or what boundary was crossed.",
+    "If you deny, the message must say what detail is missing or what boundary was crossed.",
     `Purpose scrutiny level is ${strictnessLevel} of 5.`,
     `Leisure allowance level is ${leisureAllowanceLevel} of 5.`,
     "Purpose scrutiny 1 means light review; 3 means balanced review; 5 means require a clear, necessary, well-bounded purpose.",
     "Leisure allowance 1 means leisure is rarely approved; 3 means planned leisure can pass when specific and time-boxed; 5 means leisure can pass easily if still concrete and bounded.",
-    "When the purpose is vague and followUpCount is 0, prefer ASK_FOLLOWUP unless purpose scrutiny is 4 or 5.",
-    "When the purpose remains vague after one follow-up, return FAIL.",
+    "This is a single-input flow; return PASS, PASS_WITH_LIMIT, or FAIL only.",
+    "When the purpose is vague, return FAIL with a short reason instead of asking a follow-up.",
   ];
 
   const instructions = [...shared];
@@ -72,7 +72,7 @@ const buildReviewLevelInstructions = (
     );
   } else if (strictnessLevel >= 4) {
     instructions.push(
-      "At purpose scrutiny 4, return FAIL for casual, vague, novelty, or open-ended requests instead of asking a follow-up."
+      "At purpose scrutiny 4, return FAIL for casual, vague, novelty, or open-ended requests."
     );
   } else if (strictnessLevel <= 2) {
     instructions.push(
@@ -155,10 +155,7 @@ export const requestOpenAiAccessReview = async (
         type: "object",
         additionalProperties: false,
         properties: {
-          decision: {
-            type: "string",
-            enum: ["PASS", "PASS_WITH_LIMIT", "FAIL", "ASK_FOLLOWUP"],
-          },
+          decision: { type: "string", enum: ["PASS", "PASS_WITH_LIMIT", "FAIL"] },
           scope: {
             type: "string",
             enum: ["domain", "url", "none"],
@@ -202,10 +199,11 @@ export const requestOpenAiAccessReview = async (
               text: JSON.stringify({
                 task: "Review one temporary access request.",
                 constraints: [
-                  "Use exactly one decision: PASS, PASS_WITH_LIMIT, FAIL, ASK_FOLLOWUP.",
-                  "Ask at most one follow-up in total; if followUpCount is 1, return a terminal decision.",
+                  "Use exactly one decision: PASS, PASS_WITH_LIMIT, or FAIL.",
+                  "Do not ask follow-up questions; this flow has one input and needs a terminal decision.",
                   "Do not exceed the requested minutes unless reducing it.",
                   "Prefer URL scope when purpose asks for one specific page and requestedUrl matches blocked domain.",
+                  "Use domain scope when the user needs to browse the site, open comment sections, follow internal links, or requestedUrl is the site homepage.",
                   ...buildReviewLevelInstructions(reviewStrictnessLevel, leisureAllowanceLevel),
                 ],
                 request: {
@@ -215,8 +213,6 @@ export const requestOpenAiAccessReview = async (
                   requestedMinutes: context.requestedMinutes,
                   reviewStrictnessLevel,
                   leisureAllowanceLevel,
-                  followUpAnswer: context.followUpAnswer ?? null,
-                  followUpCount: context.followUpCount,
                   currentTimeIso: context.currentTimeIso,
                   dayOfWeek: context.dayOfWeek,
                   stats: buildStatsSnippet(context.stats),

@@ -59,6 +59,15 @@ const shouldPreferUrlScope = (context: LlmDecisionValidationContext): boolean =>
   );
 };
 
+const isSiteRootUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return (parsed.pathname === "" || parsed.pathname === "/") && !parsed.search;
+  } catch {
+    return false;
+  }
+};
+
 const failClosed = (
   context: LlmDecisionValidationContext,
   message = DEFAULT_FAIL_MESSAGE
@@ -123,7 +132,8 @@ export const validateLlmReviewedDecision = (
 
   const modelScope = parsed.scope === "url" || parsed.scope === "domain" ? parsed.scope : "domain";
   const preferUrlScope = shouldPreferUrlScope(context);
-  const scope = (preferUrlScope || modelScope === "url") && context.requestedUrl ? "url" : "domain";
+  const canUseUrlScope = !!context.requestedUrl && !isSiteRootUrl(context.requestedUrl);
+  const scope = (preferUrlScope || modelScope === "url") && canUseUrlScope ? "url" : "domain";
 
   return {
     decision,
