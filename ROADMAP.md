@@ -21,6 +21,9 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add an explicitly configured LLM-reviewed request gate (OpenAI first), with fail-closed validation and one follow-up maximum.
 - [ ] Add an LLM router provider so users can configure one router API key and
       choose among hosted models without changing extension code.
+- [ ] Add a developer-only local LLM review logger that records prompt payloads,
+      raw provider responses, parsed decisions, and validation failures locally
+      for debugging provider behavior.
 - [x] Support URL-scoped temporary access internally for future access gates and
       configuration.
 - [x] Refactor toward modular access gates and actions before adding more gate
@@ -70,6 +73,8 @@ Possible module types:
 - Actions: peek with ChatGPT, redirect, temporary allow, scoped allow,
   copy original URL.
 - UI panels: stats summary, request-access form, gate result, options sections.
+- Developer diagnostics: local-only LLM review logs for prompt/output debugging,
+  guarded behind an explicit developer setting.
 
 Default UI boundary:
 
@@ -113,7 +118,30 @@ judgment or heavy analytics.
 - [x] Approximate temporary-allow time used today
 - [x] Top blocked domains
 - [x] Recent access decisions
+- [ ] Refactor stats around a local OpenTelemetry-shaped event log as the
+      source of truth, with dashboard and gate context derived as projections.
+- [ ] Add structured decision categories such as work, learning, errands,
+      maintenance, planned leisure, unplanned leisure, and unclear.
+- [ ] Show per-site detail rows with blocked attempts, temporary allows, and
+      temporary-access time together.
+- [ ] Show access pressure, such as temporary allows compared with blocked
+      attempts, without moralizing the number.
+- [ ] Show compact category summaries and last-access-by-category/site context.
+- [ ] Feed richer per-site, category, and recent timeline context into LLM
+      review and other access gates.
 - [ ] Longest recent streak without temporary access
+
+Implementation direction:
+
+- Store local event records first, using OTel-style names and attributes such
+  as `blocker.blocked`, `access.requested`, `access.approved`,
+  `access.denied`, `access.used`, `site`, `scope`, `source`, `provider`,
+  `model`, `category`, `requested_minutes`, `granted_minutes`, and
+  `used_seconds`.
+- Keep current daily counters as derived projections so existing UI can migrate
+  incrementally.
+- Do not add remote telemetry or OTLP export by default; the model is for
+  structure, local debugging, and future portability.
 
 Possible placement:
 

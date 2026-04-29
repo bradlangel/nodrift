@@ -1,5 +1,9 @@
 import { DailyStatsContext } from "../core/access-contracts.js";
-import { LlmReviewLevel, normalizeReviewLevel } from "./openai-access-review.js";
+import {
+  buildAccessReviewPolicy,
+  LlmReviewLevel,
+  normalizeReviewLevel,
+} from "./access-review-policy.js";
 
 type ChromeLocalAccessReviewContext = {
   blockedDomain: string;
@@ -41,40 +45,55 @@ const extractJsonObjectText = (value: string): string => {
   return trimmed;
 };
 
-const buildReviewGuidance = (
-  strictnessLevel: LlmReviewLevel,
-  leisureAllowanceLevel: LlmReviewLevel
-): string[] => [
-  "Return JSON only. No markdown, prose, or code fences.",
-  'The response must look like {"decision":"FAIL","scope":"none","minutes":0,"message":"Denied because ...","followUpQuestion":null}.',
-  "Use exactly one decision: PASS, PASS_WITH_LIMIT, or FAIL.",
-  "Do not ask follow-up questions; this flow has one input and needs a terminal decision.",
-  "Use domain scope when the user needs to browse the site, open comment sections, follow internal links, or requestedUrl is the site homepage.",
-  "Use url scope only when the request is clearly for one exact page.",
-  "The message field must explain the concrete reason for your decision in one short sentence.",
-  "If you approve, the message must say why the request was specific enough.",
-  "If you deny, the message must say what detail is missing or what boundary was crossed.",
-  `Purpose scrutiny level is ${strictnessLevel} of 5.`,
-  `Leisure allowance level is ${leisureAllowanceLevel} of 5.`,
-  "Purpose scrutiny 1 means light review; 3 means balanced review; 5 means require a clear, necessary, well-bounded purpose.",
-  "Leisure allowance 1 means leisure is rarely approved; 3 means planned leisure can pass when specific and time-boxed; 5 means leisure can pass easily if still concrete and bounded.",
-  "When the purpose is vague, return FAIL with a short reason.",
-];
+const formatBulletList = (items: string[]): string =>
+  items.map((item, index) => `${index + 1}. ${item}`).join("\n");
 
-const buildChromeLocalPrompt = (context: ChromeLocalAccessReviewContext): string => {
+const formatExamples = (examples: ReturnType<typeof buildAccessReviewPolicy>["examples"]): string =>
+  examples
+    .map(
+      (example, index) =>
+        [
+          `Example ${index + 1}`,
+          `Purpose: ${JSON.stringify(example.requestedPurpose)}`,
+          `Output: ${JSON.stringify({
+            decision: example.decision,
+            scope: example.scope,
+            minutes: example.minutes,
+            message: example.message,
+            followUpQuestion: null,
+          })}`,
+        ].join("\n")
+    )
+    .join("\n\n");
+
+export const buildChromeLocalPrompt = (context: ChromeLocalAccessReviewContext): string => {
   const reviewStrictnessLevel = normalizeReviewLevel(context.reviewStrictnessLevel);
   const leisureAllowanceLevel = normalizeReviewLevel(context.leisureAllowanceLevel);
-  return JSON.stringify({
-    role: "temporary_access_reviewer",
-    outputSchema: {
-      decision: "PASS | PASS_WITH_LIMIT | FAIL",
-      scope: "domain | url | none",
-      minutes: "number",
-      message: "short reason",
-      followUpQuestion: null,
-    },
-    constraints: buildReviewGuidance(reviewStrictnessLevel, leisureAllowanceLevel),
-    request: {
+  const policy = buildAccessReviewPolicy(reviewStrictnessLevel, leisureAllowanceLevel);
+
+  return [
+    "You review temporary access requests for a soft website blocker.",
+    "Return exactly one valid JSON object and nothing else.",
+    "Do not use markdown, code fences, comments, trailing commas, or unquoted keys.",
+    "Use double quotes for every JSON key and string value. Escape any double quotes inside string values.",
+    "",
+    "Required JSON shape:",
+    '{"decision":"FAIL","scope":"none","minutes":0,"message":"Denied because ...","followUpQuestion":null}',
+    "",
+    `Task: ${policy.task}`,
+    "",
+    "Constraints:",
+    formatBulletList(policy.constraints),
+    "",
+    "Rubric:",
+    formatBulletList(policy.rubric),
+    "",
+    "Examples:",
+    formatExamples(policy.examples),
+    "",
+    "Request:",
+    JSON.stringify(
+      {
       blockedDomain: context.blockedDomain,
       requestedUrl: context.requestedUrl,
       requestedPurpose: context.requestedPurpose,
@@ -84,8 +103,13 @@ const buildChromeLocalPrompt = (context: ChromeLocalAccessReviewContext): string
       currentTimeIso: context.currentTimeIso,
       dayOfWeek: context.dayOfWeek,
       stats: buildStatsSnippet(context.stats),
-    },
-  });
+      },
+      null,
+      2
+    ),
+    "",
+    "Return only the final JSON object now. The first character must be { and the last character must be }.",
+  ].join("\n");
 };
 
 export const hasChromeLocalProviderConfig = (config: { provider: string }): boolean =>

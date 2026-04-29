@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import { buildAccessReviewPolicy } from "../../dist/integrations/access-review-policy.js";
 import {
   extractOpenAiOutputText,
   getOpenAiAccessReviewReasoningEffort,
@@ -57,6 +58,33 @@ test("normalizes numeric and legacy review levels", () => {
   assert.equal(normalizeReviewLevel("balanced"), 3);
   assert.equal(normalizeReviewLevel("strict"), 4);
   assert.equal(normalizeReviewLevel("surprise"), 3);
+});
+
+test("shared access review policy includes local-model steering examples", () => {
+  const policy = buildAccessReviewPolicy(3, 3);
+  const failureExample = policy.examples.find((example) =>
+    example.requestedPurpose.includes("Just for fun")
+  );
+
+  assert.equal(failureExample?.decision, "FAIL");
+  assert.match(failureExample?.message || "", /I should be working/);
+  assert.ok(
+    policy.constraints.some((constraint) => constraint.includes("admits avoidance of work"))
+  );
+});
+
+test("shared access review policy includes a mini rubric", () => {
+  const policy = buildAccessReviewPolicy(4, 2);
+
+  assert.ok(policy.rubric.some((item) => item.startsWith("specificity:")));
+  assert.ok(policy.rubric.some((item) => item.startsWith("necessity:")));
+  assert.ok(policy.rubric.some((item) => item.startsWith("boundedness:")));
+  assert.ok(policy.rubric.some((item) => item.startsWith("obligation conflict:")));
+  assert.ok(
+    policy.constraints.some((constraint) =>
+      constraint.includes("deny casual requests rather than asking for more detail")
+    )
+  );
 });
 
 let failures = 0;
