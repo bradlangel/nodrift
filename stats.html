@@ -51,7 +51,7 @@
 
     .card {
       background: #fff;
-      border-radius: 10px;
+      border-radius: 8px;
       padding: 14px;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
       margin-top: 12px;
@@ -115,7 +115,9 @@
       justify-content: flex-start;
     }
 
-    .decision-row {
+    .decision-row,
+    .site-detail-row,
+    .category-row {
       border-bottom: 1px solid #f3f4f6;
       padding: 10px 0;
       display: flex;
@@ -128,6 +130,7 @@
       justify-content: space-between;
       gap: 8px;
       align-items: baseline;
+      flex-wrap: wrap;
     }
 
     button {
@@ -180,6 +183,20 @@
     <section class="card">
       <strong>Top temporary access domains</strong>
       <ul id="top-temp-access-domains">
+        <li class="row row-empty">Loading...</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <strong>Per-site details</strong>
+      <ul id="per-site-details">
+        <li class="row row-empty">Loading...</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <strong>Category summary</strong>
+      <ul id="category-summary">
         <li class="row row-empty">Loading...</li>
       </ul>
     </section>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { buildAccessReviewPolicy } from "../../dist/integrations/access-review-policy.js";
 import {
+  buildOpenAiStatsSnippet,
   extractOpenAiOutputText,
   getOpenAiAccessReviewReasoningEffort,
   normalizeReviewLevel,
@@ -71,6 +72,10 @@ test("shared access review policy includes local-model steering examples", () =>
   assert.ok(
     policy.constraints.some((constraint) => constraint.includes("admits avoidance of work"))
   );
+  assert.ok(
+    policy.constraints.some((constraint) => constraint.includes("Never reuse names"))
+  );
+  assert.ok(!JSON.stringify(policy.examples).includes("bug in library X"));
 });
 
 test("shared access review policy includes a mini rubric", () => {
@@ -85,6 +90,52 @@ test("shared access review policy includes a mini rubric", () => {
       constraint.includes("deny casual requests rather than asking for more detail")
     )
   );
+});
+
+test("includes richer local stats context for OpenAI requests", () => {
+  const snippet = buildOpenAiStatsSnippet({
+    blockedAttemptsToday: 2,
+    temporaryAllowsToday: 1,
+    temporaryAllowUsedSecondsToday: 90,
+    globalStatsToday: {
+      blockedAttemptsToday: 3,
+      temporaryAllowsToday: 1,
+      temporaryAllowUsedSecondsToday: 90,
+    },
+    currentSiteStatsToday: {
+      site: "news.ycombinator.com",
+      blockedAttemptsToday: 2,
+      temporaryAllowsToday: 1,
+      temporaryAllowUsedSecondsToday: 90,
+      accessPressure: 0.5,
+      lastTemporaryAccessAt: 1770000000000,
+    },
+    categorySummaryToday: {
+      work: {
+        accessRequestsToday: 1,
+        temporaryAllowsToday: 1,
+        requestDenialsToday: 0,
+        followUpsToday: 0,
+        grantedMinutesToday: 10,
+        requestedMinutesToday: 15,
+        temporaryAllowUsedSecondsToday: 90,
+      },
+    },
+    recentSiteDecisions: [
+      {
+        timestamp: 1770000000000,
+        decision: "temporary-allow",
+        minutes: 10,
+        scope: "domain",
+        source: "llm-reviewed",
+        category: "work",
+      },
+    ],
+  });
+
+  assert.equal(snippet.currentSiteStatsToday.site, "news.ycombinator.com");
+  assert.equal(snippet.categorySummaryToday.work.accessRequestsToday, 1);
+  assert.equal(snippet.recentSiteDecisions[0].category, "work");
 });
 
 let failures = 0;

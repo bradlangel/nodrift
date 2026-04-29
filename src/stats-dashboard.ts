@@ -1,4 +1,11 @@
-import { DailyBlockerStats, DailySiteStats } from "./stats.js";
+import {
+  AccessDecisionCategory,
+  CategoryStatsProjection,
+  DailyBlockerStats,
+  DailySiteStats,
+  SiteStatsProjection,
+  buildDailyStatsProjection,
+} from "./stats.js";
 
 type LocalStatsResponse = {
   ok: boolean;
@@ -35,6 +42,12 @@ const formatDecisionLabel = (decision: DailyBlockerStats["recentDecisions"][numb
   }
   return "Blocked";
 };
+
+const formatCategoryLabel = (category: AccessDecisionCategory): string =>
+  category
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
 const siteStatsEntries = (stats: DailyBlockerStats): Array<[string, DailySiteStats]> =>
   Object.entries(stats.siteStatsToday || {});
@@ -88,6 +101,130 @@ const renderTopSites = (
     item.appendChild(domain);
     item.appendChild(value);
     list.appendChild(item);
+  });
+};
+
+const renderPerSiteDetails = (stats: DailyBlockerStats) => {
+  const root = document.getElementById("per-site-details");
+  if (!root) return;
+  root.innerHTML = "";
+
+  const projection = buildDailyStatsProjection(stats);
+  const rows = Object.values(projection.perSiteStatsToday)
+    .filter(
+      (siteStats) =>
+        siteStats.blockedAttemptsToday > 0 ||
+        siteStats.temporaryAllowsToday > 0 ||
+        siteStats.temporaryAllowUsedSecondsToday > 0
+    )
+    .sort(
+      (a, b) =>
+        b.blockedAttemptsToday - a.blockedAttemptsToday ||
+        b.temporaryAllowsToday - a.temporaryAllowsToday ||
+        a.site.localeCompare(b.site)
+    )
+    .slice(0, 12);
+
+  if (rows.length === 0) {
+    const item = document.createElement("li");
+    item.className = "row row-empty";
+    item.textContent = "No site stats recorded today.";
+    root.appendChild(item);
+    return;
+  }
+
+  rows.forEach((siteStats: SiteStatsProjection) => {
+    const item = document.createElement("li");
+    item.className = "site-detail-row";
+
+    const top = document.createElement("div");
+    top.className = "decision-top";
+
+    const site = document.createElement("strong");
+    site.className = "row-domain";
+    site.textContent = siteStats.site;
+
+    const pressure = document.createElement("span");
+    pressure.className = "muted";
+    pressure.textContent =
+      siteStats.blockedAttemptsToday > 0
+        ? `Access pressure ${siteStats.temporaryAllowsToday}/${siteStats.blockedAttemptsToday}`
+        : "Access pressure n/a";
+
+    const detail = document.createElement("div");
+    detail.className = "muted";
+    detail.textContent = [
+      `${siteStats.blockedAttemptsToday} blocked`,
+      `${siteStats.temporaryAllowsToday} temp allows`,
+      `${formatUsedTime(siteStats.temporaryAllowUsedSecondsToday)} temp access`,
+    ].join(" · ");
+
+    top.appendChild(site);
+    top.appendChild(pressure);
+    item.appendChild(top);
+    item.appendChild(detail);
+    root.appendChild(item);
+  });
+};
+
+const hasCategoryActivity = (categoryStats: CategoryStatsProjection): boolean =>
+  categoryStats.accessRequestsToday > 0 ||
+  categoryStats.temporaryAllowsToday > 0 ||
+  categoryStats.requestDenialsToday > 0 ||
+  categoryStats.followUpsToday > 0 ||
+  categoryStats.temporaryAllowUsedSecondsToday > 0;
+
+const renderCategorySummary = (stats: DailyBlockerStats) => {
+  const root = document.getElementById("category-summary");
+  if (!root) return;
+  root.innerHTML = "";
+
+  const projection = buildDailyStatsProjection(stats);
+  const rows = Object.entries(projection.categorySummaryToday)
+    .filter(([, categoryStats]) => hasCategoryActivity(categoryStats))
+    .sort(
+      (a, b) =>
+        b[1].accessRequestsToday - a[1].accessRequestsToday ||
+        b[1].temporaryAllowsToday - a[1].temporaryAllowsToday ||
+        a[0].localeCompare(b[0])
+    ) as Array<[AccessDecisionCategory, CategoryStatsProjection]>;
+
+  if (rows.length === 0) {
+    const item = document.createElement("li");
+    item.className = "row row-empty";
+    item.textContent = "No categorized requests yet today.";
+    root.appendChild(item);
+    return;
+  }
+
+  rows.forEach(([category, categoryStats]) => {
+    const item = document.createElement("li");
+    item.className = "category-row";
+
+    const top = document.createElement("div");
+    top.className = "decision-top";
+
+    const label = document.createElement("strong");
+    label.textContent = formatCategoryLabel(category);
+
+    const allows = document.createElement("span");
+    allows.className = "muted";
+    allows.textContent = `${categoryStats.temporaryAllowsToday} allowed`;
+
+    const detail = document.createElement("div");
+    detail.className = "muted";
+    detail.textContent = [
+      `${categoryStats.accessRequestsToday} requests`,
+      `${categoryStats.requestDenialsToday} denied`,
+      `${categoryStats.followUpsToday} follow-ups`,
+      `${formatUsedTime(categoryStats.temporaryAllowUsedSecondsToday)} used`,
+    ].join(" · ");
+
+    top.appendChild(label);
+    top.appendChild(allows);
+    item.appendChild(top);
+    item.appendChild(detail);
+    root.appendChild(item);
   });
 };
 
@@ -185,6 +322,8 @@ const renderStats = (stats: DailyBlockerStats) => {
     "No temporary access usage recorded today."
   );
 
+  renderPerSiteDetails(stats);
+  renderCategorySummary(stats);
   renderRecentDecisions(stats);
 };
 

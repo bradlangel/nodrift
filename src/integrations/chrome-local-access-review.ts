@@ -26,9 +26,18 @@ const buildStatsSnippet = (stats?: DailyStatsContext) => ({
   blockedAttemptsToday: stats?.blockedAttemptsToday ?? 0,
   temporaryAllowsToday: stats?.temporaryAllowsToday ?? 0,
   temporaryAllowUsedSecondsToday: stats?.temporaryAllowUsedSecondsToday ?? 0,
+  globalStatsToday: stats?.globalStatsToday ?? {
+    blockedAttemptsToday: stats?.blockedAttemptsToday ?? 0,
+    temporaryAllowsToday: stats?.temporaryAllowsToday ?? 0,
+    temporaryAllowUsedSecondsToday: stats?.temporaryAllowUsedSecondsToday ?? 0,
+  },
+  currentSiteStatsToday: stats?.currentSiteStatsToday ?? null,
+  categorySummaryToday: stats?.categorySummaryToday ?? {},
   recentSiteDecisions: Array.isArray(stats?.recentSiteDecisions)
     ? stats?.recentSiteDecisions.slice(0, 5)
     : [],
+  lastAccessByCategory: stats?.lastAccessByCategory ?? {},
+  lastAccessBySite: stats?.lastAccessBySite ?? null,
 });
 
 const extractJsonObjectText = (value: string): string => {

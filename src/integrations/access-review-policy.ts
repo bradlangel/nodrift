@@ -41,6 +41,7 @@ const buildReviewLevelInstructions = (
     "A request should explain what the user will do, why they need this blocked site, and what will count as done.",
     "If the request admits avoidance of work or another stated obligation, return FAIL unless it names a specific bounded recovery break.",
     "The message field must cite the decisive phrase or concrete evidence from the user's request.",
+    "Never reuse names, phrases, or reasons from examples in the message field.",
     "If you approve, the message must say why the request was specific enough.",
     "If you deny, the message must say what detail is missing or what boundary was crossed.",
     `Purpose scrutiny level is ${strictnessLevel} of 5.`,
@@ -121,11 +122,12 @@ export const buildAccessReviewPolicy = (
         'Denied because "just for fun" is vague and conflicts with "I should be working."',
     },
     {
-      requestedPurpose: "Need HN comments for a bug in library X",
+      requestedPurpose: "Need comment thread for a specific named debugging issue",
       decision: "PASS",
       scope: "domain",
       minutes: 10,
-      message: 'Approved because "bug in library X" is a specific work-related research task.',
+      message:
+        'Approved because the request names a specific debugging issue and a bounded research target.',
     },
     {
       requestedPurpose: "Planned 10 minute break to read one saved article",

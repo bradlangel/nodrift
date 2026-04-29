@@ -21,7 +21,39 @@ const baseContext = () => ({
     blockedAttemptsToday: 1,
     temporaryAllowsToday: 0,
     temporaryAllowUsedSecondsToday: 0,
-    recentSiteDecisions: [],
+    globalStatsToday: {
+      blockedAttemptsToday: 4,
+      temporaryAllowsToday: 1,
+      temporaryAllowUsedSecondsToday: 120,
+    },
+    currentSiteStatsToday: {
+      site: "news.ycombinator.com",
+      blockedAttemptsToday: 1,
+      temporaryAllowsToday: 0,
+      temporaryAllowUsedSecondsToday: 0,
+      accessPressure: 0,
+      lastTemporaryAccessAt: null,
+    },
+    categorySummaryToday: {
+      "unplanned-leisure": {
+        accessRequestsToday: 1,
+        temporaryAllowsToday: 0,
+        requestDenialsToday: 1,
+        followUpsToday: 0,
+        grantedMinutesToday: 0,
+        requestedMinutesToday: 15,
+        temporaryAllowUsedSecondsToday: 0,
+      },
+    },
+    recentSiteDecisions: [
+      {
+        timestamp: 1770000000000,
+        decision: "request-denied",
+        scope: "none",
+        source: "llm-reviewed",
+        category: "unplanned-leisure",
+      },
+    ],
   },
 });
 
@@ -39,6 +71,16 @@ test("includes shared examples and the live request purpose", () => {
   assert.match(prompt, /Purpose: "Just for fun but I should be working"/);
   assert.match(prompt, /"decision":"FAIL"/);
   assert.match(prompt, /"requestedPurpose": "Just for fun but I should be working"/);
+  assert.match(prompt, /Never reuse names, phrases, or reasons from examples/);
+  assert.doesNotMatch(prompt, /bug in library X/);
+});
+
+test("includes richer local stats context in the prompt", () => {
+  const prompt = buildChromeLocalPrompt(baseContext());
+
+  assert.match(prompt, /"currentSiteStatsToday": \{/);
+  assert.match(prompt, /"categorySummaryToday": \{/);
+  assert.match(prompt, /"category": "unplanned-leisure"/);
 });
 
 let failures = 0;

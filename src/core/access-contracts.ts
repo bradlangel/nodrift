@@ -5,11 +5,42 @@ export type DailyStatsContext = {
   blockedAttemptsToday: number;
   temporaryAllowsToday: number;
   temporaryAllowUsedSecondsToday: number;
+  globalStatsToday?: {
+    blockedAttemptsToday: number;
+    temporaryAllowsToday: number;
+    temporaryAllowUsedSecondsToday: number;
+  };
+  currentSiteStatsToday?: {
+    site: string;
+    blockedAttemptsToday: number;
+    temporaryAllowsToday: number;
+    temporaryAllowUsedSecondsToday: number;
+    accessPressure: number | null;
+    lastTemporaryAccessAt: number | null;
+  } | null;
+  categorySummaryToday?: Record<
+    string,
+    {
+      accessRequestsToday: number;
+      temporaryAllowsToday: number;
+      requestDenialsToday: number;
+      followUpsToday: number;
+      grantedMinutesToday: number;
+      requestedMinutesToday: number;
+      temporaryAllowUsedSecondsToday: number;
+    }
+  >;
   recentSiteDecisions: Array<{
     timestamp: number;
     decision: "blocked" | "temporary-allow" | "request-denied" | "request-follow-up";
     minutes?: number;
+    scope?: AccessDecisionScope;
+    source?: string;
+    category?: string;
+    message?: string;
   }>;
+  lastAccessByCategory?: Record<string, unknown>;
+  lastAccessBySite?: unknown;
 };
 
 export type AccessRequestContext = {

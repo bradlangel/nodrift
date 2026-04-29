@@ -8,8 +8,10 @@ import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-p
 import {
   createEmptyDailyStats,
   DailyBlockerStats,
+  buildAccessGateStatsContext,
   getLocalDayKey,
   normalizeDailyStats,
+  withAccessRequested,
   withBlockedAttempt,
   withRequestGateDecision,
   withTemporaryAllow,
@@ -1260,22 +1262,7 @@ const requestLocalIntentAccess = async (
   const currentUrl = ensureHttpUrl(payload.currentUrl) || fallbackCurrentUrl;
   const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
   const stats = await getDailyStats();
-
-  const siteStats = {
-    blockedAttemptsToday: stats.blockedAttemptsToday,
-    temporaryAllowsToday: stats.temporaryAllowsToday,
-    temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
-    recentSiteDecisions: Array.isArray(stats.recentDecisions)
-      ? stats.recentDecisions
-          .filter((entry) => entry.site === currentSite)
-          .slice(0, 5)
-          .map((entry) => ({
-            timestamp: entry.timestamp,
-            decision: entry.action,
-            minutes: entry.minutes ?? undefined,
-          }))
-      : [],
-  };
+  const siteStats = buildAccessGateStatsContext(stats, currentSite);
 
   const decision = localIntentAccessGate.decide({
     rawUrl: payload.url,
@@ -1366,22 +1353,7 @@ const requestLlmReviewedAccess = async (
 
   const requestedPurpose = typeof payload.purpose === "string" ? payload.purpose : "";
   const followUpCount = Math.max(0, Number(payload.followUpCount) || 0);
-
-  const siteStats = {
-    blockedAttemptsToday: stats.blockedAttemptsToday,
-    temporaryAllowsToday: stats.temporaryAllowsToday,
-    temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
-    recentSiteDecisions: Array.isArray(stats.recentDecisions)
-      ? stats.recentDecisions
-          .filter((entry) => entry.site === currentSite)
-          .slice(0, 5)
-          .map((entry) => ({
-            timestamp: entry.timestamp,
-            decision: entry.action,
-            minutes: entry.minutes ?? undefined,
-          }))
-      : [],
-  };
+  const siteStats = buildAccessGateStatsContext(stats, currentSite);
 
   let modelDecision: unknown;
   try {
@@ -2412,18 +2384,39 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
     message?.type === "request-agentic-access"
   ) {
-    const requestPromise =
+    const requestMessage = message as RequestLocalIntentAccessMessage;
+    const source =
       message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
-        ? requestLlmReviewedAccess(message as RequestLocalIntentAccessMessage, sender)
-        : requestLocalIntentAccess(message as RequestLocalIntentAccessMessage, sender);
+        ? "llm-reviewed"
+        : "local-intent";
+    const requestedSite =
+      sanitizeSite(requestMessage.currentSite) || sanitizeSite(parseSiteFromSender(sender));
+    const requestedUrl = ensureHttpUrl(requestMessage.currentUrl) || ensureHttpUrl(requestMessage.url);
+    const requestPromise = getTempAllowMinutes()
+      .then((defaultMinutes) =>
+        updateDailyStats((stats) =>
+          withAccessRequested(
+            stats,
+            requestedSite,
+            Number(requestMessage.requestedMinutes) || defaultMinutes,
+            Date.now(),
+            {
+              scope: "domain",
+              source,
+              purpose: requestMessage.purpose,
+              url: requestedUrl,
+            }
+          )
+        )
+      )
+      .then(() =>
+        message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
+          ? requestLlmReviewedAccess(requestMessage, sender)
+          : requestLocalIntentAccess(requestMessage, sender)
+      );
 
     requestPromise
       .then(async ({ decision, ...allowResult }) => {
-        const requestMessage = message as RequestLocalIntentAccessMessage;
-        const source =
-          message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
-            ? "llm-reviewed"
-            : "local-intent";
         if (allowResult.ok) {
           await updateDailyStats((stats) =>
             withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
@@ -2434,6 +2427,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
               url: allowResult.url,
               provider: allowResult.provider,
               model: allowResult.model,
+              requestedMinutes: Number(requestMessage.requestedMinutes) || undefined,
             })
           );
         } else if (decision.decision === "FAIL" || decision.decision === "ASK_FOLLOWUP") {

@@ -29,13 +29,22 @@ export const hasOpenAiProviderConfig = (config: {
 
 const ACCESS_REVIEW_MAX_OUTPUT_TOKENS = 300;
 
-const buildStatsSnippet = (stats?: DailyStatsContext) => ({
+export const buildOpenAiStatsSnippet = (stats?: DailyStatsContext) => ({
   blockedAttemptsToday: stats?.blockedAttemptsToday ?? 0,
   temporaryAllowsToday: stats?.temporaryAllowsToday ?? 0,
   temporaryAllowUsedSecondsToday: stats?.temporaryAllowUsedSecondsToday ?? 0,
+  globalStatsToday: stats?.globalStatsToday ?? {
+    blockedAttemptsToday: stats?.blockedAttemptsToday ?? 0,
+    temporaryAllowsToday: stats?.temporaryAllowsToday ?? 0,
+    temporaryAllowUsedSecondsToday: stats?.temporaryAllowUsedSecondsToday ?? 0,
+  },
+  currentSiteStatsToday: stats?.currentSiteStatsToday ?? null,
+  categorySummaryToday: stats?.categorySummaryToday ?? {},
   recentSiteDecisions: Array.isArray(stats?.recentSiteDecisions)
     ? stats?.recentSiteDecisions.slice(0, 5)
     : [],
+  lastAccessByCategory: stats?.lastAccessByCategory ?? {},
+  lastAccessBySite: stats?.lastAccessBySite ?? null,
 });
 
 export const getOpenAiAccessReviewReasoningEffort = (model: string): string | null => {
@@ -139,7 +148,7 @@ export const requestOpenAiAccessReview = async (
                   leisureAllowanceLevel,
                   currentTimeIso: context.currentTimeIso,
                   dayOfWeek: context.dayOfWeek,
-                  stats: buildStatsSnippet(context.stats),
+                  stats: buildOpenAiStatsSnippet(context.stats),
                 },
               }),
             },
