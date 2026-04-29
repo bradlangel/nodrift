@@ -47,7 +47,7 @@ const normalizeAccessGateActionId = (actionId) =>
     : actionId;
 
 const normalizeLlmProvider = (provider) =>
-  provider === "openai" ? "openai" : DEFAULT_LLM_PROVIDER;
+  provider === "openai" || provider === "chrome-local" ? provider : DEFAULT_LLM_PROVIDER;
 
 const normalizeLlmReviewStrictness = (strictness) => {
   if (strictness === "lenient") return "2";
@@ -82,6 +82,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const llmLeisureAllowanceLabel = document.getElementById("llm-leisure-allowance-label");
   const openAiModelInput = document.getElementById("openai-model");
   const openAiApiKeyInput = document.getElementById("openai-api-key");
+  const openAiModelField = document.getElementById("openai-model-field");
+  const openAiApiKeyField = document.getElementById("openai-api-key-field");
   const llmConfigStatus = document.getElementById("llm-config-status");
   const saveStatus = document.getElementById("save-status");
   if (
@@ -110,6 +112,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateLlmConfigStatus = () => {
     if (!llmConfigStatus) return;
+    const provider = normalizeLlmProvider(llmProviderSelect.value);
+    const isChromeLocal = provider === "chrome-local";
+    if (openAiModelField) openAiModelField.hidden = isChromeLocal;
+    if (openAiApiKeyField) openAiApiKeyField.hidden = isChromeLocal;
+
+    if (isChromeLocal) {
+      llmConfigStatus.textContent =
+        "Chrome local LLM uses Gemini Nano on this device when the Prompt API is available.";
+      llmConfigStatus.className = "hint ok";
+      return;
+    }
+
     const hasApiKey = openAiApiKeyInput.value.trim().length > 0;
     const hasModel = openAiModelInput.value.trim().length > 0;
     if (hasApiKey && hasModel) {
@@ -177,6 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   openAiApiKeyInput.addEventListener("input", updateLlmConfigStatus);
   openAiModelInput.addEventListener("input", updateLlmConfigStatus);
+  llmProviderSelect.addEventListener("change", updateLlmConfigStatus);
   llmReviewStrictnessSelect.addEventListener("input", updateReviewRangeLabels);
   llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
 

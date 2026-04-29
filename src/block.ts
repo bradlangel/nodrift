@@ -17,6 +17,10 @@ import {
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
 import {
+  hasChromeLocalProviderConfig,
+  requestChromeLocalAccessReview,
+} from "./integrations/chrome-local-access-review.js";
+import {
   hasOpenAiProviderConfig,
   normalizeReviewLevel,
   requestOpenAiAccessReview,
@@ -796,6 +800,8 @@ const getActiveTemporaryAllowDetails = async (rawUrl?: string | null) => {
     remainingSeconds: Math.max(Math.floor((activeWindow.expiresAt - now) / 1000), 0),
     minutes: decision?.minutes ?? null,
     source: decision?.source ?? null,
+    provider: decision?.provider ?? null,
+    model: decision?.model ?? null,
     purpose: decision?.purpose ?? null,
     reason: decision?.message ?? null,
   };
@@ -1176,6 +1182,8 @@ type TemporaryAllowResult = {
   url: string | null;
   scope: "domain" | "url" | "none";
   minutes: number;
+  provider?: string | null;
+  model?: string | null;
 };
 
 const applyTemporaryAllowDecision = async (
@@ -1331,13 +1339,19 @@ const requestLlmReviewedAccess = async (
     );
   });
 
-  if (!hasOpenAiProviderConfig(provider)) {
+  const modelLabel = hasChromeLocalProviderConfig(provider)
+    ? "Chrome local LLM (Gemini Nano)"
+    : provider.model;
+
+  if (!hasOpenAiProviderConfig(provider) && !hasChromeLocalProviderConfig(provider)) {
     return {
       ok: false,
       host: null,
       url: null,
       scope: "none",
       minutes: defaultMinutes,
+      provider: provider.provider,
+      model: modelLabel,
       decision: {
         decision: "FAIL",
         scope: "none",
@@ -1345,7 +1359,7 @@ const requestLlmReviewedAccess = async (
         host: null,
         url: null,
         ruleIds: [],
-        message: "LLM-reviewed request is selected, but OpenAI model/API key settings are missing.",
+        message: "LLM-reviewed request is selected, but provider settings are incomplete.",
       },
     };
   }
@@ -1371,7 +1385,7 @@ const requestLlmReviewedAccess = async (
 
   let modelDecision: unknown;
   try {
-    modelDecision = await requestOpenAiAccessReview(provider.apiKey, provider.model, {
+    const reviewContext = {
       blockedDomain: currentSite || "unknown",
       requestedUrl: currentUrl,
       requestedPurpose,
@@ -1383,15 +1397,24 @@ const requestLlmReviewedAccess = async (
       currentTimeIso: new Date().toISOString(),
       dayOfWeek: new Date().toLocaleDateString("en-US", { weekday: "long" }),
       stats: siteStats,
-    });
+    };
+    modelDecision = hasChromeLocalProviderConfig(provider)
+      ? await requestChromeLocalAccessReview(reviewContext)
+      : await requestOpenAiAccessReview(provider.apiKey, provider.model, reviewContext);
   } catch (error) {
     console.warn("llm-reviewed-access request failed", error);
+    const message =
+      error instanceof Error && error.message
+        ? `The LLM review could not run: ${error.message}`
+        : "The LLM review is temporarily unavailable. Please try again shortly.";
     return {
       ok: false,
       host: null,
       url: null,
       scope: "none",
       minutes: defaultMinutes,
+      provider: provider.provider,
+      model: modelLabel,
       decision: {
         decision: "FAIL",
         scope: "none",
@@ -1399,7 +1422,7 @@ const requestLlmReviewedAccess = async (
         host: null,
         url: null,
         ruleIds: [],
-        message: "The LLM review is temporarily unavailable. Please try again shortly.",
+        message,
       },
     };
   }
@@ -2409,6 +2432,8 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
               message: decision.message,
               purpose: requestMessage.purpose,
               url: allowResult.url,
+              provider: allowResult.provider,
+              model: allowResult.model,
             })
           );
         } else if (decision.decision === "FAIL" || decision.decision === "ASK_FOLLOWUP") {
@@ -2424,6 +2449,8 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
                 message: decision.message,
                 purpose: requestMessage.purpose,
                 url: decision.url,
+                provider: allowResult.provider,
+                model: allowResult.model,
               },
               Date.now()
             )

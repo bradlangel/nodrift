@@ -81,6 +81,13 @@ const failClosed = (
   message,
 });
 
+const failWithModelReason = (
+  context: LlmDecisionValidationContext,
+  parsed: ModelDecision | null,
+  fallback: string
+): AccessGateDecision =>
+  failClosed(context, sanitizeMessage(parsed?.message, fallback));
+
 export const validateLlmReviewedDecision = (
   rawDecision: unknown,
   context: LlmDecisionValidationContext
@@ -90,7 +97,12 @@ export const validateLlmReviewedDecision = (
   }
 
   const parsed = asObject(rawDecision) as ModelDecision | null;
-  if (!parsed) return failClosed(context);
+  if (!parsed) {
+    return failClosed(
+      context,
+      "The provider did not return readable decision JSON, so access stayed blocked."
+    );
+  }
 
   const decision = typeof parsed.decision === "string" ? parsed.decision : "";
   const requestedBaseMinutes = Number.isFinite(context.requestedMinutes)
@@ -127,7 +139,11 @@ export const validateLlmReviewedDecision = (
   }
 
   if (decision !== "PASS" && decision !== "PASS_WITH_LIMIT") {
-    return failClosed(context);
+    return failWithModelReason(
+      context,
+      parsed,
+      "The provider did not return a valid approve/deny decision, so access stayed blocked."
+    );
   }
 
   const modelScope = parsed.scope === "url" || parsed.scope === "domain" ? parsed.scope : "domain";

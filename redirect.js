@@ -198,11 +198,12 @@ const loadConfiguredActions = (callback) => {
     (data) => {
       chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {
         const llmConfigured =
-          data.llmProvider === "openai" &&
-          typeof data.openAiModel === "string" &&
-          data.openAiModel.trim().length > 0 &&
-          typeof localData.openAiApiKey === "string" &&
-          localData.openAiApiKey.trim().length > 0;
+          data.llmProvider === "chrome-local" ||
+          (data.llmProvider === "openai" &&
+            typeof data.openAiModel === "string" &&
+            data.openAiModel.trim().length > 0 &&
+            typeof localData.openAiApiKey === "string" &&
+            localData.openAiApiKey.trim().length > 0);
 
         const primaryAction = getAccessGateAction(data.accessGateActionId);
         const effectivePrimaryAction =
@@ -211,7 +212,7 @@ const loadConfiguredActions = (callback) => {
                 ...primaryAction,
                 label: "LLM-reviewed request (setup required)",
                 disabledReason:
-                  "LLM-reviewed request is selected, but OpenAI settings are incomplete. Add model and API key in Options.",
+                  "LLM-reviewed request is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
               }
             : primaryAction;
 

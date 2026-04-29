@@ -25,6 +25,8 @@ test("records local request-gate details for temporary allows", () => {
       message: "Approved for a specific page.",
       purpose: "Check one thread for release notes.",
       url: "https://old.reddit.com/r/example/comments/123",
+      provider: "openai",
+      model: "gpt-5-nano",
     }
   );
 
@@ -34,6 +36,8 @@ test("records local request-gate details for temporary allows", () => {
   assert.equal(decision.message, "Approved for a specific page.");
   assert.equal(decision.purpose, "Check one thread for release notes.");
   assert.equal(decision.url, "https://old.reddit.com/r/example/comments/123");
+  assert.equal(decision.provider, "openai");
+  assert.equal(decision.model, "gpt-5-nano");
 });
 
 test("normalizes stored request-gate details", () => {
@@ -53,6 +57,8 @@ test("normalizes stored request-gate details", () => {
         source: "llm-reviewed",
         message: "  Approved   with extra whitespace. ",
         purpose: " just for fun ".repeat(30),
+        provider: "chrome-local",
+        model: "Chrome local LLM (Gemini Nano)",
       },
     ],
   };
@@ -63,6 +69,8 @@ test("normalizes stored request-gate details", () => {
   assert.equal(decision.source, "llm-reviewed");
   assert.equal(decision.message, "Approved with extra whitespace.");
   assert.equal(decision.purpose.length, 220);
+  assert.equal(decision.provider, "chrome-local");
+  assert.equal(decision.model, "Chrome local LLM (Gemini Nano)");
 });
 
 test("records denied request-gate reasons", () => {
@@ -77,6 +85,8 @@ test("records denied request-gate reasons", () => {
       message: "Denied because the purpose was too vague.",
       purpose: "just because",
       url: null,
+      provider: "chrome-local",
+      model: "Chrome local LLM (Gemini Nano)",
     },
     new Date("2026-04-28T12:00:00Z").getTime()
   );
@@ -86,6 +96,7 @@ test("records denied request-gate reasons", () => {
   assert.equal(decision.source, "llm-reviewed");
   assert.equal(decision.message, "Denied because the purpose was too vague.");
   assert.equal(decision.purpose, "just because");
+  assert.equal(decision.model, "Chrome local LLM (Gemini Nano)");
 });
 
 let failures = 0;

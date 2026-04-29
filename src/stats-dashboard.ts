@@ -139,6 +139,7 @@ const renderRecentDecisions = (stats: DailyBlockerStats) => {
       meta.className = "muted";
       meta.textContent = [
         decision.source ? `via ${decision.source}` : null,
+        decision.model ? `model ${decision.model}` : null,
         decision.scope === "url" ? "URL scoped" : null,
       ]
         .filter(Boolean)

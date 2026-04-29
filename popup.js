@@ -59,6 +59,7 @@ const renderActiveGrant = (details) => {
   };
 
   appendRow("Scope", scope);
+  appendRow("Model", details.model);
   appendRow("Elapsed", formatDuration(details.elapsedSeconds));
   appendRow("Remaining", formatDuration(details.remainingSeconds));
   appendRow("Reason", details.reason);

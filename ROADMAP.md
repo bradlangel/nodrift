@@ -19,6 +19,8 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add a fuller local stats dashboard page.
 - [x] Add a local intent-check "request access" flow that can pass, fail, or ask one follow-up.
 - [x] Add an explicitly configured LLM-reviewed request gate (OpenAI first), with fail-closed validation and one follow-up maximum.
+- [ ] Add an LLM router provider so users can configure one router API key and
+      choose among hosted models without changing extension code.
 - [x] Support URL-scoped temporary access internally for future access gates and
       configuration.
 - [x] Refactor toward modular access gates and actions before adding more gate

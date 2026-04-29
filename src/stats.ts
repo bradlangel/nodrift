@@ -17,6 +17,8 @@ export type AccessDecision = {
   message?: string | null;
   purpose?: string | null;
   url?: string | null;
+  provider?: string | null;
+  model?: string | null;
 };
 
 export type DailyBlockerStats = {
@@ -161,6 +163,8 @@ const normalizeRecentDecision = (value: unknown): AccessDecision | null => {
     message: sanitizeDecisionText(maybe.message),
     purpose: sanitizeDecisionText(maybe.purpose),
     url: sanitizeDecisionText(maybe.url, 500),
+    provider: sanitizeDecisionText(maybe.provider, 80),
+    model: sanitizeDecisionText(maybe.model, 120),
   };
 };
 
@@ -243,7 +247,9 @@ export const withTemporaryAllow = (
   site: string | null,
   minutes: number,
   timestamp = Date.now(),
-  details: Partial<Pick<AccessDecision, "scope" | "source" | "message" | "purpose" | "url">> = {}
+  details: Partial<
+    Pick<AccessDecision, "scope" | "source" | "message" | "purpose" | "url" | "provider" | "model">
+  > = {}
 ): DailyBlockerStats => {
   const normalizedMinutes = Math.max(Math.floor(minutes), 0);
   const scope =
@@ -269,6 +275,8 @@ export const withTemporaryAllow = (
       message: sanitizeDecisionText(details.message),
       purpose: sanitizeDecisionText(details.purpose),
       url: sanitizeDecisionText(details.url, 500),
+      provider: sanitizeDecisionText(details.provider, 80),
+      model: sanitizeDecisionText(details.model, 120),
     }
   );
 };
@@ -288,6 +296,8 @@ export const withRequestGateDecision = (
     message: sanitizeDecisionText(decision.message),
     purpose: sanitizeDecisionText(decision.purpose),
     url: sanitizeDecisionText(decision.url, 500),
+    provider: sanitizeDecisionText(decision.provider, 80),
+    model: sanitizeDecisionText(decision.model, 120),
   });
 
 export const withTemporaryAllowUsedSeconds = (

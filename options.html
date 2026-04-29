@@ -183,9 +183,10 @@
         <label for="llm-provider">Provider</label>
         <select id="llm-provider">
           <option value="openai">OpenAI</option>
+          <option value="chrome-local">Chrome local LLM</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" id="openai-model-field">
         <label for="openai-model">OpenAI model</label>
         <input type="text" id="openai-model" placeholder="gpt-5-nano" />
       </div>
@@ -205,7 +206,7 @@
         </div>
         <p class="hint">Higher levels allow intentional downtime more readily, but the prompt still asks for concrete, time-boxed access.</p>
       </div>
-      <div class="field">
+      <div class="field" id="openai-api-key-field">
         <label for="openai-api-key">OpenAI API key (stored locally on this browser)</label>
         <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
       </div>

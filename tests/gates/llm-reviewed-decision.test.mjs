@@ -112,6 +112,25 @@ test("invalid model output fails closed", () => {
 
   assert.equal(decision.decision, "FAIL");
   assert.equal(decision.scope, "none");
+  assert.equal(
+    decision.message,
+    "The provider did not return readable decision JSON, so access stayed blocked."
+  );
+});
+
+test("invalid decision preserves model reason when present", () => {
+  const decision = validateLlmReviewedDecision(
+    {
+      decision: "MAYBE",
+      scope: "none",
+      minutes: 10,
+      message: "I could not decide because the request was ambiguous.",
+    },
+    baseContext()
+  );
+
+  assert.equal(decision.decision, "FAIL");
+  assert.equal(decision.message, "I could not decide because the request was ambiguous.");
 });
 
 let failures = 0;
