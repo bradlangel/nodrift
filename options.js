@@ -17,9 +17,24 @@ const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const DEFAULT_LLM_PROVIDER = "openai";
-const DEFAULT_LLM_REVIEW_STRICTNESS = "balanced";
+const DEFAULT_LLM_REVIEW_STRICTNESS = "3";
+const DEFAULT_LLM_LEISURE_ALLOWANCE = "3";
 const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
-const LLM_REVIEW_STRICTNESS_VALUES = new Set(["lenient", "balanced", "strict"]);
+const LLM_REVIEW_STRICTNESS_VALUES = new Set(["1", "2", "3", "4", "5"]);
+const PURPOSE_SCRUTINY_LABELS = {
+  1: "Relaxed",
+  2: "Easy",
+  3: "Balanced",
+  4: "Strict",
+  5: "Focus lock",
+};
+const LEISURE_ALLOWANCE_LABELS = {
+  1: "Rare",
+  2: "Limited",
+  3: "Planned",
+  4: "Flexible",
+  5: "Open",
+};
 const ACCESS_GATE_ACTION_IDS = new Set([
   "temporary-allow-domain",
   LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
@@ -34,8 +49,16 @@ const normalizeAccessGateActionId = (actionId) =>
 const normalizeLlmProvider = (provider) =>
   provider === "openai" ? "openai" : DEFAULT_LLM_PROVIDER;
 
-const normalizeLlmReviewStrictness = (strictness) =>
-  LLM_REVIEW_STRICTNESS_VALUES.has(strictness) ? strictness : DEFAULT_LLM_REVIEW_STRICTNESS;
+const normalizeLlmReviewStrictness = (strictness) => {
+  if (strictness === "lenient") return "2";
+  if (strictness === "balanced") return "3";
+  if (strictness === "strict") return "4";
+  return LLM_REVIEW_STRICTNESS_VALUES.has(String(strictness))
+    ? String(strictness)
+    : DEFAULT_LLM_REVIEW_STRICTNESS;
+};
+
+const formatRangeLabel = (value, labels) => `${value} - ${labels[value] || labels[3]}`;
 
 const normalizeOpenAiModel = (model) => {
   const trimmed = typeof model === "string" ? model.trim() : "";
@@ -54,6 +77,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
   const llmProviderSelect = document.getElementById("llm-provider");
   const llmReviewStrictnessSelect = document.getElementById("llm-review-strictness");
+  const llmLeisureAllowanceInput = document.getElementById("llm-leisure-allowance");
+  const llmReviewStrictnessLabel = document.getElementById("llm-review-strictness-label");
+  const llmLeisureAllowanceLabel = document.getElementById("llm-leisure-allowance-label");
   const openAiModelInput = document.getElementById("openai-model");
   const openAiApiKeyInput = document.getElementById("openai-api-key");
   const llmConfigStatus = document.getElementById("llm-config-status");
@@ -69,7 +95,8 @@ document.addEventListener("DOMContentLoaded", () => {
     !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
     !(llmProviderSelect instanceof HTMLSelectElement) ||
-    !(llmReviewStrictnessSelect instanceof HTMLSelectElement) ||
+    !(llmReviewStrictnessSelect instanceof HTMLInputElement) ||
+    !(llmLeisureAllowanceInput instanceof HTMLInputElement) ||
     !(openAiModelInput instanceof HTMLInputElement) ||
     !(openAiApiKeyInput instanceof HTMLInputElement)
   ) {
@@ -97,6 +124,17 @@ document.addEventListener("DOMContentLoaded", () => {
     llmConfigStatus.className = "hint warning";
   };
 
+  const updateReviewRangeLabels = () => {
+    const strictness = normalizeLlmReviewStrictness(llmReviewStrictnessSelect.value);
+    const leisure = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
+    if (llmReviewStrictnessLabel) {
+      llmReviewStrictnessLabel.textContent = formatRangeLabel(strictness, PURPOSE_SCRUTINY_LABELS);
+    }
+    if (llmLeisureAllowanceLabel) {
+      llmLeisureAllowanceLabel.textContent = formatRangeLabel(leisure, LEISURE_ALLOWANCE_LABELS);
+    }
+  };
+
   chrome.storage.sync.get(
     {
       blockedSites: DEFAULT_BLOCKED_SITES,
@@ -109,6 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
       grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
       llmProvider: DEFAULT_LLM_PROVIDER,
       llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
+      llmLeisureAllowance: DEFAULT_LLM_LEISURE_ALLOWANCE,
       openAiModel: DEFAULT_OPENAI_MODEL,
     },
     (syncData) => {
@@ -127,8 +166,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         llmProviderSelect.value = normalizeLlmProvider(syncData.llmProvider);
         llmReviewStrictnessSelect.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
+        llmLeisureAllowanceInput.value = normalizeLlmReviewStrictness(syncData.llmLeisureAllowance);
         openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
         openAiApiKeyInput.value = typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
+        updateReviewRangeLabels();
         updateLlmConfigStatus();
       });
     }
@@ -136,6 +177,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   openAiApiKeyInput.addEventListener("input", updateLlmConfigStatus);
   openAiModelInput.addEventListener("input", updateLlmConfigStatus);
+  llmReviewStrictnessSelect.addEventListener("input", updateReviewRangeLabels);
+  llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
 
   saveBtn.addEventListener("click", () => {
     const sites = textarea.value
@@ -154,6 +197,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
     const llmProvider = normalizeLlmProvider(llmProviderSelect.value);
     const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessSelect.value);
+    const llmLeisureAllowance = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
     const openAiModel = normalizeOpenAiModel(openAiModelInput.value);
     const openAiApiKey = openAiApiKeyInput.value.trim();
 
@@ -169,6 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
         grayscaleOnTemporaryAllow,
         llmProvider,
         llmReviewStrictness,
+        llmLeisureAllowance,
         openAiModel,
       },
       () => {

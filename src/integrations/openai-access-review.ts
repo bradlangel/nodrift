@@ -5,7 +5,8 @@ export type OpenAiAccessReviewContext = {
   requestedUrl: string | null;
   requestedPurpose: string;
   requestedMinutes: number;
-  reviewStrictness?: LlmReviewStrictness;
+  reviewStrictnessLevel?: LlmReviewLevel;
+  leisureAllowanceLevel?: LlmReviewLevel;
   followUpAnswer?: string | null;
   followUpCount: number;
   currentTimeIso: string;
@@ -13,7 +14,7 @@ export type OpenAiAccessReviewContext = {
   stats?: DailyStatsContext;
 };
 
-export type LlmReviewStrictness = "lenient" | "balanced" | "strict";
+export type LlmReviewLevel = 1 | 2 | 3 | 4 | 5;
 
 export const hasOpenAiProviderConfig = (config: {
   provider: string;
@@ -32,38 +33,78 @@ const buildStatsSnippet = (stats?: DailyStatsContext) => ({
     : [],
 });
 
-const normalizeReviewStrictness = (strictness: unknown): LlmReviewStrictness =>
-  strictness === "lenient" || strictness === "strict" ? strictness : "balanced";
+export const normalizeReviewLevel = (value: unknown): LlmReviewLevel => {
+  if (value === "lenient") return 2;
+  if (value === "strict") return 4;
+  if (value === "balanced") return 3;
 
-const buildReviewStrictnessInstructions = (strictness: LlmReviewStrictness): string[] => {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (numericValue === 1 || numericValue === 2 || numericValue === 3 || numericValue === 4 || numericValue === 5) {
+    return numericValue;
+  }
+
+  return 3;
+};
+
+const buildReviewLevelInstructions = (
+  strictnessLevel: LlmReviewLevel,
+  leisureAllowanceLevel: LlmReviewLevel
+): string[] => {
   const shared = [
     "Treat vague purposes such as just for fun, bored, scroll, browse, check stuff, or kill time as insufficient.",
-    "Legitimate downtime can be approved only when the user gives a concrete activity and time box.",
-    "When the purpose is vague and followUpCount is 0, prefer ASK_FOLLOWUP unless strictness says to fail immediately.",
+    "A request should explain what the user will do, why they need this blocked site, and what will count as done.",
+    "The message field must explain the concrete reason for your decision in one short sentence.",
+    "If you approve, the message must say why the request was specific enough.",
+    "If you deny or ask a follow-up, the message must say what detail is missing or what boundary was crossed.",
+    `Purpose scrutiny level is ${strictnessLevel} of 5.`,
+    `Leisure allowance level is ${leisureAllowanceLevel} of 5.`,
+    "Purpose scrutiny 1 means light review; 3 means balanced review; 5 means require a clear, necessary, well-bounded purpose.",
+    "Leisure allowance 1 means leisure is rarely approved; 3 means planned leisure can pass when specific and time-boxed; 5 means leisure can pass easily if still concrete and bounded.",
+    "When the purpose is vague and followUpCount is 0, prefer ASK_FOLLOWUP unless purpose scrutiny is 4 or 5.",
     "When the purpose remains vague after one follow-up, return FAIL.",
   ];
 
-  if (strictness === "strict") {
-    return [
-      ...shared,
-      "Strict mode: approve only clearly necessary work, errands, maintenance, learning, debugging, or explicitly planned leisure.",
-      "Strict mode: return FAIL for casual, vague, novelty, or open-ended entertainment requests instead of asking a follow-up.",
-    ];
+  const instructions = [...shared];
+
+  if (strictnessLevel >= 5) {
+    instructions.push(
+      "At purpose scrutiny 5, approve only urgent or necessary work, errands, maintenance, research, learning, or debugging."
+    );
+  } else if (strictnessLevel >= 4) {
+    instructions.push(
+      "At purpose scrutiny 4, return FAIL for casual, vague, novelty, or open-ended requests instead of asking a follow-up."
+    );
+  } else if (strictnessLevel <= 2) {
+    instructions.push(
+      "At purpose scrutiny 1-2, approve plausible concrete requests more readily, but never approve vague or open-ended access."
+    );
   }
 
-  if (strictness === "lenient") {
-    return [
-      ...shared,
-      "Lenient mode: approve plausible deliberate work, errands, learning, maintenance, or specific planned downtime.",
-      "Lenient mode: if a leisure request is concrete and time-boxed, it may pass even when it is not productive.",
-    ];
+  if (leisureAllowanceLevel <= 1) {
+    instructions.push(
+      "At leisure allowance 1, return FAIL for entertainment, casual browsing, novelty, and open-ended downtime."
+    );
+  } else if (leisureAllowanceLevel === 2) {
+    instructions.push(
+      "At leisure allowance 2, approve leisure only when it is planned, specific, short, and has a clear stopping point."
+    );
+  } else if (leisureAllowanceLevel === 3) {
+    instructions.push(
+      "At leisure allowance 3, planned downtime may pass when it is specific, time-boxed, and not feed-seeking."
+    );
+  } else {
+    instructions.push(
+      "At leisure allowance 4-5, leisure does not need to be productive, but it still must be concrete and time-boxed."
+    );
   }
 
-  return [
-    ...shared,
-    "Balanced mode: approve deliberate work, errands, learning, maintenance, debugging, or specific planned downtime.",
-    "Balanced mode: ask one follow-up for vague leisure or ambiguous requests instead of approving immediately.",
-  ];
+  if (strictnessLevel >= 4 && leisureAllowanceLevel <= 2) {
+    instructions.push(
+      "When both purpose scrutiny is high and leisure allowance is low, deny casual requests rather than asking for more detail."
+    );
+  }
+
+  return instructions;
 };
 
 export const getOpenAiAccessReviewReasoningEffort = (model: string): string | null => {
@@ -102,7 +143,8 @@ export const requestOpenAiAccessReview = async (
   context: OpenAiAccessReviewContext
 ): Promise<unknown> => {
   const reasoningEffort = getOpenAiAccessReviewReasoningEffort(model);
-  const reviewStrictness = normalizeReviewStrictness(context.reviewStrictness);
+  const reviewStrictnessLevel = normalizeReviewLevel(context.reviewStrictnessLevel);
+  const leisureAllowanceLevel = normalizeReviewLevel(context.leisureAllowanceLevel);
   const textConfig = {
     ...(supportsOpenAiTextVerbosity(model) ? { verbosity: "low" } : {}),
     format: {
@@ -164,14 +206,15 @@ export const requestOpenAiAccessReview = async (
                   "Ask at most one follow-up in total; if followUpCount is 1, return a terminal decision.",
                   "Do not exceed the requested minutes unless reducing it.",
                   "Prefer URL scope when purpose asks for one specific page and requestedUrl matches blocked domain.",
-                  ...buildReviewStrictnessInstructions(reviewStrictness),
+                  ...buildReviewLevelInstructions(reviewStrictnessLevel, leisureAllowanceLevel),
                 ],
                 request: {
                   blockedDomain: context.blockedDomain,
                   requestedUrl: context.requestedUrl,
                   requestedPurpose: context.requestedPurpose,
                   requestedMinutes: context.requestedMinutes,
-                  reviewStrictness,
+                  reviewStrictnessLevel,
+                  leisureAllowanceLevel,
                   followUpAnswer: context.followUpAnswer ?? null,
                   followUpCount: context.followUpCount,
                   currentTimeIso: context.currentTimeIso,

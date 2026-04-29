@@ -7,7 +7,7 @@ export type DailyStatsContext = {
   temporaryAllowUsedSecondsToday: number;
   recentSiteDecisions: Array<{
     timestamp: number;
-    decision: "blocked" | "temporary-allow";
+    decision: "blocked" | "temporary-allow" | "request-denied" | "request-follow-up";
     minutes?: number;
   }>;
 };

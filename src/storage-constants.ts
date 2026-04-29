@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   showChatGptPeek: "showChatGptPeek",
   llmProvider: "llmProvider",
   llmReviewStrictness: "llmReviewStrictness",
+  llmLeisureAllowance: "llmLeisureAllowance",
   openAiModel: "openAiModel",
   openAiApiKey: "openAiApiKey",
   grayscaleOnTemporaryAllow: "grayscaleOnTemporaryAllow",

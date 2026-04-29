@@ -11,11 +11,16 @@ import {
   getLocalDayKey,
   normalizeDailyStats,
   withBlockedAttempt,
+  withRequestGateDecision,
   withTemporaryAllow,
   withTemporaryAllowUsedSeconds,
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
-import { hasOpenAiProviderConfig, requestOpenAiAccessReview } from "./integrations/openai-access-review.js";
+import {
+  hasOpenAiProviderConfig,
+  normalizeReviewLevel,
+  requestOpenAiAccessReview,
+} from "./integrations/openai-access-review.js";
 import {
   buildExactUrlRegexFilter,
   buildParentDomainUrlFilter,
@@ -1222,24 +1227,24 @@ const requestLlmReviewedAccess = async (
     provider: string;
     model: string;
     apiKey: string;
-    reviewStrictness: "lenient" | "balanced" | "strict";
+    reviewStrictnessLevel: 1 | 2 | 3 | 4 | 5;
+    leisureAllowanceLevel: 1 | 2 | 3 | 4 | 5;
   }>((resolve) => {
     chrome.storage.sync.get(
       {
         [STORAGE_KEYS.llmProvider]: "openai",
-        [STORAGE_KEYS.llmReviewStrictness]: "balanced",
+        [STORAGE_KEYS.llmReviewStrictness]: "3",
+        [STORAGE_KEYS.llmLeisureAllowance]: "3",
         [STORAGE_KEYS.openAiModel]: "gpt-5-nano",
       },
       (syncData: StorageItems) => {
         chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
-          const rawStrictness = syncData[STORAGE_KEYS.llmReviewStrictness];
-          const reviewStrictness =
-            rawStrictness === "lenient" || rawStrictness === "strict" ? rawStrictness : "balanced";
           resolve({
             provider: String(syncData[STORAGE_KEYS.llmProvider] || "openai"),
             model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-5-nano"),
             apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
-            reviewStrictness,
+            reviewStrictnessLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmReviewStrictness]),
+            leisureAllowanceLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmLeisureAllowance]),
           });
         });
       }
@@ -1265,6 +1270,9 @@ const requestLlmReviewedAccess = async (
     };
   }
 
+  const requestedPurpose = typeof payload.purpose === "string" ? payload.purpose : "";
+  const followUpCount = Math.max(0, Number(payload.followUpCount) || 0);
+
   const siteStats = {
     blockedAttemptsToday: stats.blockedAttemptsToday,
     temporaryAllowsToday: stats.temporaryAllowsToday,
@@ -1286,11 +1294,12 @@ const requestLlmReviewedAccess = async (
     modelDecision = await requestOpenAiAccessReview(provider.apiKey, provider.model, {
       blockedDomain: currentSite || "unknown",
       requestedUrl: currentUrl,
-      requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
+      requestedPurpose,
       requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
-      reviewStrictness: provider.reviewStrictness,
+      reviewStrictnessLevel: provider.reviewStrictnessLevel,
+      leisureAllowanceLevel: provider.leisureAllowanceLevel,
       followUpAnswer: payload.followUpAnswer,
-      followUpCount: Math.max(0, Number(payload.followUpCount) || 0),
+      followUpCount,
       currentTimeIso: new Date().toISOString(),
       dayOfWeek: new Date().toLocaleDateString("en-US", { weekday: "long" }),
       stats: siteStats,
@@ -1321,12 +1330,12 @@ const requestLlmReviewedAccess = async (
     requestedUrl: currentUrl,
     blockedSites,
     defaultMinutes,
-    requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
+    requestedPurpose,
     requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
     currentUrl,
     currentSite,
     followUpAnswer: payload.followUpAnswer,
-    followUpCount: Math.max(0, Number(payload.followUpCount) || 0),
+    followUpCount,
     maxMinutes,
     modelDecision,
     stats: siteStats,
@@ -2291,12 +2300,12 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
 
     requestPromise
       .then(async ({ decision, ...allowResult }) => {
+        const requestMessage = message as RequestLocalIntentAccessMessage;
+        const source =
+          message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
+            ? "llm-reviewed"
+            : "local-intent";
         if (allowResult.ok) {
-          const requestMessage = message as RequestLocalIntentAccessMessage;
-          const source =
-            message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
-              ? "llm-reviewed"
-              : "local-intent";
           await updateDailyStats((stats) =>
             withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
               scope: allowResult.scope,
@@ -2305,6 +2314,23 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
               purpose: requestMessage.purpose,
               url: allowResult.url,
             })
+          );
+        } else if (decision.decision === "FAIL" || decision.decision === "ASK_FOLLOWUP") {
+          await updateDailyStats((stats) =>
+            withRequestGateDecision(
+              stats,
+              {
+                site: decision.host || requestMessage.currentSite || null,
+                action: decision.decision === "ASK_FOLLOWUP" ? "request-follow-up" : "request-denied",
+                scope: decision.scope,
+                minutes: null,
+                source,
+                message: decision.message,
+                purpose: requestMessage.purpose,
+                url: decision.url,
+              },
+              Date.now()
+            )
           );
         }
 

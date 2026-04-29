@@ -27,6 +27,12 @@ const formatDecisionLabel = (decision: DailyBlockerStats["recentDecisions"][numb
     const mins = Number.isFinite(decision.minutes) ? Math.max(decision.minutes ?? 0, 0) : 0;
     return mins > 0 ? `Temporarily allowed (${mins}m)` : "Temporarily allowed";
   }
+  if (decision.action === "request-denied") {
+    return "Request denied";
+  }
+  if (decision.action === "request-follow-up") {
+    return "Follow-up requested";
+  }
   return "Blocked";
 };
 

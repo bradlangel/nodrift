@@ -74,6 +74,21 @@
     .hint.ok {
       color: #065f46;
     }
+    input[type="range"] {
+      width: 100%;
+    }
+    .range-row {
+      align-items: center;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr auto;
+    }
+    .range-value {
+      color: #111827;
+      font-weight: 700;
+      min-width: 92px;
+      text-align: right;
+    }
     button {
       min-height: 44px;
       border: 0;
@@ -175,13 +190,20 @@
         <input type="text" id="openai-model" placeholder="gpt-5-nano" />
       </div>
       <div class="field">
-        <label for="llm-review-strictness">Review strictness</label>
-        <select id="llm-review-strictness">
-          <option value="balanced">Balanced</option>
-          <option value="strict">Strict</option>
-          <option value="lenient">Lenient</option>
-        </select>
-        <p class="hint">Balanced asks one follow-up for vague requests. Strict rejects vague or casual access. Lenient still requires a concrete plan.</p>
+        <label for="llm-review-strictness">Purpose scrutiny</label>
+        <div class="range-row">
+          <input type="range" id="llm-review-strictness" min="1" max="5" step="1" value="3" />
+          <span id="llm-review-strictness-label" class="range-value">Balanced</span>
+        </div>
+        <p class="hint">Higher levels require a clearer purpose and are less likely to ask follow-ups for vague requests.</p>
+      </div>
+      <div class="field">
+        <label for="llm-leisure-allowance">Leisure allowance</label>
+        <div class="range-row">
+          <input type="range" id="llm-leisure-allowance" min="1" max="5" step="1" value="3" />
+          <span id="llm-leisure-allowance-label" class="range-value">Planned</span>
+        </div>
+        <p class="hint">Higher levels allow intentional downtime more readily, but the prompt still asks for concrete, time-boxed access.</p>
       </div>
       <div class="field">
         <label for="openai-api-key">OpenAI API key (stored locally on this browser)</label>

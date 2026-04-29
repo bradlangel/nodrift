@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createEmptyDailyStats,
   normalizeDailyStats,
+  withRequestGateDecision,
   withTemporaryAllow,
 } from "../dist/stats.js";
 
@@ -62,6 +63,29 @@ test("normalizes stored request-gate details", () => {
   assert.equal(decision.source, "llm-reviewed");
   assert.equal(decision.message, "Approved with extra whitespace.");
   assert.equal(decision.purpose.length, 220);
+});
+
+test("records denied request-gate reasons", () => {
+  const stats = withRequestGateDecision(
+    createEmptyDailyStats("2026-04-28"),
+    {
+      site: "old.reddit.com",
+      action: "request-denied",
+      scope: "none",
+      minutes: null,
+      source: "llm-reviewed",
+      message: "Denied because the purpose was too vague.",
+      purpose: "just because",
+      url: null,
+    },
+    new Date("2026-04-28T12:00:00Z").getTime()
+  );
+
+  const [decision] = stats.recentDecisions;
+  assert.equal(decision.action, "request-denied");
+  assert.equal(decision.source, "llm-reviewed");
+  assert.equal(decision.message, "Denied because the purpose was too vague.");
+  assert.equal(decision.purpose, "just because");
 });
 
 let failures = 0;

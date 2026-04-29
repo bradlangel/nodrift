@@ -1,6 +1,10 @@
 export const MAX_RECENT_DECISIONS = 30;
 
-export type AccessDecisionAction = "blocked" | "temporary-allow";
+export type AccessDecisionAction =
+  | "blocked"
+  | "temporary-allow"
+  | "request-denied"
+  | "request-follow-up";
 export type AccessDecisionSource = "one-click" | "local-intent" | "llm-reviewed";
 
 export type AccessDecision = {
@@ -124,7 +128,10 @@ const normalizeRecentDecision = (value: unknown): AccessDecision | null => {
     return null;
   }
   const action =
-    maybe.action === "blocked" || maybe.action === "temporary-allow"
+    maybe.action === "blocked" ||
+    maybe.action === "temporary-allow" ||
+    maybe.action === "request-denied" ||
+    maybe.action === "request-follow-up"
       ? maybe.action
       : null;
   const scope =
@@ -265,6 +272,23 @@ export const withTemporaryAllow = (
     }
   );
 };
+
+export const withRequestGateDecision = (
+  stats: DailyBlockerStats,
+  decision: Omit<AccessDecision, "timestamp">,
+  timestamp = Date.now()
+): DailyBlockerStats =>
+  withRecentDecision(stats, {
+    timestamp,
+    site: decision.site,
+    action: decision.action,
+    scope: decision.scope,
+    minutes: decision.minutes,
+    ...(decision.source ? { source: decision.source } : {}),
+    message: sanitizeDecisionText(decision.message),
+    purpose: sanitizeDecisionText(decision.purpose),
+    url: sanitizeDecisionText(decision.url, 500),
+  });
 
 export const withTemporaryAllowUsedSeconds = (
   stats: DailyBlockerStats,
