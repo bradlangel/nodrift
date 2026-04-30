@@ -2,9 +2,9 @@ import {
   AccessGate,
   AccessGateDecision,
   LocalIntentAccessRequestContext,
-} from "../core/access-contracts.js";
-import { getRelatedRuleIdsForHost, hostMatchesSite } from "../site-matching.js";
-import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "../url-domain.js";
+} from "../../core/access-contracts.js";
+import { getRelatedRuleIdsForHost, hostMatchesSite } from "../../site-matching.js";
+import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "../../url-domain.js";
 
 const MINUTES_FLOOR = 5;
 const MINUTES_CEILING = 45;

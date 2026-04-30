@@ -2,10 +2,12 @@ import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import {
   AccessGateDecision,
   AccessReviewProgressStage,
+  BlockPageActionCapability,
 } from "./core/access-contracts.js";
-import { temporaryAllowGate } from "./gates/temporary-allow-gate.js";
-import { localIntentAccessGate } from "./gates/local-intent-access-gate.js";
-import { llmReviewedAccessGate } from "./gates/llm-reviewed-access-gate.js";
+import { temporaryAllowGate } from "./gates/temporary-allow/index.js";
+import { localIntentAccessGate } from "./gates/local-intent/index.js";
+import { llmReviewedAccessGate } from "./gates/llm-reviewed/index.js";
+import { GATE_BLOCK_PAGE_ACTION_CAPABILITIES } from "./gates/registry.js";
 import { buildDecisionApplication } from "./core/decision-application.js";
 import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page/block-page-capabilities.js";
 import {
@@ -24,12 +26,12 @@ import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
 import {
   hasChromeLocalProviderConfig,
   requestChromeLocalAccessReview,
-} from "./integrations/chrome-local-access-review.js";
+} from "./gates/llm-reviewed/providers/chrome-local.js";
 import {
   hasOpenAiProviderConfig,
-  normalizeReviewLevel,
   requestOpenAiAccessReview,
-} from "./integrations/openai-access-review.js";
+} from "./gates/llm-reviewed/providers/openai.js";
+import { normalizeReviewLevel } from "./gates/llm-reviewed/policy.js";
 import {
   buildExactUrlRegexFilter,
   buildParentDomainUrlFilter,
@@ -50,6 +52,19 @@ const DEFAULT_BLOCKED_SITES = [
   "www.yahoo.com",
   "news.ycombinator.com",
 ];
+
+const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
+const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
+const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
+const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
+const DEFAULT_SHOW_CHATGPT_PEEK = true;
+const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
+const DEFAULT_LLM_PROVIDER = "openai";
+const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
+
+const ACCESS_GATE_ACTION_IDS = new Set(
+  GATE_BLOCK_PAGE_ACTION_CAPABILITIES.map((action) => action.id)
+);
 
 type ChromeTab = {
   id?: number;
@@ -287,6 +302,125 @@ const updateDailyStats = async (
   );
   dailyStatsUpdateQueue = queued.catch(() => undefined);
   return queued;
+};
+
+type BlockPageActionView = BlockPageActionCapability & {
+  disabledReason?: string;
+  reviewerLabel?: string | null;
+};
+
+const normalizeAccessGateActionId = (actionId: unknown): string => {
+  if (actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID) {
+    return "local-intent-request-access";
+  }
+  return typeof actionId === "string" ? actionId : DEFAULT_ACCESS_GATE_ACTION_ID;
+};
+
+const getBlockPageActionCapability = (
+  actionId: string
+): BlockPageActionCapability | null =>
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((action) => action.id === actionId) ?? null;
+
+const getAccessGateActionCapability = (
+  actionId: string
+): BlockPageActionCapability | null =>
+  GATE_BLOCK_PAGE_ACTION_CAPABILITIES.find((action) => action.id === actionId) ?? null;
+
+const getSyncStorageItems = (
+  defaults: Record<string, unknown>
+): Promise<StorageItems> =>
+  new Promise((resolve) => {
+    chrome.storage.sync.get(defaults, (items: StorageItems) => resolve(items));
+  });
+
+const getLocalStorageItems = (
+  defaults: Record<string, unknown>
+): Promise<StorageItems> =>
+  new Promise((resolve) => {
+    chrome.storage.local.get(defaults, (items: StorageItems) => resolve(items));
+  });
+
+const formatLlmReviewerLabel = (provider: string, model: string): string => {
+  if (provider === "chrome-local") {
+    return "Using Chrome local LLM · Gemini Nano";
+  }
+  const modelLabel =
+    typeof model === "string" && model.trim().length > 0 ? model.trim() : DEFAULT_OPENAI_MODEL;
+  return `Using OpenAI · ${modelLabel}`;
+};
+
+const getBlockPageActions = async (): Promise<{
+  ok: true;
+  primaryActions: BlockPageActionView[];
+  secondaryActions: BlockPageActionView[];
+  accessGateActions: BlockPageActionCapability[];
+}> => {
+  const syncData = await getSyncStorageItems({
+    [STORAGE_KEYS.accessGateActionId]: DEFAULT_ACCESS_GATE_ACTION_ID,
+    [STORAGE_KEYS.showCareerTrackerRedirect]: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
+    [STORAGE_KEYS.showChatGptPeek]: DEFAULT_SHOW_CHATGPT_PEEK,
+    [STORAGE_KEYS.redirectBtnText]: DEFAULT_REDIRECT_BTN_TEXT,
+    [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
+    [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
+  });
+  const localData = await getLocalStorageItems({ [STORAGE_KEYS.openAiApiKey]: "" });
+
+  const provider = String(syncData[STORAGE_KEYS.llmProvider] || DEFAULT_LLM_PROVIDER);
+  const model = String(syncData[STORAGE_KEYS.openAiModel] || DEFAULT_OPENAI_MODEL);
+  const apiKey = String(localData[STORAGE_KEYS.openAiApiKey] || "");
+  const llmConfigured =
+    provider === "chrome-local" ||
+    (provider === "openai" && model.trim().length > 0 && apiKey.trim().length > 0);
+
+  const normalizedActionId = normalizeAccessGateActionId(
+    syncData[STORAGE_KEYS.accessGateActionId]
+  );
+  const configuredActionId = ACCESS_GATE_ACTION_IDS.has(normalizedActionId)
+    ? normalizedActionId
+    : DEFAULT_ACCESS_GATE_ACTION_ID;
+  const primaryAction = getAccessGateActionCapability(configuredActionId);
+  const reviewerLabel =
+    primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID
+      ? formatLlmReviewerLabel(provider, model)
+      : null;
+  const effectivePrimaryAction: BlockPageActionView | null =
+    primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID && !llmConfigured
+      ? {
+          ...primaryAction,
+          reviewerLabel,
+          label: "LLM-reviewed request (setup required)",
+          disabledReason:
+            "LLM-reviewed request is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
+        }
+      : primaryAction
+      ? { ...primaryAction, reviewerLabel }
+      : null;
+
+  const secondaryActionIds = [
+    syncData[STORAGE_KEYS.showCareerTrackerRedirect] !== false ? "redirect" : null,
+    syncData[STORAGE_KEYS.showChatGptPeek] !== false ? "peek-chatgpt" : null,
+  ];
+  const secondaryActions = secondaryActionIds
+    .map((actionId): BlockPageActionView | null => {
+      if (!actionId) return null;
+      const action = getBlockPageActionCapability(actionId);
+      if (!action) return null;
+      if (action.id === "redirect") {
+        return {
+          ...action,
+          label: String(syncData[STORAGE_KEYS.redirectBtnText] || DEFAULT_REDIRECT_BTN_TEXT),
+        };
+      }
+      return { ...action };
+    })
+    .filter((action): action is BlockPageActionView => !!action);
+
+  return {
+    ok: true,
+    primaryActions: effectivePrimaryAction ? [effectivePrimaryAction] : [],
+    secondaryActions,
+    accessGateActions: GATE_BLOCK_PAGE_ACTION_CAPABILITIES,
+  };
 };
 
 // ---------- Rule builder ----------
@@ -2380,6 +2514,19 @@ const handleRequestAccessMessage = async (
 };
 
 chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: SendResponse) => {
+  if (message?.type === "get-block-page-actions") {
+    getBlockPageActions()
+      .then((response) => sendResponse(response))
+      .catch((error) => {
+        console.warn("get-block-page-actions request failed", error);
+        sendResponse({ ok: false, error: error?.message ?? String(error) });
+      });
+    return true;
+  }
+  if (message?.type === "get-access-gate-actions") {
+    sendResponse({ ok: true, actions: GATE_BLOCK_PAGE_ACTION_CAPABILITIES });
+    return undefined;
+  }
   if (message?.type === "get-active-temporary-allow") {
     const rawUrl =
       typeof message?.url === "string"

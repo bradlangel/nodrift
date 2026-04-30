@@ -128,9 +128,16 @@ export type BlockPageActionType =
 export type BlockPageActionCapability = {
   id: string;
   type: BlockPageActionType;
-  messageType: string;
+  messageType?: string;
   visibleByDefault: boolean;
   description: string;
+  label: string;
+  settingsLabel?: string;
+  buttonId?: string;
+  pendingLabel?: string;
+  scope?: AccessDecisionScope;
+  className?: string;
+  title?: string;
 };
 
 export type OptionalIntegration = {
@@ -138,4 +145,12 @@ export type OptionalIntegration = {
   actionId: string;
   messageType: string;
   enabledByDefault: boolean;
+};
+
+export type GateModule<TContext = any> = {
+  id: string;
+  gate: AccessGate<TContext>;
+  action: BlockPageActionCapability;
+  integrations?: OptionalIntegration[];
+  isConfigured?: (settings: unknown) => boolean;
 };

@@ -1,42 +1,72 @@
 # No Distractions Extension Architecture Notes
 
-This extension keeps a **compiled-in internal module system**. New gates and
-integrations are added as TypeScript modules in `src/` and compiled into the
-service worker bundle. There is no runtime plugin marketplace.
+This extension keeps a **compiled-in internal module system**. New gates are
+added as TypeScript modules under `src/gates/` and compiled into the service
+worker bundle. There is no runtime plugin marketplace.
 
 ## Core boundaries
 
 - `src/block.ts` remains the service-worker orchestrator for Chrome APIs.
 - Shared access contracts live in `src/core/access-contracts.ts`.
+- Compiled-in gate discovery lives in `src/gates/registry.ts`.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
-  `src/gates/temporary-allow-gate.ts`.
-- Local intent request checks live in `src/gates/local-intent-access-gate.ts`.
-- LLM-reviewed request decisions live in `src/gates/llm-reviewed-access-gate.ts` and
-  `src/gates/llm-reviewed-decision.ts`, with provider calls in
-  `src/integrations/openai-access-review.ts`.
+  `src/gates/temporary-allow/`.
+- Local intent request checks live in `src/gates/local-intent/`.
+- LLM-reviewed request decisions, policy, and provider adapters live in
+  `src/gates/llm-reviewed/`.
 - Decision-to-application planning lives in `src/core/decision-application.ts`.
-- Block-page action capabilities and optional integrations live in
+- Block-page gate capabilities are derived from the gate registry. Optional
+  non-gate integrations, such as ChatGPT peek, still live in
   `src/block-page/block-page-capabilities.ts`.
+- `redirect.js` asks the service worker for the current block-page action model
+  instead of carrying its own gate registry.
+- `options.js` asks the service worker for access-gate metadata when rendering
+  the access-gate selector.
+
+## Gate module shape
+
+Each gate owns a vertical slice under `src/gates/<gate-name>/`:
+
+```text
+src/gates/<gate-name>/
+  gate.ts
+  manifest.ts
+  index.ts
+```
+
+Gate-specific dependencies also live inside that folder. For example, the
+LLM-reviewed gate owns `policy.ts`, `decision.ts`, and provider adapters in
+`providers/`.
+
+The `index.ts` file exports a `GateModule` with the pure gate implementation and
+its block-page action metadata. `src/gates/registry.ts` imports those modules and
+is the single source of truth for compiled-in access gates.
 
 ## Add a new access gate
 
-1. Implement the `AccessGate` contract from `src/core/access-contracts.ts`.
+1. Create a folder under `src/gates/`.
+2. Implement the `AccessGate` contract from `src/core/access-contracts.ts` in
+   that folder.
 2. Accept an `AccessRequestContext` (or a richer specialized context) and return
    an `AccessGateDecision` with one of `PASS`, `PASS_WITH_LIMIT`, `FAIL`, or
    `ASK_FOLLOWUP`.
 3. Keep browser API calls out of the gate module.
-4. Call the gate from `src/block.ts`, then pass the decision through
+4. Define the block-page action metadata in the gate's `manifest.ts`.
+5. Export a `GateModule` from the gate's `index.ts`.
+6. Add the gate module to `src/gates/registry.ts`.
+7. Call the gate from `src/block.ts`, then pass the decision through
    `buildDecisionApplication` to apply side effects.
 
 ## Add a new block-page action or integration
 
-1. Add a capability entry to `BLOCK_PAGE_ACTION_CAPABILITIES` with its
-   `messageType` and visibility intent.
-2. If the action should be selectable as the block page access gate, add it to
+1. If the action is an access gate, define it in that gate's `manifest.ts`.
+2. If the action is not an access gate, add it to
+   `src/block-page/block-page-capabilities.ts`.
+3. If the action should be selectable as the block page access gate, add it to
    the options page and store its action id in `accessGateActionId`.
-3. If it is optional (like ChatGPT peek), register it in
+4. If it is optional (like ChatGPT peek), register it in
    `OPTIONAL_INTEGRATIONS`.
-4. Handle the corresponding message in `src/block.ts` and keep business logic in
+5. Handle the corresponding message in `src/block.ts` and keep business logic in
    focused modules where possible.
 
 ## LLM-reviewed gate notes

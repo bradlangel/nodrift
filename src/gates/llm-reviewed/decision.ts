@@ -1,6 +1,6 @@
-import { AccessGateDecision } from "../core/access-contracts.js";
-import { hostMatchesSite } from "../site-matching.js";
-import { parseHostnameFromUrl } from "../url-domain.js";
+import { AccessGateDecision } from "../../core/access-contracts.js";
+import { hostMatchesSite } from "../../site-matching.js";
+import { parseHostnameFromUrl } from "../../url-domain.js";
 
 type ModelDecision = {
   decision?: unknown;

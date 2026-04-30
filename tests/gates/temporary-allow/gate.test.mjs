@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { temporaryAllowGate } from "../../dist/gates/temporary-allow-gate.js";
+import { temporaryAllowGate } from "../../../dist/gates/temporary-allow/index.js";
 
 const tests = [];
 

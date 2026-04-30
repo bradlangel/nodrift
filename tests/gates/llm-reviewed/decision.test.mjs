@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { validateLlmReviewedDecision } from "../../dist/gates/llm-reviewed-decision.js";
+import { validateLlmReviewedDecision } from "../../../dist/gates/llm-reviewed/decision.js";
 
 const tests = [];
 

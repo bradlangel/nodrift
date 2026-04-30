@@ -6,7 +6,7 @@ import {
   buildChromeLocalPrompt,
   normalizeChromeLocalRequestAnalysis,
   requestChromeLocalAccessReview,
-} from "../../dist/integrations/chrome-local-access-review.js";
+} from "../../../../dist/gates/llm-reviewed/providers/chrome-local.js";
 
 const tests = [];
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { localIntentAccessGate } from "../../dist/gates/local-intent-access-gate.js";
+import { localIntentAccessGate } from "../../../dist/gates/local-intent/index.js";
 
 const tests = [];
 

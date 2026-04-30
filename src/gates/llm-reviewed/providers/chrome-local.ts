@@ -1,12 +1,12 @@
 import {
   AccessReviewProgressStage,
   DailyStatsContext,
-} from "../core/access-contracts.js";
+} from "../../../core/access-contracts.js";
 import {
   buildAccessReviewPolicy,
   LlmReviewLevel,
   normalizeReviewLevel,
-} from "./access-review-policy.js";
+} from "../policy.js";
 
 type ChromeLocalAccessReviewContext = {
   blockedDomain: string;

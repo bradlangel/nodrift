@@ -35,11 +35,20 @@ const LEISURE_ALLOWANCE_LABELS = {
   4: "Flexible",
   5: "Open",
 };
-const ACCESS_GATE_ACTION_IDS = new Set([
-  "temporary-allow-domain",
-  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
-  LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
-]);
+const FALLBACK_ACCESS_GATE_ACTIONS = [
+  {
+    id: DEFAULT_ACCESS_GATE_ACTION_ID,
+    label: "One-click temporary allow",
+  },
+  {
+    id: LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
+    label: "Local intent check (fallback/test)",
+  },
+  {
+    id: LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
+    label: "LLM-reviewed request",
+  },
+];
 
 const normalizeAccessGateActionId = (actionId) =>
   actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID
@@ -110,6 +119,36 @@ document.addEventListener("DOMContentLoaded", () => {
     saveStatus.textContent = message;
   };
 
+  let accessGateActions = FALLBACK_ACCESS_GATE_ACTIONS;
+
+  const getAccessGateActionIds = () =>
+    new Set(accessGateActions.map((action) => action.id));
+
+  const renderAccessGateOptions = () => {
+    const currentValue = accessGateSelect.value || DEFAULT_ACCESS_GATE_ACTION_ID;
+    accessGateSelect.innerHTML = "";
+    accessGateActions.forEach((action) => {
+      const option = document.createElement("option");
+      option.value = action.id;
+      option.textContent = action.settingsLabel || action.label || action.description || action.id;
+      accessGateSelect.appendChild(option);
+    });
+
+    accessGateSelect.value = getAccessGateActionIds().has(currentValue)
+      ? currentValue
+      : DEFAULT_ACCESS_GATE_ACTION_ID;
+  };
+
+  const loadAccessGateActions = (next) => {
+    chrome.runtime.sendMessage({ type: "get-access-gate-actions" }, (response) => {
+      if (!chrome.runtime.lastError && response?.ok && Array.isArray(response.actions)) {
+        accessGateActions = response.actions;
+      }
+      renderAccessGateOptions();
+      next();
+    });
+  };
+
   const updateLlmConfigStatus = () => {
     if (!llmConfigStatus) return;
     const provider = normalizeLlmProvider(llmProviderSelect.value);
@@ -149,45 +188,50 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  chrome.storage.sync.get(
-    {
-      blockedSites: DEFAULT_BLOCKED_SITES,
-      tempAllowMinutes: 30,
-      accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
-      showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
-      showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
-      redirectUrl: DEFAULT_REDIRECT_URL,
-      redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT,
-      grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
-      llmProvider: DEFAULT_LLM_PROVIDER,
-      llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
-      llmLeisureAllowance: DEFAULT_LLM_LEISURE_ALLOWANCE,
-      openAiModel: DEFAULT_OPENAI_MODEL,
-    },
-    (syncData) => {
-      chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {
-        textarea.value = syncData.blockedSites.join("\n");
-        minutesInput.value = String(syncData.tempAllowMinutes);
-        const accessGateActionId = normalizeAccessGateActionId(syncData.accessGateActionId);
-        accessGateSelect.value = ACCESS_GATE_ACTION_IDS.has(accessGateActionId)
-          ? accessGateActionId
-          : DEFAULT_ACCESS_GATE_ACTION_ID;
-        showRedirectCheckbox.checked = syncData.showCareerTrackerRedirect !== false;
-        showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
-        redirectInput.value = syncData.redirectUrl;
-        btnTextInput.value = syncData.redirectBtnText;
-        grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
+  const loadSettings = () => {
+    chrome.storage.sync.get(
+      {
+        blockedSites: DEFAULT_BLOCKED_SITES,
+        tempAllowMinutes: 30,
+        accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
+        showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
+        showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
+        redirectUrl: DEFAULT_REDIRECT_URL,
+        redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT,
+        grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+        llmProvider: DEFAULT_LLM_PROVIDER,
+        llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
+        llmLeisureAllowance: DEFAULT_LLM_LEISURE_ALLOWANCE,
+        openAiModel: DEFAULT_OPENAI_MODEL,
+      },
+      (syncData) => {
+        chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {
+          textarea.value = syncData.blockedSites.join("\n");
+          minutesInput.value = String(syncData.tempAllowMinutes);
+          const accessGateActionId = normalizeAccessGateActionId(syncData.accessGateActionId);
+          accessGateSelect.value = getAccessGateActionIds().has(accessGateActionId)
+            ? accessGateActionId
+            : DEFAULT_ACCESS_GATE_ACTION_ID;
+          showRedirectCheckbox.checked = syncData.showCareerTrackerRedirect !== false;
+          showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
+          redirectInput.value = syncData.redirectUrl;
+          btnTextInput.value = syncData.redirectBtnText;
+          grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
 
-        llmProviderSelect.value = normalizeLlmProvider(syncData.llmProvider);
-        llmReviewStrictnessSelect.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
-        llmLeisureAllowanceInput.value = normalizeLlmReviewStrictness(syncData.llmLeisureAllowance);
-        openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
-        openAiApiKeyInput.value = typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
-        updateReviewRangeLabels();
-        updateLlmConfigStatus();
-      });
-    }
-  );
+          llmProviderSelect.value = normalizeLlmProvider(syncData.llmProvider);
+          llmReviewStrictnessSelect.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
+          llmLeisureAllowanceInput.value = normalizeLlmReviewStrictness(syncData.llmLeisureAllowance);
+          openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
+          openAiApiKeyInput.value = typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
+          updateReviewRangeLabels();
+          updateLlmConfigStatus();
+        });
+      }
+    );
+  };
+
+  renderAccessGateOptions();
+  loadAccessGateActions(loadSettings);
 
   openAiApiKeyInput.addEventListener("input", updateLlmConfigStatus);
   openAiModelInput.addEventListener("input", updateLlmConfigStatus);
@@ -202,7 +246,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter(Boolean);
     const minutes = parseInt(minutesInput.value, 10) || 30;
     const selectedAccessGateActionId = normalizeAccessGateActionId(accessGateSelect.value);
-    const accessGateActionId = ACCESS_GATE_ACTION_IDS.has(selectedAccessGateActionId)
+    const accessGateActionId = getAccessGateActionIds().has(selectedAccessGateActionId)
       ? selectedAccessGateActionId
       : DEFAULT_ACCESS_GATE_ACTION_ID;
     const redirectUrl = redirectInput.value.trim();

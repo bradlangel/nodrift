@@ -5,6 +5,8 @@ export const STORAGE_KEYS = {
   accessGateActionId: "accessGateActionId",
   showCareerTrackerRedirect: "showCareerTrackerRedirect",
   showChatGptPeek: "showChatGptPeek",
+  redirectUrl: "redirectUrl",
+  redirectBtnText: "redirectBtnText",
   llmProvider: "llmProvider",
   llmReviewStrictness: "llmReviewStrictness",
   llmLeisureAllowance: "llmLeisureAllowance",

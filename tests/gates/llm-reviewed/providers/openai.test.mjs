@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 
-import { buildAccessReviewPolicy } from "../../dist/integrations/access-review-policy.js";
+import { buildAccessReviewPolicy } from "../../../../dist/gates/llm-reviewed/policy.js";
 import {
   buildOpenAiStatsSnippet,
   extractOpenAiOutputText,
   getOpenAiAccessReviewReasoningEffort,
   normalizeReviewLevel,
-} from "../../dist/integrations/openai-access-review.js";
+} from "../../../../dist/gates/llm-reviewed/providers/openai.js";
 
 const tests = [];
 

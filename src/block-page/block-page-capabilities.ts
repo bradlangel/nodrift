@@ -1,37 +1,39 @@
 import { BlockPageActionCapability, OptionalIntegration } from "../core/access-contracts.js";
+import {
+  GATE_BLOCK_PAGE_ACTION_CAPABILITIES,
+  GATE_OPTIONAL_INTEGRATIONS,
+} from "../gates/registry.js";
+
+const PEEK_CHATGPT_ACTION_CAPABILITY: BlockPageActionCapability = {
+  id: "peek-chatgpt",
+  type: "peek-chatgpt",
+  messageType: "peek-with-chatgpt",
+  visibleByDefault: false,
+  description: "Open ChatGPT with a generated peek prompt and snapshot.",
+  label: "Peek with ChatGPT",
+  buttonId: "peek-chatgpt-btn",
+  className: "secondary",
+  title:
+    "Opens ChatGPT with your prompt and a quick page snapshot so you can review and send it yourself",
+};
+
+const REDIRECT_ACTION_CAPABILITY: BlockPageActionCapability = {
+  id: "redirect",
+  type: "redirect",
+  visibleByDefault: false,
+  description: "Open the configured redirect destination.",
+  label: "Go to Career Tracker",
+  buttonId: "redirect-btn",
+};
 
 export const BLOCK_PAGE_ACTION_CAPABILITIES: BlockPageActionCapability[] = [
-  {
-    id: "temporary-allow-domain",
-    type: "temporary-allow",
-    messageType: "temporarily-allow-tab",
-    visibleByDefault: true,
-    description: "Allow the blocked site for the configured duration.",
-  },
-  {
-    id: "local-intent-request-access",
-    type: "request-access",
-    messageType: "request-local-intent-access",
-    visibleByDefault: false,
-    description: "Run a local intent check for focused access.",
-  },
-  {
-    id: "llm-reviewed-request-access",
-    type: "request-access",
-    messageType: "request-llm-reviewed-access",
-    visibleByDefault: false,
-    description: "Use your configured LLM provider to review the access request.",
-  },
-  {
-    id: "peek-chatgpt",
-    type: "peek-chatgpt",
-    messageType: "peek-with-chatgpt",
-    visibleByDefault: false,
-    description: "Open ChatGPT with a generated peek prompt and snapshot.",
-  },
+  ...GATE_BLOCK_PAGE_ACTION_CAPABILITIES,
+  REDIRECT_ACTION_CAPABILITY,
+  PEEK_CHATGPT_ACTION_CAPABILITY,
 ];
 
 export const OPTIONAL_INTEGRATIONS: OptionalIntegration[] = [
+  ...GATE_OPTIONAL_INTEGRATIONS,
   {
     id: "chatgpt-peek",
     actionId: "peek-chatgpt",

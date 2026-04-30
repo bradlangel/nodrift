@@ -1,7 +1,7 @@
-import { AccessGate, LlmReviewedAccessRequestContext } from "../core/access-contracts.js";
-import { getRelatedRuleIdsForHost } from "../site-matching.js";
-import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "../url-domain.js";
-import { validateLlmReviewedDecision } from "./llm-reviewed-decision.js";
+import { AccessGate, LlmReviewedAccessRequestContext } from "../../core/access-contracts.js";
+import { getRelatedRuleIdsForHost } from "../../site-matching.js";
+import { ensureHttpUrl, normalizeHost, parseHostnameFromUrl } from "../../url-domain.js";
+import { validateLlmReviewedDecision } from "./decision.js";
 
 const resolveHostAndRules = (
   context: LlmReviewedAccessRequestContext
