@@ -466,123 +466,7 @@
       <section class="settings-panel" aria-labelledby="gate-library-heading">
         <h2 id="gate-library-heading">Gate Library</h2>
         <p class="hint">Choose the default gate shown on the block page.</p>
-        <div class="gate-list">
-          <article class="gate-card" data-gate-card="temporary-allow-domain">
-            <div class="gate-card-header">
-              <div>
-                <h3>One-click Temporary Allow</h3>
-                <p class="hint">Fast domain access using the shared access defaults.</p>
-              </div>
-              <div class="gate-meta">
-                <span class="badge" data-gate-status="temporary-allow-domain"></span>
-                <button type="button" class="secondary-button" data-set-default="temporary-allow-domain">Set as default</button>
-              </div>
-            </div>
-            <details class="gate-details" data-gate-details="temporary-allow-domain">
-              <summary>Details</summary>
-              <div class="gate-details-body">
-                <p class="hint">Uses the default temporary allow duration and grayscale setting above.</p>
-              </div>
-            </details>
-          </article>
-
-          <article class="gate-card" data-gate-card="local-intent-request-access">
-            <div class="gate-card-header">
-              <div>
-                <h3>Local Intent Check</h3>
-                <p class="hint">A lightweight local review with no provider setup.</p>
-              </div>
-              <div class="gate-meta">
-                <span class="badge" data-gate-status="local-intent-request-access"></span>
-                <button type="button" class="secondary-button" data-set-default="local-intent-request-access">Set as default</button>
-              </div>
-            </div>
-            <details class="gate-details" data-gate-details="local-intent-request-access">
-              <summary>Details</summary>
-              <div class="gate-details-body">
-                <p class="hint">Uses the requested purpose, requested duration, current site, and local stats. No setup needed.</p>
-              </div>
-            </details>
-          </article>
-
-          <article class="gate-card" data-gate-card="llm-reviewed-request-access">
-            <div class="gate-card-header">
-              <div>
-                <h3>LLM-reviewed Request</h3>
-                <p class="hint">Provider-reviewed access with local stats context.</p>
-              </div>
-              <div class="gate-meta">
-                <span class="badge" data-gate-status="llm-reviewed-request-access">Needs setup</span>
-                <button type="button" class="secondary-button" data-set-default="llm-reviewed-request-access">Set as default</button>
-              </div>
-            </div>
-            <details class="gate-details" data-gate-details="llm-reviewed-request-access">
-              <summary>Settings</summary>
-              <div class="gate-details-body">
-                <p class="hint">Privacy: request purpose, requested URL/domain, requested minutes, time/day, and small local stats context are sent to your provider.</p>
-                <div class="llm-panel">
-                  <fieldset>
-                    <legend class="label">Default LLM provider</legend>
-                    <div class="provider-list">
-                      <article class="provider-card" data-provider-card="openai">
-                        <label class="provider-choice" for="llm-provider-openai">
-                          <input type="radio" id="llm-provider-openai" name="llm-provider" value="openai" />
-                          <span>
-                            <span class="provider-title">OpenAI</span>
-                            <span class="hint">Hosted review through your OpenAI API key.</span>
-                          </span>
-                        </label>
-                        <div class="provider-config" id="openai-provider-config">
-                          <div class="field" id="openai-model-field">
-                            <label for="openai-model">Model</label>
-                            <input type="text" id="openai-model" placeholder="gpt-5-nano" />
-                          </div>
-                          <div class="field" id="openai-api-key-field">
-                            <label for="openai-api-key">API key</label>
-                            <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
-                            <p class="hint">Stored locally in this browser.</p>
-                          </div>
-                        </div>
-                      </article>
-
-                      <article class="provider-card" data-provider-card="chrome-local">
-                        <label class="provider-choice" for="llm-provider-chrome-local">
-                          <input type="radio" id="llm-provider-chrome-local" name="llm-provider" value="chrome-local" />
-                          <span>
-                            <span class="provider-title">Chrome local LLM</span>
-                            <span class="hint">On-device review when Chrome Prompt API is available.</span>
-                          </span>
-                        </label>
-                        <div class="provider-config">
-                          <p class="hint">No API key or hosted provider account required.</p>
-                        </div>
-                      </article>
-                    </div>
-                  </fieldset>
-
-                  <div class="field-row">
-                    <div class="field">
-                      <label for="llm-review-strictness">Purpose scrutiny</label>
-                      <div class="range-row">
-                        <input type="range" id="llm-review-strictness" min="1" max="5" step="1" value="3" />
-                        <span id="llm-review-strictness-label" class="range-value">Balanced</span>
-                      </div>
-                    </div>
-                    <div class="field">
-                      <label for="llm-leisure-allowance">Leisure allowance</label>
-                      <div class="range-row">
-                        <input type="range" id="llm-leisure-allowance" min="1" max="5" step="1" value="3" />
-                        <span id="llm-leisure-allowance-label" class="range-value">Planned</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p id="llm-config-status" class="hint warning" aria-live="polite"></p>
-                </div>
-              </div>
-            </details>
-          </article>
-        </div>
+        <div id="gate-list" class="gate-list"></div>
       </section>
 
       <div class="save-row">
@@ -591,6 +475,6 @@
       </div>
     </div>
   </main>
-  <script src="options.js"></script>
+  <script type="module" src="dist/options.js"></script>
 </body>
 </html>

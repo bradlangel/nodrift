@@ -43,6 +43,19 @@ test("registry resolves gates by action id and message type", () => {
   assert.equal(findGateModuleByActionId("missing"), null);
 });
 
+test("registry exposes gate options metadata", () => {
+  const llmGate = findGateModuleByActionId("llm-reviewed-request-access");
+  assert.equal(llmGate?.options?.detailsSummary, "Settings");
+  assert.deepEqual(
+    llmGate?.options?.providerGroup?.providers.map((provider) => provider.id),
+    ["openai", "chrome-local"]
+  );
+  assert.equal(
+    findGateModuleByActionId("temporary-allow-domain")?.options?.detailsSummary,
+    "Details"
+  );
+});
+
 let failures = 0;
 for (const { name, run } of tests) {
   try {

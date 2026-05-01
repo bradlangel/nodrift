@@ -1,3 +1,11 @@
+import type { GateModule } from "./core/access-contracts.js";
+import type {
+  GateOptionsProvider,
+  GateOptionsRangeField,
+  GateOptionsTextField,
+} from "./core/options-contracts.js";
+import { GATE_MODULES } from "./gates/registry.js";
+
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
   "old.reddit.com",
@@ -20,6 +28,7 @@ const DEFAULT_LLM_PROVIDER = "openai";
 const DEFAULT_LLM_REVIEW_STRICTNESS = "3";
 const DEFAULT_LLM_LEISURE_ALLOWANCE = "3";
 const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
+const ACCESS_GATE_ACTIONS = GATE_MODULES.map((module) => module.action);
 const LLM_REVIEW_STRICTNESS_VALUES = new Set(["1", "2", "3", "4", "5"]);
 const PURPOSE_SCRUTINY_LABELS = {
   1: "Relaxed",
@@ -35,33 +44,23 @@ const LEISURE_ALLOWANCE_LABELS = {
   4: "Flexible",
   5: "Open",
 };
-const FALLBACK_ACCESS_GATE_ACTIONS = [
-  {
-    id: DEFAULT_ACCESS_GATE_ACTION_ID,
-    label: "Temporarily Allow",
-    settingsLabel: "One-click temporary allow",
-  },
-  {
-    id: LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
-    label: "Check intent",
-    settingsLabel: "Local intent check",
-  },
-  {
-    id: LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
-    label: "LLM-reviewed request",
-    settingsLabel: "LLM-reviewed request",
-  },
-];
 
-const normalizeAccessGateActionId = (actionId) =>
+type RangeLabels = Record<string, string>;
+
+type NormalizedBlockedSites = {
+  sites: string[];
+  duplicateCount: number;
+};
+
+const normalizeAccessGateActionId = (actionId: unknown): string =>
   actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID
     ? LOCAL_INTENT_ACCESS_GATE_ACTION_ID
-    : actionId;
+    : String(actionId || "");
 
-const normalizeLlmProvider = (provider) =>
+const normalizeLlmProvider = (provider: unknown): string =>
   provider === "openai" || provider === "chrome-local" ? provider : DEFAULT_LLM_PROVIDER;
 
-const normalizeLlmReviewStrictness = (strictness) => {
+const normalizeLlmReviewStrictness = (strictness: unknown): string => {
   if (strictness === "lenient") return "2";
   if (strictness === "balanced") return "3";
   if (strictness === "strict") return "4";
@@ -70,17 +69,22 @@ const normalizeLlmReviewStrictness = (strictness) => {
     : DEFAULT_LLM_REVIEW_STRICTNESS;
 };
 
-const formatRangeLabel = (value, labels) => `${value} - ${labels[value] || labels[3]}`;
+const formatRangeLabel = (value: string, labels: RangeLabels): string =>
+  `${value} - ${labels[value] || labels[3]}`;
 
-const normalizeOpenAiModel = (model) => {
+const normalizeOpenAiModel = (model: unknown): string => {
   const trimmed = typeof model === "string" ? model.trim() : "";
   return trimmed || DEFAULT_OPENAI_MODEL;
 };
 
-const singularize = (count, singular, plural = `${singular}s`) =>
+const singularize = (
+  count: number,
+  singular: string,
+  plural = `${singular}s`
+): string =>
   `${count} ${count === 1 ? singular : plural}`;
 
-const normalizeBlockedSiteEntry = (entry) => {
+const normalizeBlockedSiteEntry = (entry: string): string | null => {
   const trimmed = entry.trim();
   if (!trimmed) return null;
 
@@ -99,15 +103,15 @@ const normalizeBlockedSiteEntry = (entry) => {
   return withoutWildcard.split(/[/?#]/)[0].toLowerCase();
 };
 
-const normalizeBlockedSites = (value) => {
+const normalizeBlockedSites = (value: unknown): NormalizedBlockedSites => {
   const seen = new Set();
   let duplicateCount = 0;
-  const sites = [];
+  const sites: string[] = [];
 
   String(value)
     .split("\n")
     .map(normalizeBlockedSiteEntry)
-    .filter(Boolean)
+    .filter((site): site is string => Boolean(site))
     .forEach((site) => {
       if (seen.has(site)) {
         duplicateCount += 1;
@@ -120,8 +124,8 @@ const normalizeBlockedSites = (value) => {
   return { sites, duplicateCount };
 };
 
-const findOverlappingSites = (sites) => {
-  const overlaps = [];
+const findOverlappingSites = (sites: string[]): string[] => {
+  const overlaps: string[] = [];
   sites.forEach((site) => {
     sites.forEach((candidateParent) => {
       if (site === candidateParent) return;
@@ -131,6 +135,145 @@ const findOverlappingSites = (sites) => {
     });
   });
   return overlaps;
+};
+
+const escapeHtml = (value: unknown): string =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const renderTextField = (field: GateOptionsTextField) => `
+  <div class="field" id="${escapeHtml(field.id)}-field">
+    <label for="${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
+    <input
+      type="${escapeHtml(field.type)}"
+      id="${escapeHtml(field.id)}"
+      ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}
+      ${field.autocomplete ? `autocomplete="${escapeHtml(field.autocomplete)}"` : ""}
+    />
+    ${field.hint ? `<p class="hint">${escapeHtml(field.hint)}</p>` : ""}
+  </div>
+`;
+
+const renderProvider = (
+  providerGroupName: string,
+  provider: GateOptionsProvider
+) => `
+  <article class="provider-card" data-provider-card="${escapeHtml(provider.id)}">
+    <label class="provider-choice" for="${escapeHtml(providerGroupName)}-${escapeHtml(provider.id)}">
+      <input
+        type="radio"
+        id="${escapeHtml(providerGroupName)}-${escapeHtml(provider.id)}"
+        name="${escapeHtml(providerGroupName)}"
+        value="${escapeHtml(provider.id)}"
+      />
+      <span>
+        <span class="provider-title">${escapeHtml(provider.label)}</span>
+        <span class="hint">${escapeHtml(provider.description)}</span>
+      </span>
+    </label>
+    ${
+      provider.fields?.length || provider.hint
+        ? `<div class="provider-config">
+            ${provider.fields?.map(renderTextField).join("") ?? ""}
+            ${provider.hint ? `<p class="hint">${escapeHtml(provider.hint)}</p>` : ""}
+          </div>`
+        : ""
+    }
+  </article>
+`;
+
+const renderRangeField = (field: GateOptionsRangeField) => `
+  <div class="field">
+    <label for="${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
+    <div class="range-row">
+      <input
+        type="range"
+        id="${escapeHtml(field.id)}"
+        min="${field.min}"
+        max="${field.max}"
+        step="${field.step}"
+        value="${escapeHtml(field.value)}"
+      />
+      <span id="${escapeHtml(field.labelId)}" class="range-value"></span>
+    </div>
+  </div>
+`;
+
+const renderGateOptions = (module: GateModule) => {
+  const options = module.options;
+  if (!options) return "";
+
+  const providerMarkup = options.providerGroup
+    ? `
+      <fieldset>
+        <legend class="label">${escapeHtml(options.providerGroup.legend)}</legend>
+        <div class="provider-list">
+          ${options.providerGroup.providers
+            .map((provider) =>
+              renderProvider(options.providerGroup!.inputName, provider)
+            )
+            .join("")}
+        </div>
+      </fieldset>
+    `
+    : "";
+
+  const rangeMarkup = options.rangeFields?.length
+    ? `<div class="field-row">${options.rangeFields.map(renderRangeField).join("")}</div>`
+    : "";
+
+  const statusMarkup = options.statusId
+    ? `<p id="${escapeHtml(options.statusId)}" class="hint warning" aria-live="polite"></p>`
+    : "";
+  const panelMarkup =
+    providerMarkup || rangeMarkup || statusMarkup
+      ? `<div class="llm-panel">
+          ${providerMarkup}
+          ${rangeMarkup}
+          ${statusMarkup}
+        </div>`
+      : "";
+
+  return `
+    ${options.notes?.map((note) => `<p class="hint">${escapeHtml(note)}</p>`).join("") ?? ""}
+    ${panelMarkup}
+  `;
+};
+
+const renderGateCard = (module: GateModule) => {
+  const action = module.action;
+  const options = module.options;
+  const actionLabel = action.settingsLabel || action.label;
+  const cardDescription = options?.cardDescription || action.description;
+  const detailsSummary = options?.detailsSummary || "Details";
+
+  return `
+    <article class="gate-card" data-gate-card="${escapeHtml(action.id)}">
+      <div class="gate-card-header">
+        <div>
+          <h3>${escapeHtml(actionLabel)}</h3>
+          <p class="hint">${escapeHtml(cardDescription)}</p>
+        </div>
+        <div class="gate-meta">
+          <span class="badge" data-gate-status="${escapeHtml(action.id)}"></span>
+          <button type="button" class="secondary-button" data-set-default="${escapeHtml(action.id)}">Set as default</button>
+        </div>
+      </div>
+      <details class="gate-details" data-gate-details="${escapeHtml(action.id)}">
+        <summary>${escapeHtml(detailsSummary)}</summary>
+        <div class="gate-details-body">
+          ${renderGateOptions(module)}
+        </div>
+      </details>
+    </article>
+  `;
+};
+
+const renderGateLibrary = (gateList: HTMLElement) => {
+  gateList.innerHTML = GATE_MODULES.map(renderGateCard).join("");
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -144,16 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const grayscaleCheckbox = document.getElementById("grayscale-temp-allow");
   const showRedirectCheckbox = document.getElementById("show-career-tracker-redirect");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
-  const llmProviderInputs = Array.from(
-    document.querySelectorAll('input[name="llm-provider"]')
-  );
-  const llmReviewStrictnessInput = document.getElementById("llm-review-strictness");
-  const llmLeisureAllowanceInput = document.getElementById("llm-leisure-allowance");
-  const llmReviewStrictnessLabel = document.getElementById("llm-review-strictness-label");
-  const llmLeisureAllowanceLabel = document.getElementById("llm-leisure-allowance-label");
-  const openAiModelInput = document.getElementById("openai-model");
-  const openAiApiKeyInput = document.getElementById("openai-api-key");
-  const llmConfigStatus = document.getElementById("llm-config-status");
+  const gateList = document.getElementById("gate-list");
   const saveStatus = document.getElementById("save-status");
 
   if (
@@ -166,6 +300,25 @@ document.addEventListener("DOMContentLoaded", () => {
     !(grayscaleCheckbox instanceof HTMLInputElement) ||
     !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
+    !(gateList instanceof HTMLElement)
+  ) {
+    return;
+  }
+
+  renderGateLibrary(gateList);
+
+  const llmProviderInputs = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[name="llm-provider"]')
+  );
+  const llmReviewStrictnessInput = document.getElementById("llm-review-strictness");
+  const llmLeisureAllowanceInput = document.getElementById("llm-leisure-allowance");
+  const llmReviewStrictnessLabel = document.getElementById("llm-review-strictness-label");
+  const llmLeisureAllowanceLabel = document.getElementById("llm-leisure-allowance-label");
+  const openAiModelInput = document.getElementById("openai-model");
+  const openAiApiKeyInput = document.getElementById("openai-api-key");
+  const llmConfigStatus = document.getElementById("llm-config-status");
+
+  if (
     llmProviderInputs.length === 0 ||
     !llmProviderInputs.every((input) => input instanceof HTMLInputElement) ||
     !(llmReviewStrictnessInput instanceof HTMLInputElement) ||
@@ -176,19 +329,19 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const setStatus = (message, className = "") => {
+  const setStatus = (message: string, className = ""): void => {
     if (!saveStatus) return;
     saveStatus.textContent = message;
     saveStatus.className = className;
   };
 
-  let accessGateActions = FALLBACK_ACCESS_GATE_ACTIONS;
+  let accessGateActions = ACCESS_GATE_ACTIONS;
   let defaultGateActionId = DEFAULT_ACCESS_GATE_ACTION_ID;
 
   const getAccessGateActionIds = () =>
     new Set(accessGateActions.map((action) => action.id));
 
-  const normalizeDefaultGateActionId = (preferredActionId) => {
+  const normalizeDefaultGateActionId = (preferredActionId: unknown): string => {
     const normalizedPreferred = normalizeAccessGateActionId(preferredActionId);
     const validActionIds = getAccessGateActionIds();
     return validActionIds.has(normalizedPreferred)
@@ -196,7 +349,10 @@ document.addEventListener("DOMContentLoaded", () => {
       : DEFAULT_ACCESS_GATE_ACTION_ID;
   };
 
-  const setDefaultGateActionId = (preferredActionId, options = {}) => {
+  const setDefaultGateActionId = (
+    preferredActionId: unknown,
+    options: { openDetails?: boolean } = {}
+  ) => {
     defaultGateActionId = normalizeDefaultGateActionId(preferredActionId);
     if (options.openDetails) {
       document.querySelectorAll("[data-gate-details]").forEach((details) => {
@@ -208,20 +364,11 @@ document.addEventListener("DOMContentLoaded", () => {
     updateGateLibraryState();
   };
 
-  const initializeDefaultGateActionId = (preferredActionId) => {
+  const initializeDefaultGateActionId = (preferredActionId: unknown): void => {
     setDefaultGateActionId(preferredActionId, { openDetails: true });
   };
 
-  const loadAccessGateActions = (next) => {
-    chrome.runtime.sendMessage({ type: "get-access-gate-actions" }, (response) => {
-      if (!chrome.runtime.lastError && response?.ok && Array.isArray(response.actions)) {
-        accessGateActions = response.actions;
-      }
-      next();
-    });
-  };
-
-  const updateSitesSummary = () => {
+  const updateSitesSummary = (): void => {
     if (!sitesSummary) return;
     const { sites, duplicateCount } = normalizeBlockedSites(textarea.value);
     const overlaps = findOverlappingSites(sites);
@@ -238,26 +385,26 @@ document.addEventListener("DOMContentLoaded", () => {
     sitesSummary.className = duplicateCount > 0 || overlaps.length > 0 ? "hint warning" : "hint";
   };
 
-  const cleanSitesInput = () => {
+  const cleanSitesInput = (): void => {
     const { sites, duplicateCount } = normalizeBlockedSites(textarea.value);
     textarea.value = sites.join("\n");
     updateSitesSummary();
     setStatus(duplicateCount > 0 ? "List cleaned." : "List normalized.");
   };
 
-  const getSelectedLlmProvider = () => {
+  const getSelectedLlmProvider = (): string => {
     const selected = llmProviderInputs.find((input) => input.checked);
     return normalizeLlmProvider(selected?.value);
   };
 
-  const setSelectedLlmProvider = (provider) => {
+  const setSelectedLlmProvider = (provider: unknown): void => {
     const normalizedProvider = normalizeLlmProvider(provider);
     llmProviderInputs.forEach((input) => {
       input.checked = input.value === normalizedProvider;
     });
   };
 
-  const updateProviderCards = () => {
+  const updateProviderCards = (): void => {
     const provider = getSelectedLlmProvider();
     document.querySelectorAll("[data-provider-card]").forEach((card) => {
       card.classList.toggle(
@@ -267,7 +414,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const hasReadyLlmProviderConfig = () => {
+  const hasReadyLlmProviderConfig = (): boolean => {
     const provider = getSelectedLlmProvider();
     if (provider === "chrome-local") return true;
     return (
@@ -276,7 +423,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   };
 
-  const updateLlmConfigStatus = () => {
+  const updateLlmConfigStatus = (): void => {
     if (!llmConfigStatus) return;
     const provider = getSelectedLlmProvider();
     const isChromeLocal = provider === "chrome-local";
@@ -302,7 +449,7 @@ document.addEventListener("DOMContentLoaded", () => {
     llmConfigStatus.className = "hint warning";
   };
 
-  const updateGateLibraryState = () => {
+  const updateGateLibraryState = (): void => {
     const selectedActionId = defaultGateActionId;
     document.querySelectorAll("[data-gate-card]").forEach((card) => {
       card.classList.toggle(
@@ -311,7 +458,7 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     });
 
-    document.querySelectorAll("[data-gate-status]").forEach((statusElement) => {
+    document.querySelectorAll<HTMLElement>("[data-gate-status]").forEach((statusElement) => {
       const actionId = statusElement.getAttribute("data-gate-status");
       if (!actionId) return;
 
@@ -333,7 +480,7 @@ document.addEventListener("DOMContentLoaded", () => {
       statusElement.hidden = false;
     });
 
-    document.querySelectorAll("[data-set-default]").forEach((button) => {
+    document.querySelectorAll<HTMLButtonElement>("[data-set-default]").forEach((button) => {
       const actionId = button.getAttribute("data-set-default");
       const selected = actionId === selectedActionId;
       button.textContent = selected ? "Default" : "Set as default";
@@ -343,7 +490,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLlmConfigStatus();
   };
 
-  const updateReviewRangeLabels = () => {
+  const updateReviewRangeLabels = (): void => {
     const strictness = normalizeLlmReviewStrictness(llmReviewStrictnessInput.value);
     const leisure = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
     if (llmReviewStrictnessLabel) {
@@ -354,7 +501,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
-  const loadSettings = () => {
+  const loadSettings = (): void => {
     chrome.storage.sync.get(
       {
         blockedSites: DEFAULT_BLOCKED_SITES,
@@ -370,8 +517,8 @@ document.addEventListener("DOMContentLoaded", () => {
         llmLeisureAllowance: DEFAULT_LLM_LEISURE_ALLOWANCE,
         openAiModel: DEFAULT_OPENAI_MODEL,
       },
-      (syncData) => {
-        chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {
+      (syncData: Record<string, any>) => {
+        chrome.storage.local.get({ openAiApiKey: "" }, (localData: Record<string, any>) => {
           const storedBlockedSites = Array.isArray(syncData.blockedSites)
             ? syncData.blockedSites
             : DEFAULT_BLOCKED_SITES;
@@ -399,7 +546,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   };
 
-  loadAccessGateActions(loadSettings);
+  loadSettings();
 
   textarea.addEventListener("input", updateSitesSummary);
   cleanSitesBtn.addEventListener("click", cleanSitesInput);
@@ -411,7 +558,7 @@ document.addEventListener("DOMContentLoaded", () => {
   llmReviewStrictnessInput.addEventListener("input", updateReviewRangeLabels);
   llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
 
-  document.querySelectorAll("[data-set-default]").forEach((button) => {
+  document.querySelectorAll<HTMLButtonElement>("[data-set-default]").forEach((button) => {
     button.addEventListener("click", () => {
       const actionId = button.getAttribute("data-set-default");
       if (!actionId || !getAccessGateActionIds().has(actionId)) return;

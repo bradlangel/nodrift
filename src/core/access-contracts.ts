@@ -1,3 +1,5 @@
+import type { GateOptionsDefinition } from "./options-contracts.js";
+
 export type AccessDecision = "PASS" | "PASS_WITH_LIMIT" | "FAIL" | "ASK_FOLLOWUP";
 export type AccessDecisionScope = "domain" | "url" | "none";
 export type AccessReviewProgressStage =
@@ -151,6 +153,7 @@ export type GateModule<TContext = any> = {
   id: string;
   gate: AccessGate<TContext>;
   action: BlockPageActionCapability;
+  options?: GateOptionsDefinition;
   integrations?: OptionalIntegration[];
   isConfigured?: (settings: unknown) => boolean;
 };
