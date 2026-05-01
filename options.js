@@ -142,10 +142,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const redirectInput = document.getElementById("redirect-url");
   const btnTextInput = document.getElementById("redirect-btn-text");
   const grayscaleCheckbox = document.getElementById("grayscale-temp-allow");
-  const accessGateSelect = document.getElementById("access-gate-action");
   const showRedirectCheckbox = document.getElementById("show-career-tracker-redirect");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
-  const llmGateSettings = document.getElementById("llm-gate-settings");
   const llmProviderSelect = document.getElementById("llm-provider");
   const llmReviewStrictnessInput = document.getElementById("llm-review-strictness");
   const llmLeisureAllowanceInput = document.getElementById("llm-leisure-allowance");
@@ -166,10 +164,8 @@ document.addEventListener("DOMContentLoaded", () => {
     !(redirectInput instanceof HTMLInputElement) ||
     !(btnTextInput instanceof HTMLInputElement) ||
     !(grayscaleCheckbox instanceof HTMLInputElement) ||
-    !(accessGateSelect instanceof HTMLSelectElement) ||
     !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
-    !(llmGateSettings instanceof HTMLElement) ||
     !(llmProviderSelect instanceof HTMLSelectElement) ||
     !(llmReviewStrictnessInput instanceof HTMLInputElement) ||
     !(llmLeisureAllowanceInput instanceof HTMLInputElement) ||
@@ -186,26 +182,33 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   let accessGateActions = FALLBACK_ACCESS_GATE_ACTIONS;
+  let defaultGateActionId = DEFAULT_ACCESS_GATE_ACTION_ID;
 
   const getAccessGateActionIds = () =>
     new Set(accessGateActions.map((action) => action.id));
 
-  const renderAccessGateOptions = (preferredActionId = accessGateSelect.value) => {
+  const normalizeDefaultGateActionId = (preferredActionId) => {
     const normalizedPreferred = normalizeAccessGateActionId(preferredActionId);
     const validActionIds = getAccessGateActionIds();
-    const selectedActionId = validActionIds.has(normalizedPreferred)
+    return validActionIds.has(normalizedPreferred)
       ? normalizedPreferred
       : DEFAULT_ACCESS_GATE_ACTION_ID;
+  };
 
-    accessGateSelect.innerHTML = "";
-    accessGateActions.forEach((action) => {
-      const option = document.createElement("option");
-      option.value = action.id;
-      option.textContent = action.settingsLabel || action.label || action.id;
-      accessGateSelect.appendChild(option);
-    });
+  const setDefaultGateActionId = (preferredActionId, options = {}) => {
+    defaultGateActionId = normalizeDefaultGateActionId(preferredActionId);
+    if (options.openDetails) {
+      document.querySelectorAll("[data-gate-details]").forEach((details) => {
+        if (details instanceof HTMLDetailsElement) {
+          details.open = details.getAttribute("data-gate-details") === defaultGateActionId;
+        }
+      });
+    }
+    updateGateLibraryState();
+  };
 
-    accessGateSelect.value = selectedActionId;
+  const initializeDefaultGateActionId = (preferredActionId) => {
+    setDefaultGateActionId(preferredActionId, { openDetails: true });
   };
 
   const loadAccessGateActions = (next) => {
@@ -241,6 +244,15 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus(duplicateCount > 0 ? "List cleaned." : "List normalized.");
   };
 
+  const hasReadyLlmProviderConfig = () => {
+    const provider = normalizeLlmProvider(llmProviderSelect.value);
+    if (provider === "chrome-local") return true;
+    return (
+      openAiApiKeyInput.value.trim().length > 0 &&
+      openAiModelInput.value.trim().length > 0
+    );
+  };
+
   const updateLlmConfigStatus = () => {
     if (!llmConfigStatus) return;
     const provider = normalizeLlmProvider(llmProviderSelect.value);
@@ -260,7 +272,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const hasModel = openAiModelInput.value.trim().length > 0;
     if (hasApiKey && hasModel) {
       llmConfigStatus.textContent =
-        "LLM-reviewed request gate is ready to use as a primary action.";
+        "LLM-reviewed request gate is ready to use as the default gate.";
       llmConfigStatus.className = "hint ok";
       return;
     }
@@ -269,9 +281,44 @@ document.addEventListener("DOMContentLoaded", () => {
     llmConfigStatus.className = "hint warning";
   };
 
-  const updateGateSettingsVisibility = () => {
-    const selectedActionId = normalizeAccessGateActionId(accessGateSelect.value);
-    llmGateSettings.hidden = selectedActionId !== LLM_REVIEWED_ACCESS_GATE_ACTION_ID;
+  const updateGateLibraryState = () => {
+    const selectedActionId = defaultGateActionId;
+    document.querySelectorAll("[data-gate-card]").forEach((card) => {
+      card.classList.toggle(
+        "is-default",
+        card.getAttribute("data-gate-card") === selectedActionId
+      );
+    });
+
+    document.querySelectorAll("[data-gate-status]").forEach((statusElement) => {
+      const actionId = statusElement.getAttribute("data-gate-status");
+      if (!actionId) return;
+
+      let label = "Not default";
+      let className = "badge";
+      if (actionId === LLM_REVIEWED_ACCESS_GATE_ACTION_ID && !hasReadyLlmProviderConfig()) {
+        label = "Needs setup";
+        className = "badge warning";
+      }
+      if (actionId === selectedActionId) {
+        const needsSetup =
+          actionId === LLM_REVIEWED_ACCESS_GATE_ACTION_ID && !hasReadyLlmProviderConfig();
+        label = needsSetup ? "Default - needs setup" : "Default";
+        className = needsSetup ? "badge warning" : "badge default";
+      }
+
+      statusElement.textContent = label;
+      statusElement.className = className;
+      statusElement.hidden = false;
+    });
+
+    document.querySelectorAll("[data-set-default]").forEach((button) => {
+      const actionId = button.getAttribute("data-set-default");
+      const selected = actionId === selectedActionId;
+      button.textContent = selected ? "Default" : "Set as default";
+      button.disabled = selected;
+    });
+
     updateLlmConfigStatus();
   };
 
@@ -310,7 +357,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           textarea.value = storedBlockedSites.join("\n");
           minutesInput.value = String(syncData.tempAllowMinutes);
-          renderAccessGateOptions(syncData.accessGateActionId);
+          initializeDefaultGateActionId(syncData.accessGateActionId);
           showRedirectCheckbox.checked = syncData.showCareerTrackerRedirect !== false;
           showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
           redirectInput.value = syncData.redirectUrl;
@@ -325,7 +372,7 @@ document.addEventListener("DOMContentLoaded", () => {
             typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
           updateSitesSummary();
           updateReviewRangeLabels();
-          updateGateSettingsVisibility();
+          updateGateLibraryState();
         });
       }
     );
@@ -335,22 +382,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   textarea.addEventListener("input", updateSitesSummary);
   cleanSitesBtn.addEventListener("click", cleanSitesInput);
-  accessGateSelect.addEventListener("change", updateGateSettingsVisibility);
-  openAiApiKeyInput.addEventListener("input", updateLlmConfigStatus);
-  openAiModelInput.addEventListener("input", updateLlmConfigStatus);
-  llmProviderSelect.addEventListener("change", updateLlmConfigStatus);
+  openAiApiKeyInput.addEventListener("input", updateGateLibraryState);
+  openAiModelInput.addEventListener("input", updateGateLibraryState);
+  llmProviderSelect.addEventListener("change", updateGateLibraryState);
   llmReviewStrictnessInput.addEventListener("input", updateReviewRangeLabels);
   llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
+
+  document.querySelectorAll("[data-set-default]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const actionId = button.getAttribute("data-set-default");
+      if (!actionId || !getAccessGateActionIds().has(actionId)) return;
+      setDefaultGateActionId(actionId, { openDetails: true });
+    });
+  });
 
   saveBtn.addEventListener("click", () => {
     const normalizedSites = normalizeBlockedSites(textarea.value).sites;
     textarea.value = normalizedSites.join("\n");
     updateSitesSummary();
 
-    const selectedAccessGateActionId = normalizeAccessGateActionId(accessGateSelect.value);
-    const accessGateActionId = getAccessGateActionIds().has(selectedAccessGateActionId)
-      ? selectedAccessGateActionId
-      : DEFAULT_ACCESS_GATE_ACTION_ID;
+    const accessGateActionId = normalizeDefaultGateActionId(defaultGateActionId);
     const minutes = parseInt(minutesInput.value, 10) || 30;
     const redirectUrl = redirectInput.value.trim();
     const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;
@@ -390,8 +441,8 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
           }
 
-          renderAccessGateOptions(accessGateActionId);
-          updateGateSettingsVisibility();
+          setDefaultGateActionId(accessGateActionId);
+          updateGateLibraryState();
           setStatus("Saved.", "hint ok");
           window.setTimeout(() => setStatus(""), 2500);
         });

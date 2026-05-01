@@ -227,8 +227,8 @@ Prompt goals:
 - [ ] Consider an exception/allowlist mechanism for cases like blocking
       `youtube.com` while allowing `music.youtube.com`.
 - [x] Show saved-state feedback after changes.
-- [x] Group settings into clear sections: blocked sites, access flow, and
-      selected gate settings.
+- [x] Group settings into clear sections: blocked sites, access defaults, block
+      page, and gate library.
 
 ## Browser Support
 

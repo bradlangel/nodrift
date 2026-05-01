@@ -8,16 +8,21 @@
     :root {
       color-scheme: light;
       --bg: #f6f7f9;
+      --panel: #ffffff;
       --border: #d6dde8;
       --border-soft: #e7ebf1;
       --text: #111827;
       --muted: #566273;
       --accent: #176b5d;
+      --accent-soft: #dff3ee;
       --accent-strong: #0f5a4d;
       --button-soft: #e7eef6;
       --button-soft-text: #1f344d;
       --warning: #8a4b00;
+      --warning-bg: #fff7ed;
       --ok: #075e48;
+      --ok-bg: #ecfdf5;
+      --neutral-bg: #eef2f7;
       --danger: #a12626;
     }
 
@@ -46,6 +51,7 @@
 
     h1,
     h2,
+    h3,
     p {
       margin-top: 0;
     }
@@ -60,6 +66,12 @@
       font-size: 1.02rem;
       line-height: 1.25;
       margin-bottom: 12px;
+    }
+
+    h3 {
+      font-size: 0.98rem;
+      line-height: 1.25;
+      margin-bottom: 4px;
     }
 
     .chrome-note,
@@ -162,6 +174,76 @@
       gap: 10px;
     }
 
+    .gate-list,
+    .llm-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .gate-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 13px;
+    }
+
+    .gate-card.is-default {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    .gate-card-header {
+      display: grid;
+      gap: 10px;
+    }
+
+    .gate-meta {
+      display: grid;
+      gap: 8px;
+    }
+
+    .badge {
+      align-self: start;
+      background: var(--neutral-bg);
+      border-radius: 999px;
+      color: var(--muted);
+      display: inline-flex;
+      font-size: 0.78rem;
+      font-weight: 800;
+      justify-self: start;
+      line-height: 1;
+      padding: 6px 9px;
+    }
+
+    .badge.default {
+      background: var(--ok-bg);
+      color: var(--ok);
+    }
+
+    .badge.warning {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+
+    .gate-details {
+      border-top: 1px solid var(--border-soft);
+      margin-top: 12px;
+      padding-top: 8px;
+    }
+
+    .gate-details summary {
+      cursor: pointer;
+      font-weight: 800;
+      min-height: 34px;
+      padding: 6px 0;
+    }
+
+    .gate-details-body {
+      display: grid;
+      gap: 12px;
+      padding-top: 8px;
+    }
+
     .range-row {
       align-items: center;
       display: grid;
@@ -174,15 +256,6 @@
       font-weight: 800;
       min-width: 94px;
       text-align: right;
-    }
-
-    .gate-settings[hidden] {
-      display: none;
-    }
-
-    .llm-panel {
-      display: grid;
-      gap: 12px;
     }
 
     .save-row {
@@ -208,6 +281,11 @@
       padding: 9px 15px;
     }
 
+    button:disabled {
+      cursor: default;
+      opacity: 0.75;
+    }
+
     .primary-button {
       background: var(--accent);
       color: #ffffff;
@@ -224,7 +302,7 @@
 
     @media (min-width: 640px) {
       main {
-        width: min(100% - 40px, 820px);
+        width: min(100% - 40px, 860px);
         padding: 28px 0 40px;
       }
 
@@ -249,6 +327,16 @@
 
       .save-row {
         justify-items: end;
+      }
+
+      .gate-card-header {
+        align-items: start;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .gate-meta {
+        justify-items: end;
+        min-width: 132px;
       }
     }
   </style>
@@ -277,25 +365,23 @@
         </div>
       </section>
 
-      <section class="settings-panel" aria-labelledby="access-heading">
-        <h2 id="access-heading">Access Flow</h2>
-        <div class="form-grid">
+      <section class="settings-panel" aria-labelledby="access-defaults-heading">
+        <h2 id="access-defaults-heading">Access Defaults</h2>
+        <div class="field-row">
           <div class="field">
-            <label for="access-gate-action">Primary action</label>
-            <select id="access-gate-action"></select>
+            <label for="temp-allow-minutes">Temporary allow minutes</label>
+            <input type="number" id="temp-allow-minutes" value="30" min="1" />
           </div>
+          <label class="checkbox-row">
+            <input type="checkbox" id="grayscale-temp-allow" checked />
+            <span>Grayscale during temporary allow</span>
+          </label>
+        </div>
+      </section>
 
-          <div class="field-row">
-            <div class="field">
-              <label for="temp-allow-minutes">Temporary allow minutes</label>
-              <input type="number" id="temp-allow-minutes" value="30" min="1" />
-            </div>
-            <label class="checkbox-row">
-              <input type="checkbox" id="grayscale-temp-allow" checked />
-              <span>Grayscale during temporary allow</span>
-            </label>
-          </div>
-
+      <section class="settings-panel" aria-labelledby="block-page-heading">
+        <h2 id="block-page-heading">Block Page</h2>
+        <div class="form-grid">
           <label class="checkbox-row">
             <input type="checkbox" id="show-career-tracker-redirect" checked />
             <span>Show Career Tracker redirect</span>
@@ -319,48 +405,106 @@
         </div>
       </section>
 
-      <section id="llm-gate-settings" class="settings-panel gate-settings" aria-labelledby="llm-heading" hidden>
-        <h2 id="llm-heading">LLM Review</h2>
-        <div class="llm-panel">
-          <p class="hint">Privacy: request purpose, requested URL/domain, requested minutes, time/day, and small local stats context are sent to your provider.</p>
-          <div class="field-row">
-            <div class="field">
-              <label for="llm-provider">Provider</label>
-              <select id="llm-provider">
-                <option value="openai">OpenAI</option>
-                <option value="chrome-local">Chrome local LLM</option>
-              </select>
-            </div>
-            <div class="field" id="openai-model-field">
-              <label for="openai-model">OpenAI model</label>
-              <input type="text" id="openai-model" placeholder="gpt-5-nano" />
-            </div>
-          </div>
-
-          <div class="field-row">
-            <div class="field">
-              <label for="llm-review-strictness">Purpose scrutiny</label>
-              <div class="range-row">
-                <input type="range" id="llm-review-strictness" min="1" max="5" step="1" value="3" />
-                <span id="llm-review-strictness-label" class="range-value">Balanced</span>
+      <section class="settings-panel" aria-labelledby="gate-library-heading">
+        <h2 id="gate-library-heading">Gate Library</h2>
+        <p class="hint">Choose the default gate shown on the block page.</p>
+        <div class="gate-list">
+          <article class="gate-card" data-gate-card="temporary-allow-domain">
+            <div class="gate-card-header">
+              <div>
+                <h3>One-click Temporary Allow</h3>
+                <p class="hint">Fast domain access using the shared access defaults.</p>
+              </div>
+              <div class="gate-meta">
+                <span class="badge" data-gate-status="temporary-allow-domain"></span>
+                <button type="button" class="secondary-button" data-set-default="temporary-allow-domain">Set as default</button>
               </div>
             </div>
-            <div class="field">
-              <label for="llm-leisure-allowance">Leisure allowance</label>
-              <div class="range-row">
-                <input type="range" id="llm-leisure-allowance" min="1" max="5" step="1" value="3" />
-                <span id="llm-leisure-allowance-label" class="range-value">Planned</span>
+            <details class="gate-details" data-gate-details="temporary-allow-domain">
+              <summary>Details</summary>
+              <div class="gate-details-body">
+                <p class="hint">Uses the default temporary allow duration and grayscale setting above.</p>
+              </div>
+            </details>
+          </article>
+
+          <article class="gate-card" data-gate-card="local-intent-request-access">
+            <div class="gate-card-header">
+              <div>
+                <h3>Local Intent Check</h3>
+                <p class="hint">A lightweight local review with no provider setup.</p>
+              </div>
+              <div class="gate-meta">
+                <span class="badge" data-gate-status="local-intent-request-access"></span>
+                <button type="button" class="secondary-button" data-set-default="local-intent-request-access">Set as default</button>
               </div>
             </div>
-          </div>
+            <details class="gate-details" data-gate-details="local-intent-request-access">
+              <summary>Details</summary>
+              <div class="gate-details-body">
+                <p class="hint">Uses the requested purpose, requested duration, current site, and local stats. No setup needed.</p>
+              </div>
+            </details>
+          </article>
 
-          <div class="field" id="openai-api-key-field">
-            <label for="openai-api-key">OpenAI API key</label>
-            <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
-            <p class="hint">Stored locally in this browser.</p>
-          </div>
+          <article class="gate-card" data-gate-card="llm-reviewed-request-access">
+            <div class="gate-card-header">
+              <div>
+                <h3>LLM-reviewed Request</h3>
+                <p class="hint">Provider-reviewed access with local stats context.</p>
+              </div>
+              <div class="gate-meta">
+                <span class="badge" data-gate-status="llm-reviewed-request-access">Needs setup</span>
+                <button type="button" class="secondary-button" data-set-default="llm-reviewed-request-access">Set as default</button>
+              </div>
+            </div>
+            <details class="gate-details" data-gate-details="llm-reviewed-request-access">
+              <summary>Settings</summary>
+              <div class="gate-details-body">
+                <p class="hint">Privacy: request purpose, requested URL/domain, requested minutes, time/day, and small local stats context are sent to your provider.</p>
+                <div class="llm-panel">
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="llm-provider">Provider</label>
+                      <select id="llm-provider">
+                        <option value="openai">OpenAI</option>
+                        <option value="chrome-local">Chrome local LLM</option>
+                      </select>
+                    </div>
+                    <div class="field" id="openai-model-field">
+                      <label for="openai-model">OpenAI model</label>
+                      <input type="text" id="openai-model" placeholder="gpt-5-nano" />
+                    </div>
+                  </div>
 
-          <p id="llm-config-status" class="hint warning" aria-live="polite"></p>
+                  <div class="field-row">
+                    <div class="field">
+                      <label for="llm-review-strictness">Purpose scrutiny</label>
+                      <div class="range-row">
+                        <input type="range" id="llm-review-strictness" min="1" max="5" step="1" value="3" />
+                        <span id="llm-review-strictness-label" class="range-value">Balanced</span>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label for="llm-leisure-allowance">Leisure allowance</label>
+                      <div class="range-row">
+                        <input type="range" id="llm-leisure-allowance" min="1" max="5" step="1" value="3" />
+                        <span id="llm-leisure-allowance-label" class="range-value">Planned</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="field" id="openai-api-key-field">
+                    <label for="openai-api-key">OpenAI API key</label>
+                    <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
+                    <p class="hint">Stored locally in this browser.</p>
+                  </div>
+
+                  <p id="llm-config-status" class="hint warning" aria-live="polite"></p>
+                </div>
+              </div>
+            </details>
+          </article>
         </div>
       </section>
 
