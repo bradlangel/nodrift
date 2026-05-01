@@ -29,8 +29,40 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Refactor toward modular access gates and actions before adding more gate
       types.
 - [x] Keep the default block page to one visible temporary-allow action.
-- [ ] Improve the options page styling and blocked-site editing experience.
-- [ ] Add Firefox support once the core Chrome flow feels solid.
+- [x] Improve the options page styling and blocked-site editing experience.
+- [ ] Keep v1 Chrome-only and document that clearly.
+- [ ] Add Firefox support after the Chrome v1 loop feels solid.
+
+## Gate Backlog
+
+These are post-v1 or v1.x gate ideas to explore now that the extension has a
+compiled-in gate module shape. The goal is playful, configurable friction, not a
+default wall of chores.
+
+- Random gate: choose from enabled gates with weights, cooldowns, and difficulty
+  settings.
+- If-then implementation intention gate: ask the user to define a concrete
+  "if this happens, then I will do that" plan before access.
+- Accomplishment threshold gate: use an LLM to judge whether today's configured
+  goals or self-reported accomplishments are enough for access.
+- GitHub contribution gate: check commits, pull requests, reviews, or issues
+  against a daily threshold.
+- LLM/work artifact gate: ask for a summary or evidence of useful work completed
+  today and have an LLM judge whether it clears the user's bar.
+- LeetCode/problem-solving gate: require a coding challenge or short algorithm
+  exercise before access.
+- Riddle or logic-puzzle gate: lightweight novelty friction for short access
+  windows.
+- Tiny debugging gate: present a short broken snippet and ask the user to spot
+  or fix the bug.
+- Reading comprehension gate: show a short passage and ask one question before
+  granting access.
+- Typing accuracy gate: require a short focused typing prompt with an error
+  threshold.
+- Cooldown timer gate: require a short intentional pause before the request can
+  continue.
+- Daily budget gate: spend from a configured leisure/access budget and make the
+  remaining budget visible.
 
 ## Order of Operations
 
@@ -188,15 +220,15 @@ Prompt goals:
 
 ## Options Page Improvements
 
-- [ ] Normalize pasted URLs into domains where possible.
-- [ ] Remove duplicate blocked-site entries.
-- [ ] Warn about overlapping entries such as `reddit.com` and
+- [x] Normalize pasted URLs into domains where possible.
+- [x] Remove duplicate blocked-site entries.
+- [x] Warn about overlapping entries such as `reddit.com` and
       `old.reddit.com`.
 - [ ] Consider an exception/allowlist mechanism for cases like blocking
       `youtube.com` while allowing `music.youtube.com`.
-- [ ] Show saved-state feedback after changes.
-- [ ] Group settings into clear sections: blocked sites, temporary access,
-      redirect, stats, and advanced settings.
+- [x] Show saved-state feedback after changes.
+- [x] Group settings into clear sections: blocked sites, access flow, and
+      selected gate settings.
 
 ## Browser Support
 

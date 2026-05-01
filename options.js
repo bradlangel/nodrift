@@ -38,15 +38,18 @@ const LEISURE_ALLOWANCE_LABELS = {
 const FALLBACK_ACCESS_GATE_ACTIONS = [
   {
     id: DEFAULT_ACCESS_GATE_ACTION_ID,
-    label: "One-click temporary allow",
+    label: "Temporarily Allow",
+    settingsLabel: "One-click temporary allow",
   },
   {
     id: LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
-    label: "Local intent check (fallback/test)",
+    label: "Check intent",
+    settingsLabel: "Local intent check",
   },
   {
     id: LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
     label: "LLM-reviewed request",
+    settingsLabel: "LLM-reviewed request",
   },
 ];
 
@@ -74,8 +77,66 @@ const normalizeOpenAiModel = (model) => {
   return trimmed || DEFAULT_OPENAI_MODEL;
 };
 
+const singularize = (count, singular, plural = `${singular}s`) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
+const normalizeBlockedSiteEntry = (entry) => {
+  const trimmed = entry.trim();
+  if (!trimmed) return null;
+
+  const withoutWildcard = trimmed.replace(/^\*\./, "");
+  const candidate = withoutWildcard.includes("://")
+    ? withoutWildcard
+    : `https://${withoutWildcard}`;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.hostname) return parsed.hostname.toLowerCase();
+  } catch {
+    // Fall back to the trimmed value below.
+  }
+
+  return withoutWildcard.split(/[/?#]/)[0].toLowerCase();
+};
+
+const normalizeBlockedSites = (value) => {
+  const seen = new Set();
+  let duplicateCount = 0;
+  const sites = [];
+
+  String(value)
+    .split("\n")
+    .map(normalizeBlockedSiteEntry)
+    .filter(Boolean)
+    .forEach((site) => {
+      if (seen.has(site)) {
+        duplicateCount += 1;
+        return;
+      }
+      seen.add(site);
+      sites.push(site);
+    });
+
+  return { sites, duplicateCount };
+};
+
+const findOverlappingSites = (sites) => {
+  const overlaps = [];
+  sites.forEach((site) => {
+    sites.forEach((candidateParent) => {
+      if (site === candidateParent) return;
+      if (site.endsWith(`.${candidateParent}`)) {
+        overlaps.push(`${site} under ${candidateParent}`);
+      }
+    });
+  });
+  return overlaps;
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   const textarea = document.getElementById("sites");
+  const sitesSummary = document.getElementById("sites-summary");
+  const cleanSitesBtn = document.getElementById("clean-sites");
   const saveBtn = document.getElementById("save");
   const minutesInput = document.getElementById("temp-allow-minutes");
   const redirectInput = document.getElementById("redirect-url");
@@ -84,8 +145,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const accessGateSelect = document.getElementById("access-gate-action");
   const showRedirectCheckbox = document.getElementById("show-career-tracker-redirect");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
+  const llmGateSettings = document.getElementById("llm-gate-settings");
   const llmProviderSelect = document.getElementById("llm-provider");
-  const llmReviewStrictnessSelect = document.getElementById("llm-review-strictness");
+  const llmReviewStrictnessInput = document.getElementById("llm-review-strictness");
   const llmLeisureAllowanceInput = document.getElementById("llm-leisure-allowance");
   const llmReviewStrictnessLabel = document.getElementById("llm-review-strictness-label");
   const llmLeisureAllowanceLabel = document.getElementById("llm-leisure-allowance-label");
@@ -95,8 +157,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const openAiApiKeyField = document.getElementById("openai-api-key-field");
   const llmConfigStatus = document.getElementById("llm-config-status");
   const saveStatus = document.getElementById("save-status");
+
   if (
     !(textarea instanceof HTMLTextAreaElement) ||
+    !(cleanSitesBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
     !(minutesInput instanceof HTMLInputElement) ||
     !(redirectInput instanceof HTMLInputElement) ||
@@ -105,8 +169,9 @@ document.addEventListener("DOMContentLoaded", () => {
     !(accessGateSelect instanceof HTMLSelectElement) ||
     !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
+    !(llmGateSettings instanceof HTMLElement) ||
     !(llmProviderSelect instanceof HTMLSelectElement) ||
-    !(llmReviewStrictnessSelect instanceof HTMLInputElement) ||
+    !(llmReviewStrictnessInput instanceof HTMLInputElement) ||
     !(llmLeisureAllowanceInput instanceof HTMLInputElement) ||
     !(openAiModelInput instanceof HTMLInputElement) ||
     !(openAiApiKeyInput instanceof HTMLInputElement)
@@ -114,9 +179,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  const setStatus = (message) => {
+  const setStatus = (message, className = "") => {
     if (!saveStatus) return;
     saveStatus.textContent = message;
+    saveStatus.className = className;
   };
 
   let accessGateActions = FALLBACK_ACCESS_GATE_ACTIONS;
@@ -124,19 +190,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const getAccessGateActionIds = () =>
     new Set(accessGateActions.map((action) => action.id));
 
-  const renderAccessGateOptions = () => {
-    const currentValue = accessGateSelect.value || DEFAULT_ACCESS_GATE_ACTION_ID;
+  const renderAccessGateOptions = (preferredActionId = accessGateSelect.value) => {
+    const normalizedPreferred = normalizeAccessGateActionId(preferredActionId);
+    const validActionIds = getAccessGateActionIds();
+    const selectedActionId = validActionIds.has(normalizedPreferred)
+      ? normalizedPreferred
+      : DEFAULT_ACCESS_GATE_ACTION_ID;
+
     accessGateSelect.innerHTML = "";
     accessGateActions.forEach((action) => {
       const option = document.createElement("option");
       option.value = action.id;
-      option.textContent = action.settingsLabel || action.label || action.description || action.id;
+      option.textContent = action.settingsLabel || action.label || action.id;
       accessGateSelect.appendChild(option);
     });
 
-    accessGateSelect.value = getAccessGateActionIds().has(currentValue)
-      ? currentValue
-      : DEFAULT_ACCESS_GATE_ACTION_ID;
+    accessGateSelect.value = selectedActionId;
   };
 
   const loadAccessGateActions = (next) => {
@@ -144,15 +213,39 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!chrome.runtime.lastError && response?.ok && Array.isArray(response.actions)) {
         accessGateActions = response.actions;
       }
-      renderAccessGateOptions();
       next();
     });
+  };
+
+  const updateSitesSummary = () => {
+    if (!sitesSummary) return;
+    const { sites, duplicateCount } = normalizeBlockedSites(textarea.value);
+    const overlaps = findOverlappingSites(sites);
+    const parts = [singularize(sites.length, "domain")];
+
+    if (duplicateCount > 0) {
+      parts.push(`${singularize(duplicateCount, "duplicate")} will be removed`);
+    }
+    if (overlaps.length > 0) {
+      parts.push(`${singularize(overlaps.length, "overlap")} found`);
+    }
+
+    sitesSummary.textContent = parts.join(". ");
+    sitesSummary.className = duplicateCount > 0 || overlaps.length > 0 ? "hint warning" : "hint";
+  };
+
+  const cleanSitesInput = () => {
+    const { sites, duplicateCount } = normalizeBlockedSites(textarea.value);
+    textarea.value = sites.join("\n");
+    updateSitesSummary();
+    setStatus(duplicateCount > 0 ? "List cleaned." : "List normalized.");
   };
 
   const updateLlmConfigStatus = () => {
     if (!llmConfigStatus) return;
     const provider = normalizeLlmProvider(llmProviderSelect.value);
     const isChromeLocal = provider === "chrome-local";
+
     if (openAiModelField) openAiModelField.hidden = isChromeLocal;
     if (openAiApiKeyField) openAiApiKeyField.hidden = isChromeLocal;
 
@@ -172,13 +265,18 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    llmConfigStatus.textContent =
-      "Add an API key and model before selecting LLM-reviewed request on the block page.";
+    llmConfigStatus.textContent = "Add an API key and model before using LLM-reviewed request.";
     llmConfigStatus.className = "hint warning";
   };
 
+  const updateGateSettingsVisibility = () => {
+    const selectedActionId = normalizeAccessGateActionId(accessGateSelect.value);
+    llmGateSettings.hidden = selectedActionId !== LLM_REVIEWED_ACCESS_GATE_ACTION_ID;
+    updateLlmConfigStatus();
+  };
+
   const updateReviewRangeLabels = () => {
-    const strictness = normalizeLlmReviewStrictness(llmReviewStrictnessSelect.value);
+    const strictness = normalizeLlmReviewStrictness(llmReviewStrictnessInput.value);
     const leisure = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
     if (llmReviewStrictnessLabel) {
       llmReviewStrictnessLabel.textContent = formatRangeLabel(strictness, PURPOSE_SCRUTINY_LABELS);
@@ -206,12 +304,13 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       (syncData) => {
         chrome.storage.local.get({ openAiApiKey: "" }, (localData) => {
-          textarea.value = syncData.blockedSites.join("\n");
+          const storedBlockedSites = Array.isArray(syncData.blockedSites)
+            ? syncData.blockedSites
+            : DEFAULT_BLOCKED_SITES;
+
+          textarea.value = storedBlockedSites.join("\n");
           minutesInput.value = String(syncData.tempAllowMinutes);
-          const accessGateActionId = normalizeAccessGateActionId(syncData.accessGateActionId);
-          accessGateSelect.value = getAccessGateActionIds().has(accessGateActionId)
-            ? accessGateActionId
-            : DEFAULT_ACCESS_GATE_ACTION_ID;
+          renderAccessGateOptions(syncData.accessGateActionId);
           showRedirectCheckbox.checked = syncData.showCareerTrackerRedirect !== false;
           showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
           redirectInput.value = syncData.redirectUrl;
@@ -219,50 +318,54 @@ document.addEventListener("DOMContentLoaded", () => {
           grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
 
           llmProviderSelect.value = normalizeLlmProvider(syncData.llmProvider);
-          llmReviewStrictnessSelect.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
+          llmReviewStrictnessInput.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
           llmLeisureAllowanceInput.value = normalizeLlmReviewStrictness(syncData.llmLeisureAllowance);
           openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
-          openAiApiKeyInput.value = typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
+          openAiApiKeyInput.value =
+            typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
+          updateSitesSummary();
           updateReviewRangeLabels();
-          updateLlmConfigStatus();
+          updateGateSettingsVisibility();
         });
       }
     );
   };
 
-  renderAccessGateOptions();
   loadAccessGateActions(loadSettings);
 
+  textarea.addEventListener("input", updateSitesSummary);
+  cleanSitesBtn.addEventListener("click", cleanSitesInput);
+  accessGateSelect.addEventListener("change", updateGateSettingsVisibility);
   openAiApiKeyInput.addEventListener("input", updateLlmConfigStatus);
   openAiModelInput.addEventListener("input", updateLlmConfigStatus);
   llmProviderSelect.addEventListener("change", updateLlmConfigStatus);
-  llmReviewStrictnessSelect.addEventListener("input", updateReviewRangeLabels);
+  llmReviewStrictnessInput.addEventListener("input", updateReviewRangeLabels);
   llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
 
   saveBtn.addEventListener("click", () => {
-    const sites = textarea.value
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const minutes = parseInt(minutesInput.value, 10) || 30;
+    const normalizedSites = normalizeBlockedSites(textarea.value).sites;
+    textarea.value = normalizedSites.join("\n");
+    updateSitesSummary();
+
     const selectedAccessGateActionId = normalizeAccessGateActionId(accessGateSelect.value);
     const accessGateActionId = getAccessGateActionIds().has(selectedAccessGateActionId)
       ? selectedAccessGateActionId
       : DEFAULT_ACCESS_GATE_ACTION_ID;
+    const minutes = parseInt(minutesInput.value, 10) || 30;
     const redirectUrl = redirectInput.value.trim();
     const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;
     const grayscaleOnTemporaryAllow = Boolean(grayscaleCheckbox.checked);
     const showCareerTrackerRedirect = Boolean(showRedirectCheckbox.checked);
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
     const llmProvider = normalizeLlmProvider(llmProviderSelect.value);
-    const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessSelect.value);
+    const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessInput.value);
     const llmLeisureAllowance = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
     const openAiModel = normalizeOpenAiModel(openAiModelInput.value);
     const openAiApiKey = openAiApiKeyInput.value.trim();
 
     chrome.storage.sync.set(
       {
-        blockedSites: sites,
+        blockedSites: normalizedSites,
         tempAllowMinutes: minutes,
         accessGateActionId,
         showCareerTrackerRedirect,
@@ -277,19 +380,20 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       () => {
         if (chrome.runtime.lastError) {
-          setStatus("Could not save settings.");
+          setStatus("Could not save settings.", "hint danger");
           return;
         }
 
         chrome.storage.local.set({ openAiApiKey }, () => {
           if (chrome.runtime.lastError) {
-            setStatus("Saved most settings, but API key save failed.");
+            setStatus("Saved most settings, but API key save failed.", "hint warning");
             return;
           }
 
-          setStatus("Saved.");
+          renderAccessGateOptions(accessGateActionId);
+          updateGateSettingsVisibility();
+          setStatus("Saved.", "hint ok");
           window.setTimeout(() => setStatus(""), 2500);
-          updateLlmConfigStatus();
         });
       }
     );
