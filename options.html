@@ -112,6 +112,11 @@
       gap: 12px;
     }
 
+    .access-defaults {
+      display: grid;
+      gap: 12px;
+    }
+
     label,
     .label {
       font-weight: 750;
@@ -244,6 +249,59 @@
       padding-top: 8px;
     }
 
+    fieldset {
+      border: 0;
+      margin: 0;
+      padding: 0;
+    }
+
+    legend {
+      margin-bottom: 8px;
+      padding: 0;
+    }
+
+    .provider-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .provider-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .provider-card.is-selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    .provider-choice {
+      align-items: flex-start;
+      display: flex;
+      gap: 10px;
+    }
+
+    .provider-choice input {
+      flex: 0 0 auto;
+      margin-top: 4px;
+    }
+
+    .provider-title {
+      display: block;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .provider-config {
+      display: grid;
+      gap: 12px;
+      padding-left: 24px;
+    }
+
     .range-row {
       align-items: center;
       display: grid;
@@ -367,7 +425,7 @@
 
       <section class="settings-panel" aria-labelledby="access-defaults-heading">
         <h2 id="access-defaults-heading">Access Defaults</h2>
-        <div class="field-row">
+        <div class="access-defaults">
           <div class="field">
             <label for="temp-allow-minutes">Temporary allow minutes</label>
             <input type="number" id="temp-allow-minutes" value="30" min="1" />
@@ -463,19 +521,44 @@
               <div class="gate-details-body">
                 <p class="hint">Privacy: request purpose, requested URL/domain, requested minutes, time/day, and small local stats context are sent to your provider.</p>
                 <div class="llm-panel">
-                  <div class="field-row">
-                    <div class="field">
-                      <label for="llm-provider">Provider</label>
-                      <select id="llm-provider">
-                        <option value="openai">OpenAI</option>
-                        <option value="chrome-local">Chrome local LLM</option>
-                      </select>
+                  <fieldset>
+                    <legend class="label">Default LLM provider</legend>
+                    <div class="provider-list">
+                      <article class="provider-card" data-provider-card="openai">
+                        <label class="provider-choice" for="llm-provider-openai">
+                          <input type="radio" id="llm-provider-openai" name="llm-provider" value="openai" />
+                          <span>
+                            <span class="provider-title">OpenAI</span>
+                            <span class="hint">Hosted review through your OpenAI API key.</span>
+                          </span>
+                        </label>
+                        <div class="provider-config" id="openai-provider-config">
+                          <div class="field" id="openai-model-field">
+                            <label for="openai-model">Model</label>
+                            <input type="text" id="openai-model" placeholder="gpt-5-nano" />
+                          </div>
+                          <div class="field" id="openai-api-key-field">
+                            <label for="openai-api-key">API key</label>
+                            <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
+                            <p class="hint">Stored locally in this browser.</p>
+                          </div>
+                        </div>
+                      </article>
+
+                      <article class="provider-card" data-provider-card="chrome-local">
+                        <label class="provider-choice" for="llm-provider-chrome-local">
+                          <input type="radio" id="llm-provider-chrome-local" name="llm-provider" value="chrome-local" />
+                          <span>
+                            <span class="provider-title">Chrome local LLM</span>
+                            <span class="hint">On-device review when Chrome Prompt API is available.</span>
+                          </span>
+                        </label>
+                        <div class="provider-config">
+                          <p class="hint">No API key or hosted provider account required.</p>
+                        </div>
+                      </article>
                     </div>
-                    <div class="field" id="openai-model-field">
-                      <label for="openai-model">OpenAI model</label>
-                      <input type="text" id="openai-model" placeholder="gpt-5-nano" />
-                    </div>
-                  </div>
+                  </fieldset>
 
                   <div class="field-row">
                     <div class="field">
@@ -492,12 +575,6 @@
                         <span id="llm-leisure-allowance-label" class="range-value">Planned</span>
                       </div>
                     </div>
-                  </div>
-
-                  <div class="field" id="openai-api-key-field">
-                    <label for="openai-api-key">OpenAI API key</label>
-                    <input type="password" id="openai-api-key" placeholder="sk-..." autocomplete="off" />
-                    <p class="hint">Stored locally in this browser.</p>
                   </div>
 
                   <p id="llm-config-status" class="hint warning" aria-live="polite"></p>

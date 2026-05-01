@@ -144,15 +144,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const grayscaleCheckbox = document.getElementById("grayscale-temp-allow");
   const showRedirectCheckbox = document.getElementById("show-career-tracker-redirect");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
-  const llmProviderSelect = document.getElementById("llm-provider");
+  const llmProviderInputs = Array.from(
+    document.querySelectorAll('input[name="llm-provider"]')
+  );
   const llmReviewStrictnessInput = document.getElementById("llm-review-strictness");
   const llmLeisureAllowanceInput = document.getElementById("llm-leisure-allowance");
   const llmReviewStrictnessLabel = document.getElementById("llm-review-strictness-label");
   const llmLeisureAllowanceLabel = document.getElementById("llm-leisure-allowance-label");
   const openAiModelInput = document.getElementById("openai-model");
   const openAiApiKeyInput = document.getElementById("openai-api-key");
-  const openAiModelField = document.getElementById("openai-model-field");
-  const openAiApiKeyField = document.getElementById("openai-api-key-field");
   const llmConfigStatus = document.getElementById("llm-config-status");
   const saveStatus = document.getElementById("save-status");
 
@@ -166,7 +166,8 @@ document.addEventListener("DOMContentLoaded", () => {
     !(grayscaleCheckbox instanceof HTMLInputElement) ||
     !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
-    !(llmProviderSelect instanceof HTMLSelectElement) ||
+    llmProviderInputs.length === 0 ||
+    !llmProviderInputs.every((input) => input instanceof HTMLInputElement) ||
     !(llmReviewStrictnessInput instanceof HTMLInputElement) ||
     !(llmLeisureAllowanceInput instanceof HTMLInputElement) ||
     !(openAiModelInput instanceof HTMLInputElement) ||
@@ -244,8 +245,30 @@ document.addEventListener("DOMContentLoaded", () => {
     setStatus(duplicateCount > 0 ? "List cleaned." : "List normalized.");
   };
 
+  const getSelectedLlmProvider = () => {
+    const selected = llmProviderInputs.find((input) => input.checked);
+    return normalizeLlmProvider(selected?.value);
+  };
+
+  const setSelectedLlmProvider = (provider) => {
+    const normalizedProvider = normalizeLlmProvider(provider);
+    llmProviderInputs.forEach((input) => {
+      input.checked = input.value === normalizedProvider;
+    });
+  };
+
+  const updateProviderCards = () => {
+    const provider = getSelectedLlmProvider();
+    document.querySelectorAll("[data-provider-card]").forEach((card) => {
+      card.classList.toggle(
+        "is-selected",
+        card.getAttribute("data-provider-card") === provider
+      );
+    });
+  };
+
   const hasReadyLlmProviderConfig = () => {
-    const provider = normalizeLlmProvider(llmProviderSelect.value);
+    const provider = getSelectedLlmProvider();
     if (provider === "chrome-local") return true;
     return (
       openAiApiKeyInput.value.trim().length > 0 &&
@@ -255,11 +278,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateLlmConfigStatus = () => {
     if (!llmConfigStatus) return;
-    const provider = normalizeLlmProvider(llmProviderSelect.value);
+    const provider = getSelectedLlmProvider();
     const isChromeLocal = provider === "chrome-local";
-
-    if (openAiModelField) openAiModelField.hidden = isChromeLocal;
-    if (openAiApiKeyField) openAiApiKeyField.hidden = isChromeLocal;
+    updateProviderCards();
 
     if (isChromeLocal) {
       llmConfigStatus.textContent =
@@ -364,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
           btnTextInput.value = syncData.redirectBtnText;
           grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
 
-          llmProviderSelect.value = normalizeLlmProvider(syncData.llmProvider);
+          setSelectedLlmProvider(syncData.llmProvider);
           llmReviewStrictnessInput.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
           llmLeisureAllowanceInput.value = normalizeLlmReviewStrictness(syncData.llmLeisureAllowance);
           openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
@@ -384,7 +405,9 @@ document.addEventListener("DOMContentLoaded", () => {
   cleanSitesBtn.addEventListener("click", cleanSitesInput);
   openAiApiKeyInput.addEventListener("input", updateGateLibraryState);
   openAiModelInput.addEventListener("input", updateGateLibraryState);
-  llmProviderSelect.addEventListener("change", updateGateLibraryState);
+  llmProviderInputs.forEach((input) => {
+    input.addEventListener("change", updateGateLibraryState);
+  });
   llmReviewStrictnessInput.addEventListener("input", updateReviewRangeLabels);
   llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
 
@@ -408,7 +431,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const grayscaleOnTemporaryAllow = Boolean(grayscaleCheckbox.checked);
     const showCareerTrackerRedirect = Boolean(showRedirectCheckbox.checked);
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
-    const llmProvider = normalizeLlmProvider(llmProviderSelect.value);
+    const llmProvider = getSelectedLlmProvider();
     const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessInput.value);
     const llmLeisureAllowance = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
     const openAiModel = normalizeOpenAiModel(openAiModelInput.value);
