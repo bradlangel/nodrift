@@ -84,6 +84,23 @@
       margin-bottom: 0;
     }
 
+    .page-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .page-nav a {
+      color: var(--accent);
+      font-size: 0.95rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .page-nav a:hover {
+      text-decoration: underline;
+    }
+
     .settings-stack {
       display: grid;
     }
@@ -406,6 +423,9 @@
         <h1>Settings</h1>
         <p class="chrome-note">Chrome-only for v1.</p>
       </div>
+      <nav class="page-nav" aria-label="Extension pages">
+        <a href="stats.html">Local stats</a>
+      </nav>
     </header>
 
     <div class="settings-stack">

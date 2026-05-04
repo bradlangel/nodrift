@@ -171,6 +171,12 @@ const configureStatsLink = () => {
   statsLink.href = chrome.runtime.getURL("stats.html");
 };
 
+const configureOptionsLink = () => {
+  const optionsLink = document.getElementById("options-link");
+  if (!(optionsLink instanceof HTMLAnchorElement)) return;
+  optionsLink.href = chrome.runtime.getURL("options.html");
+};
+
 const loadConfiguredActions = (callback) => {
   chrome.runtime.sendMessage({ type: "get-block-page-actions" }, (response) => {
     if (chrome.runtime.lastError || !response?.ok) {
@@ -270,6 +276,7 @@ const wireRedirectButton = () => {
 refreshStats();
 maybeRecordBlockedAttempt();
 configureStatsLink();
+configureOptionsLink();
 
 const wirePeekChatGptButton = () => {
   const peekBtn = document.getElementById("peek-chatgpt-btn");

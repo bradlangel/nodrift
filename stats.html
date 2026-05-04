@@ -49,6 +49,10 @@
       font-size: 0.95rem;
     }
 
+    .header-links a:hover {
+      text-decoration: underline;
+    }
+
     .card {
       background: #fff;
       border-radius: 8px;
@@ -150,9 +154,9 @@
   <main class="screen">
     <h1>📊 Local stats</h1>
     <p class="muted">Today: <span id="summary-date">-</span></p>
-    <nav class="header-links">
-      <a href="options.html">Open settings</a>
-      <a href="block.html">Back to block page</a>
+    <nav class="header-links" aria-label="Extension pages">
+      <a href="options.html">Settings</a>
+      <a href="block.html">Block page</a>
     </nav>
 
     <section class="card">

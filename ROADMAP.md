@@ -30,6 +30,9 @@ interrupt autopilot, but not a hard lock when access is legitimate.
       types.
 - [x] Keep the default block page to one visible temporary-allow action.
 - [x] Improve the options page styling and blocked-site editing experience.
+- [x] Add simple navigation between the block page, settings, and local stats.
+- [ ] Redesign the local stats page so it feels as intentional as the options
+      page.
 - [ ] Keep v1 Chrome-only and document that clearly.
 - [ ] Add Firefox support after the Chrome v1 loop feels solid.
 
@@ -80,7 +83,28 @@ then let each feature prove the next boundary.
    pipeline can handle more than domain-wide allows.
 5. [x] Add the local intent access gate as another decision source.
 6. Polish the options page once the real settings and stats surfaces are known.
-7. Add Firefox support after the core Chrome flow has settled.
+7. Connect the block page, settings page, and local stats dashboard with quiet
+   navigation.
+8. Bring the stats dashboard up to the options page's visual and information
+   architecture standard.
+9. Add Firefox support after the core Chrome flow has settled.
+
+## V1 Surface Polish
+
+Before v1, prioritize coherence across the existing surfaces over adding more
+gate types. The gate library architecture is ready for expansion, but v1 should
+make the current block, stats, and settings loop feel complete.
+
+- [x] Add quiet links from the block page to stats and settings.
+- [x] Add a local stats link from the settings page.
+- [x] Keep stats page navigation aligned with the other extension surfaces.
+- [ ] Redesign the stats page with the same mobile-first visual language as
+      settings.
+- [ ] Rework the stats page around clear questions: what happened today, which
+      sites are creating pressure, what access was granted, and what gates
+      decided recently.
+- [ ] Add final v1 readiness documentation for Chrome-only setup, permissions,
+      privacy/local data, and manual QA.
 
 ## Modular Architecture
 

@@ -115,12 +115,19 @@
     .stats strong {
       display: none;
     }
-    .stats-more-link {
+    .surface-links {
       margin-top: 10px;
-      display: inline-block;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .surface-links a {
       color: #2563eb;
       text-decoration: none;
       font-weight: 600;
+    }
+    .surface-links a:hover {
+      text-decoration: underline;
     }
     .request-access {
       margin-top: 14px;
@@ -277,7 +284,10 @@
       <ul id="stats-recent-decisions">
         <li>No decisions yet today.</li>
       </ul>
-      <a id="stats-more-link" class="stats-more-link" href="stats.html">See more stats</a>
+      <nav class="surface-links" aria-label="Extension pages">
+        <a id="stats-more-link" href="stats.html">More stats</a>
+        <a id="options-link" href="options.html">Settings</a>
+      </nav>
     </div>
   </div>
 
