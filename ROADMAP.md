@@ -18,7 +18,9 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
 - [x] Add a local intent-check "request access" flow that can pass, fail, or ask one follow-up.
-- [x] Add an explicitly configured LLM-reviewed request gate (OpenAI first), with fail-closed validation and one follow-up maximum.
+- [x] Add an explicitly configured LLM-reviewed request gate with OpenAI and
+      Chrome local provider paths, fail-closed validation, and one follow-up
+      maximum.
 - [ ] Add an LLM router provider so users can configure one router API key and
       choose among hosted models without changing extension code.
 - [ ] Add a developer-only local LLM review logger that records prompt payloads,
@@ -33,7 +35,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add simple navigation between the block page, settings, and local stats.
 - [x] Redesign the local stats page so it feels as intentional as the options
       page.
-- [ ] Keep v1 Chrome-only and document that clearly.
+- [x] Keep v1 Chrome-only and document that clearly.
 - [ ] Add Firefox support after the Chrome v1 loop feels solid.
 
 ## Gate Backlog
@@ -75,22 +77,22 @@ default wall of chores.
 Avoid a big architecture rewrite up front. Do a small foundation refactor first,
 then let each feature prove the next boundary.
 
-1. Light refactor: move shared URL/domain normalization, site matching,
+1. [x] Light refactor: move shared URL/domain normalization, site matching,
    temporary-allow destination logic, and storage constants into clearer
    modules.
-2. Add local stats for blocked attempts, temporary allows, used
+2. [x] Add local stats for blocked attempts, temporary allows, used
    temporary-allow minutes, and recent decisions.
-3. Refactor temporary allow into a decision/apply pipeline while preserving the
+3. [x] Refactor temporary allow into a decision/apply pipeline while preserving the
    current one-click behavior.
 4. [x] Add URL-scoped temporary access under the hood to prove the decision
    pipeline can handle more than domain-wide allows.
 5. [x] Add the local intent access gate as another decision source.
-6. Polish the options page once the real settings and stats surfaces are known.
-7. Connect the block page, settings page, and local stats dashboard with quiet
+6. [x] Polish the options page once the real settings and stats surfaces are known.
+7. [x] Connect the block page, settings page, and local stats dashboard with quiet
    navigation.
-8. Bring the stats dashboard up to the options page's visual and information
+8. [x] Bring the stats dashboard up to the options page's visual and information
    architecture standard.
-9. Add Firefox support after the core Chrome flow has settled.
+9. [ ] Add Firefox support after the core Chrome flow has settled.
 
 ## V1 Surface Polish
 
@@ -106,7 +108,7 @@ make the current block, stats, and settings loop feel complete.
 - [x] Rework the stats page around clear questions: what happened today, which
       sites are creating pressure, what access was granted, and what gates
       decided recently.
-- [ ] Add final v1 readiness documentation for Chrome-only setup, permissions,
+- [x] Add final v1 readiness documentation for Chrome-only setup, permissions,
       privacy/local data, and manual QA.
 
 ## Modular Architecture
@@ -159,13 +161,13 @@ Target decision contract:
 
 Refactor milestones:
 
-- [ ] Move shared URL/domain normalization into one utility module.
+- [x] Move shared URL/domain normalization into one utility module.
 - [x] Move temporary-access decisions behind a single decision/apply pipeline.
 - [x] Separate gate decision logic from browser API side effects.
 - [x] Make the block page render available actions from configuration while
       preserving one simple default action.
-- [ ] Add settings flags for compiled-in modules such as stats, ChatGPT peek,
-      and local intent access.
+- [x] Add settings controls for compiled-in gate defaults and optional
+      block-page actions such as ChatGPT peek and the redirect button.
 - [x] Add a short architecture note explaining how to add a new access gate.
 
 ## Local Stats
@@ -177,17 +179,20 @@ judgment or heavy analytics.
 - [x] Temporary allows today
 - [x] Approximate temporary-allow time used today
 - [x] Top blocked domains
-- [x] Recent access decisions
-- [ ] Refactor stats around a local OpenTelemetry-shaped event log as the
-      source of truth, with dashboard and gate context derived as projections.
-- [ ] Add structured decision categories such as work, learning, errands,
-      maintenance, planned leisure, unplanned leisure, and unclear.
-- [ ] Show per-site detail rows with blocked attempts, temporary allows, and
+- [x] Top temporary access domains
+- [x] Per-site detail rows with blocked attempts, temporary allows, and
       temporary-access time together.
-- [ ] Show access pressure, such as temporary allows compared with blocked
-      attempts, without moralizing the number.
-- [ ] Show compact category summaries and last-access-by-category/site context.
-- [ ] Feed richer per-site, category, and recent timeline context into LLM
+- [x] Access pressure, such as temporary allows compared with blocked attempts,
+      without moralizing the number.
+- [x] Gate usage by access decision source.
+- [x] Recent access decisions
+- [x] Refactor stats around a local OpenTelemetry-shaped event log as the
+      source of truth, with dashboard and gate context derived as projections.
+- [x] Add structured decision categories such as work, learning, errands,
+      maintenance, planned leisure, unplanned leisure, and unclear.
+- [x] Keep category summaries internal for LLM context instead of making them a
+      v1 dashboard panel.
+- [x] Feed richer per-site, category, and recent timeline context into LLM
       review and other access gates.
 - [ ] Longest recent streak without temporary access
 
@@ -203,11 +208,13 @@ Implementation direction:
 - Do not add remote telemetry or OTLP export by default; the model is for
   structure, local debugging, and future portability.
 
-Possible placement:
+Current placement:
 
 - Block page: compact daily stats near the actions.
-- Popup: current site plus today's quick stats.
-- Options page: fuller history, reset/export controls, and per-site totals.
+- Popup: current site, active temporary grant details, temporary allow, and
+  re-block controls.
+- Local Stats page: fuller dashboard, reset controls, per-site totals, gate
+  usage, and recent decisions.
 
 ## Local Intent Check Gate
 
@@ -258,7 +265,10 @@ Prompt goals:
 - [x] Group settings into clear sections: blocked sites, access defaults, block
       page, and gate library.
 
-## Browser Support
+## Browser Support (Post-V1)
+
+v1 is Chrome-only. Keep Firefox work out of the v1 release loop unless this
+section is deliberately reprioritized.
 
 - [ ] Identify Chrome-specific APIs in the background worker.
 - [ ] Add a browser API compatibility wrapper where needed.
@@ -273,12 +283,12 @@ stable core loop:
 
 - [ ] The block, peek, request-access, temporary-allow, and re-block flows are
       reliable.
-- [ ] Local stats are useful without feeling noisy.
-- [ ] The options page feels intentional rather than experimental.
-- [ ] Chrome and Firefox support are either both working or the README clearly
+- [x] Local stats are useful without feeling noisy.
+- [x] The options page feels intentional rather than experimental.
+- [x] Chrome and Firefox support are either both working or the README clearly
       states Chrome-only support.
-- [ ] The README explains the philosophy, setup, permissions, and privacy model.
-- [ ] There is a small manual test checklist for release confidence.
+- [x] The README explains the philosophy, setup, permissions, and privacy model.
+- [x] There is a small manual test checklist for release confidence.
 
 Until then, keeping it in `the-lab` is useful. The roadmap still has product
 questions to answer, and the lab is a good place to let the shape settle before
