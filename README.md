@@ -7,6 +7,26 @@ configured distracting domains to a block page, offers a small set of deliberate
 access gates, and keeps local stats so patterns are visible without remote
 telemetry.
 
+## Architecture At A Glance
+
+The extension is built around compiled-in access gates. A gate is a small
+TypeScript module that owns its decision logic, block-page action metadata, and
+settings metadata. The central registry makes those gates available to Settings
+and to the block page, while the service worker handles Chrome API orchestration.
+
+```mermaid
+flowchart LR
+  Gates["Gate modules\nsrc/gates/*"] --> Registry["Gate registry"]
+  Registry --> Settings["Settings\nGate Library"]
+  Registry --> BlockPage["Block page\ndefault gate"]
+  BlockPage --> Decision["Access decision"]
+  Decision --> Chrome["Chrome APIs\nrules + storage + stats"]
+```
+
+Adding a new gate mostly means adding a folder under `src/gates/`, exporting its
+gate module, and registering it. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
+detailed registry flow and extension points.
+
 ## Quick Start
 
 Use the Node version pinned for this extension:
