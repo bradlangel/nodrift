@@ -97,6 +97,16 @@ export type CategoryStatsProjection = {
   temporaryAllowUsedSecondsToday: number;
 };
 
+export type GateUsageStatsProjection = {
+  accessRequestsToday: number;
+  temporaryAllowsToday: number;
+  requestDenialsToday: number;
+  followUpsToday: number;
+  grantedMinutesToday: number;
+  requestedMinutesToday: number;
+  temporaryAllowUsedSecondsToday: number;
+};
+
 export type LastAccessProjection = {
   timestamp: number;
   site: string | null;
@@ -114,6 +124,7 @@ export type DailyStatsProjection = {
   perSiteStatsToday: Record<string, SiteStatsProjection>;
   recentSiteDecisions: AccessDecision[];
   categorySummaryToday: Record<AccessDecisionCategory, CategoryStatsProjection>;
+  gateUsageSummaryToday: Record<AccessDecisionSource, GateUsageStatsProjection>;
   lastAccessByCategory: Partial<Record<AccessDecisionCategory, LastAccessProjection>>;
   lastAccessBySite: Record<string, LastAccessProjection>;
 };
@@ -126,6 +137,12 @@ const DECISION_CATEGORIES: AccessDecisionCategory[] = [
   "planned-leisure",
   "unplanned-leisure",
   "unclear",
+];
+
+const ACCESS_DECISION_SOURCES: AccessDecisionSource[] = [
+  "one-click",
+  "local-intent",
+  "llm-reviewed",
 ];
 
 const EVENT_NAMES: LocalStatsEventName[] = [
@@ -160,10 +177,25 @@ const createEmptyCategoryStats = (): CategoryStatsProjection => ({
   temporaryAllowUsedSecondsToday: 0,
 });
 
+const createEmptyGateUsageStats = (): GateUsageStatsProjection => ({
+  accessRequestsToday: 0,
+  temporaryAllowsToday: 0,
+  requestDenialsToday: 0,
+  followUpsToday: 0,
+  grantedMinutesToday: 0,
+  requestedMinutesToday: 0,
+  temporaryAllowUsedSecondsToday: 0,
+});
+
 const createEmptyCategorySummary = (): Record<AccessDecisionCategory, CategoryStatsProjection> =>
   Object.fromEntries(
     DECISION_CATEGORIES.map((category) => [category, createEmptyCategoryStats()])
   ) as Record<AccessDecisionCategory, CategoryStatsProjection>;
+
+const createEmptyGateUsageSummary = (): Record<AccessDecisionSource, GateUsageStatsProjection> =>
+  Object.fromEntries(
+    ACCESS_DECISION_SOURCES.map((source) => [source, createEmptyGateUsageStats()])
+  ) as Record<AccessDecisionSource, GateUsageStatsProjection>;
 
 export const createEmptyDailyStats = (dayKey: string): DailyBlockerStats => ({
   dayKey,
@@ -704,6 +736,7 @@ export const buildDailyStatsProjection = (
   currentSite: string | null = null
 ): DailyStatsProjection => {
   const categorySummaryToday = createEmptyCategorySummary();
+  const gateUsageSummaryToday = createEmptyGateUsageSummary();
   const perSiteStatsToday: Record<string, SiteStatsProjection> = Object.fromEntries(
     Object.entries(stats.siteStatsToday).map(([site, siteStats]) => [
       site,
@@ -724,20 +757,35 @@ export const buildDailyStatsProjection = (
   stats.events.forEach((event) => {
     const site = normalizeSiteKey(event.attributes.site);
     const eventCategory = normalizeDecisionCategory(event.attributes.category);
+    const eventSource = normalizeSource(event.attributes.source);
+    const source =
+      event.name === "access.used" && !eventSource && site
+        ? lastAccessBySite[site]?.source ?? null
+        : eventSource;
     const category =
       event.name === "access.used" && eventCategory === "unclear" && site
         ? lastAccessBySite[site]?.category ?? eventCategory
         : eventCategory;
     const categoryStats = categorySummaryToday[category];
+    const gateUsageStats = source ? gateUsageSummaryToday[source] : null;
     if (event.name === "access.requested") {
       categoryStats.accessRequestsToday += 1;
       categoryStats.requestedMinutesToday +=
         normalizePositiveInteger(event.attributes.requested_minutes) ?? 0;
+      if (gateUsageStats) {
+        gateUsageStats.accessRequestsToday += 1;
+        gateUsageStats.requestedMinutesToday +=
+          normalizePositiveInteger(event.attributes.requested_minutes) ?? 0;
+      }
     }
     if (event.name === "access.approved") {
       const grantedMinutes = normalizePositiveInteger(event.attributes.granted_minutes) ?? 0;
       categoryStats.temporaryAllowsToday += 1;
       categoryStats.grantedMinutesToday += grantedMinutes;
+      if (gateUsageStats) {
+        gateUsageStats.temporaryAllowsToday += 1;
+        gateUsageStats.grantedMinutesToday += grantedMinutes;
+      }
       const access: LastAccessProjection = {
         timestamp: event.timestamp,
         site,
@@ -763,13 +811,23 @@ export const buildDailyStatsProjection = (
     }
     if (event.name === "access.denied") {
       categoryStats.requestDenialsToday += 1;
+      if (gateUsageStats) {
+        gateUsageStats.requestDenialsToday += 1;
+      }
     }
     if (event.name === "access.followup_requested") {
       categoryStats.followUpsToday += 1;
+      if (gateUsageStats) {
+        gateUsageStats.followUpsToday += 1;
+      }
     }
     if (event.name === "access.used") {
       categoryStats.temporaryAllowUsedSecondsToday +=
         normalizePositiveInteger(event.attributes.used_seconds) ?? 0;
+      if (gateUsageStats) {
+        gateUsageStats.temporaryAllowUsedSecondsToday +=
+          normalizePositiveInteger(event.attributes.used_seconds) ?? 0;
+      }
     }
   });
 
@@ -788,6 +846,7 @@ export const buildDailyStatsProjection = (
     perSiteStatsToday,
     recentSiteDecisions: recentSiteDecisions.slice(0, 10),
     categorySummaryToday,
+    gateUsageSummaryToday,
     lastAccessByCategory,
     lastAccessBySite,
   };

@@ -1,8 +1,8 @@
 import {
-  AccessDecisionCategory,
-  CategoryStatsProjection,
+  AccessDecisionSource,
   DailyBlockerStats,
   DailySiteStats,
+  GateUsageStatsProjection,
   SiteStatsProjection,
   buildDailyStatsProjection,
 } from "./stats.js";
@@ -43,11 +43,14 @@ const formatDecisionLabel = (decision: DailyBlockerStats["recentDecisions"][numb
   return "Blocked";
 };
 
-const formatCategoryLabel = (category: AccessDecisionCategory): string =>
-  category
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+const SOURCE_LABELS: Record<AccessDecisionSource, string> = {
+  "one-click": "One-click Temporary Allow",
+  "local-intent": "Local Intent Check",
+  "llm-reviewed": "LLM-reviewed Request",
+};
+
+const formatSourceLabel = (source: AccessDecisionSource): string =>
+  SOURCE_LABELS[source] || source;
 
 const siteStatsEntries = (stats: DailyBlockerStats): Array<[string, DailySiteStats]> =>
   Object.entries(stats.siteStatsToday || {});
@@ -167,57 +170,57 @@ const renderPerSiteDetails = (stats: DailyBlockerStats) => {
   });
 };
 
-const hasCategoryActivity = (categoryStats: CategoryStatsProjection): boolean =>
-  categoryStats.accessRequestsToday > 0 ||
-  categoryStats.temporaryAllowsToday > 0 ||
-  categoryStats.requestDenialsToday > 0 ||
-  categoryStats.followUpsToday > 0 ||
-  categoryStats.temporaryAllowUsedSecondsToday > 0;
+const hasGateUsageActivity = (gateStats: GateUsageStatsProjection): boolean =>
+  gateStats.accessRequestsToday > 0 ||
+  gateStats.temporaryAllowsToday > 0 ||
+  gateStats.requestDenialsToday > 0 ||
+  gateStats.followUpsToday > 0 ||
+  gateStats.temporaryAllowUsedSecondsToday > 0;
 
-const renderCategorySummary = (stats: DailyBlockerStats) => {
-  const root = document.getElementById("category-summary");
+const renderGateUsage = (stats: DailyBlockerStats) => {
+  const root = document.getElementById("gate-usage");
   if (!root) return;
   root.innerHTML = "";
 
   const projection = buildDailyStatsProjection(stats);
-  const rows = Object.entries(projection.categorySummaryToday)
-    .filter(([, categoryStats]) => hasCategoryActivity(categoryStats))
+  const rows = Object.entries(projection.gateUsageSummaryToday)
+    .filter(([, gateStats]) => hasGateUsageActivity(gateStats))
     .sort(
       (a, b) =>
-        b[1].accessRequestsToday - a[1].accessRequestsToday ||
         b[1].temporaryAllowsToday - a[1].temporaryAllowsToday ||
+        b[1].accessRequestsToday - a[1].accessRequestsToday ||
         a[0].localeCompare(b[0])
-    ) as Array<[AccessDecisionCategory, CategoryStatsProjection]>;
+    ) as Array<[AccessDecisionSource, GateUsageStatsProjection]>;
 
   if (rows.length === 0) {
     const item = document.createElement("li");
     item.className = "row row-empty";
-    item.textContent = "No categorized requests yet today.";
+    item.textContent = "No gate usage recorded today.";
     root.appendChild(item);
     return;
   }
 
-  rows.forEach(([category, categoryStats]) => {
+  rows.forEach(([source, gateStats]) => {
     const item = document.createElement("li");
-    item.className = "category-row";
+    item.className = "gate-row";
 
     const top = document.createElement("div");
     top.className = "decision-top";
 
     const label = document.createElement("strong");
-    label.textContent = formatCategoryLabel(category);
+    label.textContent = formatSourceLabel(source);
 
     const allows = document.createElement("span");
     allows.className = "muted";
-    allows.textContent = `${categoryStats.temporaryAllowsToday} allowed`;
+    allows.textContent = `${gateStats.temporaryAllowsToday} allowed`;
 
     const detail = document.createElement("div");
     detail.className = "muted";
     detail.textContent = [
-      `${categoryStats.accessRequestsToday} requests`,
-      `${categoryStats.requestDenialsToday} denied`,
-      `${categoryStats.followUpsToday} follow-ups`,
-      `${formatUsedTime(categoryStats.temporaryAllowUsedSecondsToday)} used`,
+      `${gateStats.accessRequestsToday} requests`,
+      `${gateStats.requestDenialsToday} denied`,
+      `${gateStats.followUpsToday} follow-ups`,
+      `${formatUsedTime(gateStats.temporaryAllowUsedSecondsToday)} used`,
     ].join(" · ");
 
     top.appendChild(label);
@@ -323,7 +326,7 @@ const renderStats = (stats: DailyBlockerStats) => {
   );
 
   renderPerSiteDetails(stats);
-  renderCategorySummary(stats);
+  renderGateUsage(stats);
   renderRecentDecisions(stats);
 };
 

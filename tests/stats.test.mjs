@@ -245,6 +245,9 @@ test("builds richer stats projections for gates and dashboard", () => {
   assert.equal(projection.categorySummaryToday.work.accessRequestsToday, 1);
   assert.equal(projection.categorySummaryToday.work.temporaryAllowsToday, 1);
   assert.equal(projection.categorySummaryToday.work.temporaryAllowUsedSecondsToday, 30);
+  assert.equal(projection.gateUsageSummaryToday["llm-reviewed"].accessRequestsToday, 1);
+  assert.equal(projection.gateUsageSummaryToday["llm-reviewed"].temporaryAllowsToday, 1);
+  assert.equal(projection.gateUsageSummaryToday["llm-reviewed"].temporaryAllowUsedSecondsToday, 30);
   assert.equal(projection.recentSiteDecisions.length, 2);
 
   const context = buildAccessGateStatsContext(stats, "old.reddit.com");

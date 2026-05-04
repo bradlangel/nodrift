@@ -2,108 +2,167 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Local stats</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Stats</title>
   <style>
     :root {
       color-scheme: light;
-      font-family: sans-serif;
-      background: #f5f5f5;
-      color: #111827;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --border: #d6dde8;
+      --border-soft: #e7ebf1;
+      --text: #111827;
+      --muted: #566273;
+      --accent: #176b5d;
+      --accent-soft: #dff3ee;
+      --button-soft: #e7eef6;
+      --button-soft-text: #1f344d;
+      --danger: #a12626;
+      --danger-bg: #fff1f2;
+    }
+
+    * {
+      box-sizing: border-box;
     }
 
     body {
       margin: 0;
-      min-height: 100vh;
-      background: #f5f5f5;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    .screen {
-      max-width: 440px;
+    main {
+      width: min(100% - 24px, 760px);
       margin: 0 auto;
-      padding: 16px 14px 28px;
-      box-sizing: border-box;
+      padding: 18px 0 28px;
+    }
+
+    .page-header {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
     }
 
     h1 {
-      margin: 0;
-      font-size: 1.35rem;
+      font-size: 1.6rem;
+      line-height: 1.15;
+      margin-bottom: 2px;
     }
 
+    h2 {
+      font-size: 1.02rem;
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+
+    h3 {
+      font-size: 0.92rem;
+      line-height: 1.25;
+      margin: 0 0 8px;
+    }
+
+    .hint,
     .muted {
-      color: #6b7280;
+      color: var(--muted);
       font-size: 0.9rem;
+      line-height: 1.45;
+      margin-bottom: 0;
     }
 
-    .header-links {
+    .page-nav {
       display: flex;
-      gap: 12px;
-      margin: 6px 0 12px;
       flex-wrap: wrap;
-    }
-
-    .header-links a {
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-
-    .header-links a:hover {
-      text-decoration: underline;
-    }
-
-    .card {
-      background: #fff;
-      border-radius: 8px;
-      padding: 14px;
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-      margin-top: 12px;
-    }
-
-    .summary-grid {
-      margin-top: 10px;
-      display: grid;
-      grid-template-columns: 1fr;
       gap: 10px;
     }
 
-    .summary-item {
-      border: 1px solid #e5e7eb;
+    .page-nav a {
+      color: var(--accent);
+      font-size: 0.95rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .page-nav a:hover {
+      text-decoration: underline;
+    }
+
+    .stats-stack {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .stats-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 10px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      padding: 14px;
+    }
+
+    .stats-card-header {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .summary-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .summary-item {
+      background: #ffffff;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      min-width: 0;
+      padding: 12px;
     }
 
     .summary-item .label {
-      color: #6b7280;
+      color: var(--muted);
       display: block;
-      font-size: 0.85rem;
+      font-size: 0.84rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
     }
 
     .summary-item .value {
       display: block;
-      font-size: 1.25rem;
-      font-weight: 700;
-      margin-top: 2px;
+      font-size: 1.35rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-top: 3px;
     }
 
     ul {
       list-style: none;
-      margin: 10px 0 0;
+      margin: 0;
       padding: 0;
     }
 
     .row {
-      border-bottom: 1px solid #f3f4f6;
-      padding: 9px 0;
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
       align-items: baseline;
+      border-bottom: 1px solid var(--border-soft);
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      padding: 9px 0;
     }
 
     .row:last-child,
-    .decision-row:last-child {
+    .decision-row:last-child,
+    .site-detail-row:last-child,
+    .gate-row:last-child {
       border-bottom: none;
     }
 
@@ -113,110 +172,173 @@
       overflow-wrap: anywhere;
     }
 
+    .row-value {
+      flex: 0 0 auto;
+      font-weight: 800;
+    }
+
     .row-empty {
-      color: #6b7280;
-      border-bottom: none;
+      color: var(--muted);
       justify-content: flex-start;
     }
 
     .decision-row,
     .site-detail-row,
-    .category-row {
-      border-bottom: 1px solid #f3f4f6;
-      padding: 10px 0;
-      display: flex;
-      flex-direction: column;
+    .gate-row {
+      border-bottom: 1px solid var(--border-soft);
+      display: grid;
       gap: 4px;
+      padding: 10px 0;
     }
 
     .decision-top {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
       align-items: baseline;
+      display: flex;
       flex-wrap: wrap;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .local-data-actions {
+      align-items: stretch;
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
     }
 
     button {
-      margin-top: 10px;
-      width: 100%;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      background: #ef4444;
-      color: white;
+      border: 0;
+      border-radius: 5px;
       cursor: pointer;
-      font-weight: 600;
+      font: inherit;
+      font-weight: 800;
+      min-height: 42px;
+      padding: 9px 15px;
+    }
+
+    .danger-button {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    @media (min-width: 640px) {
+      main {
+        width: min(100% - 40px, 860px);
+        padding: 28px 0 40px;
+      }
+
+      .page-header {
+        align-items: end;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      h1 {
+        font-size: 1.85rem;
+      }
+
+      .local-data-actions {
+        align-items: center;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="screen">
-    <h1>📊 Local stats</h1>
-    <p class="muted">Today: <span id="summary-date">-</span></p>
-    <nav class="header-links" aria-label="Extension pages">
-      <a href="options.html">Settings</a>
-      <a href="block.html">Block page</a>
-    </nav>
-
-    <section class="card">
-      <strong>Today summary</strong>
-      <div class="summary-grid">
-        <div class="summary-item">
-          <span class="label">Blocked attempts</span>
-          <span class="value" id="blocked-attempts">0</span>
-        </div>
-        <div class="summary-item">
-          <span class="label">Temporary allows</span>
-          <span class="value" id="temporary-allows">0</span>
-        </div>
-        <div class="summary-item">
-          <span class="label">Temp access time</span>
-          <span class="value" id="temp-allow-time">0s</span>
-        </div>
+  <main>
+    <header class="page-header">
+      <div>
+        <h1>Local Stats</h1>
+        <p class="hint">Today: <span id="summary-date">-</span></p>
       </div>
-    </section>
+      <nav class="page-nav" aria-label="Extension pages">
+        <a href="options.html">Settings</a>
+        <a href="block.html">Block page</a>
+      </nav>
+    </header>
 
-    <section class="card">
-      <strong>Top blocked domains</strong>
-      <ul id="top-blocked-domains">
-        <li class="row row-empty">Loading...</li>
-      </ul>
-    </section>
+    <div class="stats-stack">
+      <section class="stats-card" aria-labelledby="today-heading">
+        <div class="stats-card-header">
+          <h2 id="today-heading">Today summary</h2>
+          <p class="hint">A compact read on interruptions, access grants, and time used.</p>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span class="label">Blocked attempts</span>
+            <span class="value" id="blocked-attempts">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">Temporary allows</span>
+            <span class="value" id="temporary-allows">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">Temp access time</span>
+            <span class="value" id="temp-allow-time">0s</span>
+          </div>
+        </div>
+      </section>
 
-    <section class="card">
-      <strong>Top temporary access domains</strong>
-      <ul id="top-temp-access-domains">
-        <li class="row row-empty">Loading...</li>
-      </ul>
-    </section>
+      <section class="stats-card" aria-labelledby="blocked-domains-heading">
+        <div class="stats-card-header">
+          <h2 id="blocked-domains-heading">Top blocked domains</h2>
+          <p class="hint">The sites showing up most often in blocked visits today.</p>
+        </div>
+        <ul id="top-blocked-domains">
+          <li class="row row-empty">Loading...</li>
+        </ul>
+      </section>
 
-    <section class="card">
-      <strong>Per-site details</strong>
-      <ul id="per-site-details">
-        <li class="row row-empty">Loading...</li>
-      </ul>
-    </section>
+      <section class="stats-card" aria-labelledby="site-details-heading">
+        <div class="stats-card-header">
+          <h2 id="site-details-heading">Per-site details</h2>
+          <p class="hint">Blocked attempts, temporary allows, and access time grouped by site.</p>
+        </div>
+        <ul id="per-site-details">
+          <li class="row row-empty">Loading...</li>
+        </ul>
+      </section>
 
-    <section class="card">
-      <strong>Category summary</strong>
-      <ul id="category-summary">
-        <li class="row row-empty">Loading...</li>
-      </ul>
-    </section>
+      <section class="stats-card" aria-labelledby="access-domains-heading">
+        <div class="stats-card-header">
+          <h2 id="access-domains-heading">Top temporary access domains</h2>
+          <p class="hint">Where temporary access time was actually spent today.</p>
+        </div>
+        <ul id="top-temp-access-domains">
+          <li class="row row-empty">Loading...</li>
+        </ul>
+      </section>
 
-    <section class="card">
-      <strong>Recent decisions</strong>
-      <ul id="recent-decisions">
-        <li class="row row-empty">Loading...</li>
-      </ul>
-    </section>
+      <section class="stats-card" aria-labelledby="gate-usage-heading">
+        <div class="stats-card-header">
+          <h2 id="gate-usage-heading">Gate usage</h2>
+          <p class="hint">How each access gate was used today.</p>
+        </div>
+        <ul id="gate-usage">
+          <li class="row row-empty">Loading...</li>
+        </ul>
+      </section>
 
-    <section class="card">
-      <strong>Privacy</strong>
-      <p class="muted" id="status-message">All stats stay on this device.</p>
-      <button id="reset-today">Reset today's stats</button>
-    </section>
+      <section class="stats-card" aria-labelledby="gate-decisions-heading">
+        <div class="stats-card-header">
+          <h2 id="gate-decisions-heading">Recent decisions</h2>
+          <p class="hint">Recent block, allow, denial, and follow-up decisions recorded locally.</p>
+        </div>
+        <ul id="recent-decisions">
+          <li class="row row-empty">Loading...</li>
+        </ul>
+      </section>
+
+      <section class="stats-card" aria-labelledby="local-data-heading">
+        <div class="stats-card-header">
+          <h2 id="local-data-heading">Local Data</h2>
+          <p class="hint" id="status-message">All stats stay on this device.</p>
+        </div>
+        <div class="local-data-actions">
+          <p class="hint">Reset only today's local counters and recent decisions.</p>
+          <button id="reset-today" class="danger-button">Reset today's stats</button>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script type="module" src="dist/stats-dashboard.js"></script>

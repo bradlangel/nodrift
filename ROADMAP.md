@@ -31,7 +31,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Keep the default block page to one visible temporary-allow action.
 - [x] Improve the options page styling and blocked-site editing experience.
 - [x] Add simple navigation between the block page, settings, and local stats.
-- [ ] Redesign the local stats page so it feels as intentional as the options
+- [x] Redesign the local stats page so it feels as intentional as the options
       page.
 - [ ] Keep v1 Chrome-only and document that clearly.
 - [ ] Add Firefox support after the Chrome v1 loop feels solid.
@@ -66,6 +66,9 @@ default wall of chores.
   continue.
 - Daily budget gate: spend from a configured leisure/access budget and make the
   remaining budget visible.
+- Gate-specific stats panels: let each compiled-in gate register its own
+  dashboard projection or detail panel once there are enough gates to justify
+  more than the shared gate usage summary.
 
 ## Order of Operations
 
@@ -98,9 +101,9 @@ make the current block, stats, and settings loop feel complete.
 - [x] Add quiet links from the block page to stats and settings.
 - [x] Add a local stats link from the settings page.
 - [x] Keep stats page navigation aligned with the other extension surfaces.
-- [ ] Redesign the stats page with the same mobile-first visual language as
+- [x] Redesign the stats page with the same mobile-first visual language as
       settings.
-- [ ] Rework the stats page around clear questions: what happened today, which
+- [x] Rework the stats page around clear questions: what happened today, which
       sites are creating pressure, what access was granted, and what gates
       decided recently.
 - [ ] Add final v1 readiness documentation for Chrome-only setup, permissions,
@@ -128,7 +131,8 @@ Possible module types:
   URL, blocked domain.
 - Actions: peek with ChatGPT, redirect, temporary allow, scoped allow,
   copy original URL.
-- UI panels: stats summary, request-access form, gate result, options sections.
+- UI panels: stats summary, request-access form, gate result, options sections,
+  and future gate-specific stats panels.
 - Developer diagnostics: local-only LLM review logs for prompt/output debugging,
   guarded behind an explicit developer setting.
 
