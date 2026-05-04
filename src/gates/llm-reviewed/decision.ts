@@ -43,6 +43,23 @@ const sanitizeMessage = (value: unknown, fallback: string): string => {
   return trimmed || fallback;
 };
 
+const normalizeDurationReferences = (message: string, minutes: number): string =>
+  message.replace(
+    /\b(\d+)\s*(-?)\s*minute(s)?\b/gi,
+    (_match, rawMinutes: string, hyphen: string) => {
+      if (Number(rawMinutes) === minutes) return _match;
+      return hyphen
+        ? `${minutes}-minute`
+        : `${minutes} minute${minutes === 1 ? "" : "s"}`;
+    }
+  );
+
+const sanitizeApprovedMessage = (
+  value: unknown,
+  fallback: string,
+  minutes: number
+): string => normalizeDurationReferences(sanitizeMessage(value, fallback), minutes);
+
 const clampMinutes = (value: number, maxMinutes: number): number => {
   const max = Number.isFinite(maxMinutes) ? Math.max(1, Math.floor(maxMinutes)) : 30;
   const rounded = Number.isFinite(value) ? Math.floor(value) : 0;
@@ -158,6 +175,6 @@ export const validateLlmReviewedDecision = (
     host: context.host,
     url: scope === "url" ? context.requestedUrl : null,
     ruleIds: context.ruleIds,
-    message: sanitizeMessage(parsed.message, "Approved."),
+    message: sanitizeApprovedMessage(parsed.message, "Approved.", minutes),
   };
 };

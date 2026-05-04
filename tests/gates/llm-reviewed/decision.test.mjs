@@ -34,6 +34,25 @@ test("parses valid pass decision and clamps duration", () => {
   assert.equal(decision.minutes, 25);
 });
 
+test("normalizes stale duration references in approved reasons", () => {
+  const decision = validateLlmReviewedDecision(
+    {
+      decision: "PASS",
+      scope: "domain",
+      minutes: 10,
+      message:
+        "Approved because the request is specific and bounded by a 30-minute duration.",
+    },
+    baseContext()
+  );
+
+  assert.equal(decision.minutes, 10);
+  assert.equal(
+    decision.message,
+    "Approved because the request is specific and bounded by a 10-minute duration."
+  );
+});
+
 test("prefers url scope when purpose asks for one page", () => {
   const decision = validateLlmReviewedDecision(
     {

@@ -102,6 +102,7 @@ export const buildAccessReviewPolicy = (
     "Use exactly one decision: PASS, PASS_WITH_LIMIT, or FAIL.",
     "Do not ask follow-up questions; this flow has one input and needs a terminal decision.",
     "Do not exceed the requested minutes unless reducing it.",
+    "If the message mentions an exact duration, it must match both the returned minutes value and the request duration. Otherwise omit the duration from the message.",
     "Prefer URL scope when purpose asks for one specific page and requestedUrl matches blocked domain.",
     "Use domain scope when the user needs to browse the site, open comment sections, follow internal links, or requestedUrl is the site homepage.",
     ...buildReviewLevelInstructions(strictnessLevel, leisureAllowanceLevel),

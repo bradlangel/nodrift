@@ -430,6 +430,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     currentUrl: document.referrer || null,
     currentSite: site,
     purpose,
+    requestedMinutes: defaultAccessMinutes || 30,
     followUpAnswer: null,
     followUpCount: 1,
   });
