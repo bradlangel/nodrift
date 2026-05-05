@@ -16,10 +16,10 @@ const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
 const DEFAULT_ALTERNATIVE_ITEMS = [
-  "Read a book",
-  "Go for a walk",
-  "Complete a task",
-  "Practice a skill",
+  "📖 Read a book",
+  "🏃‍♀️ Go for a run",
+  "✅ Complete a task",
+  "📝 Improve a skill",
 ];
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";

@@ -18,10 +18,10 @@ const DEFAULT_BLOCKED_SITES = [
 ];
 
 const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
-  "Read a book",
-  "Go for a walk",
-  "Complete a task",
-  "Practice a skill",
+  "📖 Read a book",
+  "🏃‍♀️ Go for a run",
+  "✅ Complete a task",
+  "📝 Improve a skill",
 ];
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";

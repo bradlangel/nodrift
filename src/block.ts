@@ -56,10 +56,10 @@ const DEFAULT_BLOCKED_SITES = [
 ];
 
 const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
-  "Read a book",
-  "Go for a walk",
-  "Complete a task",
-  "Practice a skill",
+  "📖 Read a book",
+  "🏃‍♀️ Go for a run",
+  "✅ Complete a task",
+  "📝 Improve a skill",
 ];
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
