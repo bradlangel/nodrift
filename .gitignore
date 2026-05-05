@@ -3,6 +3,9 @@
 # compiled output
 dist/
 
+# local release artifacts
+release/
+
 # node modules
 node_modules/
 

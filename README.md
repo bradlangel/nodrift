@@ -67,6 +67,61 @@ For an edit loop, run TypeScript in watch mode:
 npx tsc --watch
 ```
 
+## Release Package
+
+Build and package a runtime-only Chrome Web Store ZIP:
+
+```sh
+npm run release:zip
+```
+
+The package script runs the release confidence checks first, then writes a ZIP
+to `release/nodrift-chrome-${VERSION}.zip`, where `VERSION` comes from
+`manifest.version_name` and falls back to `manifest.version`.
+
+Inspect the artifact before uploading or publishing:
+
+```sh
+VERSION="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); console.log(m.version_name || m.version);")"
+ZIP="release/nodrift-chrome-${VERSION}.zip"
+unzip -l "$ZIP"
+```
+
+The ZIP should contain `manifest.json` at the root, compiled files under
+`dist/`, root extension pages, and runtime JavaScript such as `popup.js` and
+`redirect.js`. It should not contain source files, tests, dependency folders,
+package metadata, docs, or Git metadata.
+
+To build, verify, and extract a local Chrome-loadable release directory in one
+step, run:
+
+```sh
+npm run release:validate
+```
+
+The validation script runs `npm run release:zip`, checks ZIP integrity and
+contents, then extracts the artifact to `release/validate/nodrift-chrome-${VERSION}`.
+Load that extracted directory in `chrome://extensions` with Developer mode
+enabled.
+
+After the release commit is merged to `main`, create the GitHub prerelease from
+the manifest version:
+
+```sh
+VERSION="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); console.log(m.version_name || m.version);")"
+TAG="v${VERSION}"
+ZIP="release/nodrift-chrome-${VERSION}.zip"
+
+git tag -a "$TAG" -m "NoDrift $TAG"
+git push origin "$TAG"
+
+gh release create "$TAG" "$ZIP" \
+  --repo bradlangel/nodrift \
+  --title "NoDrift $TAG" \
+  --notes "Release candidate for NoDrift ${VERSION}." \
+  --prerelease
+```
+
 ## Load In Chrome
 
 1. Open `chrome://extensions`.

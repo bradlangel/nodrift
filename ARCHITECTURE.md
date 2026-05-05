@@ -1,8 +1,17 @@
-# No Distractions Extension Architecture Notes
+# NoDrift Architecture Notes
 
 This extension keeps a **compiled-in internal module system**. New gates are
 added as TypeScript modules under `src/gates/` and compiled into the service
 worker bundle. There is no runtime plugin marketplace.
+
+## Source And Release Artifacts
+
+TypeScript source lives under `src/` and compiles to `dist/`. Chrome loads the
+compiled service worker and page modules from `dist/`, while root HTML and
+runtime JavaScript files provide the extension surfaces. Release ZIPs are
+runtime-only Chrome artifacts: they include `manifest.json`, root HTML/runtime
+JavaScript, compiled `dist/`, and manifest-referenced assets, but not source,
+tests, docs, dependency folders, or repository metadata.
 
 ## Core Registry Flow
 
