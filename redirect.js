@@ -21,6 +21,15 @@ const DEFAULT_ALTERNATIVE_ITEMS = [
   "📝 Improve a skill",
   "💼 Go to Career Tracker | http://localhost:5173",
 ];
+const LEGACY_ALTERNATIVE_LABELS = new Map([
+  ["Read a book", "📖 Read a book"],
+  ["Go for a walk", "🏃‍♀️ Go for a run"],
+  ["Go for a run", "🏃‍♀️ Go for a run"],
+  ["Complete a task", "✅ Complete a task"],
+  ["Practice a skill", "📝 Improve a skill"],
+  ["Improve a skill", "📝 Improve a skill"],
+  ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
@@ -186,8 +195,25 @@ const configureOptionsLink = () => {
 
 const normalizeAlternativeItems = (items) =>
   Array.isArray(items)
-    ? items.map((item) => String(item).trim()).filter(Boolean)
+    ? items.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
     : DEFAULT_ALTERNATIVE_ITEMS;
+
+const normalizeAlternativeLabel = (label) =>
+  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+
+const normalizeAlternativeLine = (line) => {
+  const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return `[${normalizeAlternativeLabel(markdownLink[1])}](${markdownLink[2].trim()})`;
+  }
+
+  const pipeLink = line.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return `${normalizeAlternativeLabel(pipeLink[1])} | ${pipeLink[2].trim()}`;
+  }
+
+  return normalizeAlternativeLabel(line);
+};
 
 const parseAlternativeItem = (item) => {
   const markdownLink = item.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);

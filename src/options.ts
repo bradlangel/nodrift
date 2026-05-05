@@ -24,6 +24,15 @@ const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
   "📝 Improve a skill",
   "💼 Go to Career Tracker | http://localhost:5173",
 ];
+const LEGACY_ALTERNATIVE_LABELS = new Map([
+  ["Read a book", "📖 Read a book"],
+  ["Go for a walk", "🏃‍♀️ Go for a run"],
+  ["Go for a run", "🏃‍♀️ Go for a run"],
+  ["Complete a task", "✅ Complete a task"],
+  ["Practice a skill", "📝 Improve a skill"],
+  ["Improve a skill", "📝 Improve a skill"],
+  ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
@@ -148,11 +157,29 @@ const normalizeAlternativeLines = (value: unknown): string[] =>
   String(value)
     .split("\n")
     .map((line) => line.trim())
+    .map(normalizeAlternativeLine)
     .filter(Boolean);
+
+const normalizeAlternativeLabel = (label: string): string =>
+  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+
+const normalizeAlternativeLine = (line: string): string => {
+  const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return `[${normalizeAlternativeLabel(markdownLink[1])}](${markdownLink[2].trim()})`;
+  }
+
+  const pipeLink = line.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return `${normalizeAlternativeLabel(pipeLink[1])} | ${pipeLink[2].trim()}`;
+  }
+
+  return normalizeAlternativeLabel(line);
+};
 
 const normalizeStoredAlternatives = (value: unknown): string[] =>
   Array.isArray(value)
-    ? value.map((line) => String(line).trim()).filter(Boolean)
+    ? value.map((line) => normalizeAlternativeLine(String(line).trim())).filter(Boolean)
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const escapeHtml = (value: unknown): string =>

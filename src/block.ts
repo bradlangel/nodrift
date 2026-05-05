@@ -62,6 +62,15 @@ const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
   "📝 Improve a skill",
   "💼 Go to Career Tracker | http://localhost:5173",
 ];
+const LEGACY_ALTERNATIVE_LABELS = new Map([
+  ["Read a book", "📖 Read a book"],
+  ["Go for a walk", "🏃‍♀️ Go for a run"],
+  ["Go for a run", "🏃‍♀️ Go for a run"],
+  ["Complete a task", "✅ Complete a task"],
+  ["Practice a skill", "📝 Improve a skill"],
+  ["Improve a skill", "📝 Improve a skill"],
+  ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
@@ -317,9 +326,26 @@ type BlockPageActionView = BlockPageActionCapability & {
   reviewerLabel?: string | null;
 };
 
+const normalizeAlternativeLabel = (label: string): string =>
+  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+
+const normalizeAlternativeLine = (line: string): string => {
+  const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return `[${normalizeAlternativeLabel(markdownLink[1])}](${markdownLink[2].trim()})`;
+  }
+
+  const pipeLink = line.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return `${normalizeAlternativeLabel(pipeLink[1])} | ${pipeLink[2].trim()}`;
+  }
+
+  return normalizeAlternativeLabel(line);
+};
+
 const normalizeBlockPageAlternatives = (value: unknown): string[] =>
   Array.isArray(value)
-    ? value.map((item) => String(item).trim()).filter(Boolean)
+    ? value.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const normalizeAccessGateActionId = (actionId: unknown): string => {
