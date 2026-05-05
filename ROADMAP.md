@@ -32,6 +32,8 @@ interrupt autopilot, but not a hard lock when access is legitimate.
       types.
 - [x] Keep the default block page to one visible temporary-allow action.
 - [x] Improve the options page styling and blocked-site editing experience.
+- [ ] Add a low-touch setup helper that suggests starter blocked sites and
+      default configuration without making NoDrift feel prescriptive.
 - [x] Add simple navigation between the block page, settings, and local stats.
 - [x] Redesign the local stats page so it feels as intentional as the options
       page.
@@ -261,6 +263,9 @@ Prompt goals:
       `old.reddit.com`.
 - [ ] Consider an exception/allowlist mechanism for cases like blocking
       `youtube.com` while allowing `music.youtube.com`.
+- [ ] Consider a low-touch setup helper for first-run defaults: ask which sites
+      pull the user off course, suggest common domains, and offer sensible
+      defaults for access gate, duration, secondary actions, and provider setup.
 - [x] Show saved-state feedback after changes.
 - [x] Group settings into clear sections: blocked sites, access defaults, block
       page, and gate library.

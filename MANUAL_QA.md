@@ -66,9 +66,13 @@ Use this before a v1 release candidate. v1 is Chrome-only.
 
 ## LLM-Reviewed Gate
 
-- [ ] Select LLM-reviewed request without provider setup and confirm Settings
-      marks it as needing setup.
-- [ ] Save LLM-reviewed request as the default without required setup and
+- [ ] Select LLM-reviewed request with Chrome local LLM selected and confirm
+      Settings marks it as ready without an API key.
+- [ ] Save LLM-reviewed request as the default with Chrome local LLM selected
+      and confirm the block page shows the request form.
+- [ ] Switch to OpenAI provider without an API key and confirm Settings marks
+      LLM-reviewed request as needing setup.
+- [ ] Save LLM-reviewed request as the default with incomplete OpenAI setup and
       confirm the block page disables the request with a setup message.
 - [ ] Configure OpenAI provider with a model and API key, save, reload Settings,
       and confirm it remains ready.

@@ -8,11 +8,13 @@ import { GATE_MODULES } from "./gates/registry.js";
 
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
-  "old.reddit.com",
-  "www.reddit.com",
   "www.youtube.com",
-  "www.yahoo.com",
   "news.ycombinator.com",
+  "www.yahoo.com",
+  "x.com",
+  "instagram.com",
+  "facebook.com",
+  "tiktok.com",
 ];
 
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
