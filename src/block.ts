@@ -59,7 +59,7 @@ const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
-const DEFAULT_LLM_PROVIDER = "openai";
+const DEFAULT_LLM_PROVIDER = "chrome-local";
 const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 
 const ACCESS_GATE_ACTION_IDS = new Set(
@@ -1446,7 +1446,7 @@ const requestLlmReviewedAccess = async (
   }>((resolve) => {
     chrome.storage.sync.get(
       {
-        [STORAGE_KEYS.llmProvider]: "openai",
+        [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
         [STORAGE_KEYS.llmReviewStrictness]: "3",
         [STORAGE_KEYS.llmLeisureAllowance]: "3",
         [STORAGE_KEYS.openAiModel]: "gpt-5-nano",
@@ -1454,7 +1454,7 @@ const requestLlmReviewedAccess = async (
       (syncData: StorageItems) => {
         chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
           resolve({
-            provider: String(syncData[STORAGE_KEYS.llmProvider] || "openai"),
+            provider: String(syncData[STORAGE_KEYS.llmProvider] || DEFAULT_LLM_PROVIDER),
             model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-5-nano"),
             apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
             reviewStrictnessLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmReviewStrictness]),

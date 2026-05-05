@@ -11,6 +11,12 @@ export const llmReviewedGateOptions: GateOptionsDefinition = {
     inputName: "llm-provider",
     providers: [
       {
+        id: "chrome-local",
+        label: "Chrome local LLM",
+        description: "On-device review when Chrome Prompt API is available.",
+        hint: "No API key or hosted provider account required.",
+      },
+      {
         id: "openai",
         label: "OpenAI",
         description: "Hosted review through your OpenAI API key.",
@@ -30,12 +36,6 @@ export const llmReviewedGateOptions: GateOptionsDefinition = {
             hint: "Stored locally in this browser.",
           },
         ],
-      },
-      {
-        id: "chrome-local",
-        label: "Chrome local LLM",
-        description: "On-device review when Chrome Prompt API is available.",
-        hint: "No API key or hosted provider account required.",
       },
     ],
   },

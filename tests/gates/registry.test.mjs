@@ -48,7 +48,7 @@ test("registry exposes gate options metadata", () => {
   assert.equal(llmGate?.options?.detailsSummary, "Settings");
   assert.deepEqual(
     llmGate?.options?.providerGroup?.providers.map((provider) => provider.id),
-    ["openai", "chrome-local"]
+    ["chrome-local", "openai"]
   );
   assert.equal(
     findGateModuleByActionId("temporary-allow-domain")?.options?.detailsSummary,
