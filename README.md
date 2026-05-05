@@ -155,9 +155,10 @@ The Gate Library chooses the primary access gate shown on the block page:
   compact review request through your API key. Chrome local LLM uses Chrome's
   on-device Prompt API path when available.
 
-The block page can also show secondary actions: the configured redirect button
-and Peek with ChatGPT. Peek opens ChatGPT with a generated prompt and page
-snapshot so the user can inspect information without fully browsing the site.
+The block page can also show configured alternatives, including clickable links,
+plus the optional Peek with ChatGPT action. Peek opens ChatGPT with a generated
+prompt and page snapshot so the user can inspect information without fully
+browsing the site.
 
 The Local Stats page shows today's summary, top blocked domains, per-site
 details, top temporary access domains, gate usage, recent decisions, and local

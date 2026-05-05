@@ -22,16 +22,14 @@ const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
   "🏃‍♀️ Go for a run",
   "✅ Complete a task",
   "📝 Improve a skill",
+  "💼 Go to Career Tracker | http://localhost:5173",
 ];
-const DEFAULT_REDIRECT_URL = "http://localhost:5173";
-const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
-const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const DEFAULT_LLM_PROVIDER = "chrome-local";
 const DEFAULT_LLM_REVIEW_STRICTNESS = "3";
@@ -303,10 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const saveBtn = document.getElementById("save");
   const minutesInput = document.getElementById("temp-allow-minutes");
   const alternativesInput = document.getElementById("block-page-alternatives");
-  const redirectInput = document.getElementById("redirect-url");
-  const btnTextInput = document.getElementById("redirect-btn-text");
   const grayscaleCheckbox = document.getElementById("grayscale-temp-allow");
-  const showRedirectCheckbox = document.getElementById("show-career-tracker-redirect");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
   const gateList = document.getElementById("gate-list");
   const saveStatus = document.getElementById("save-status");
@@ -317,10 +312,7 @@ document.addEventListener("DOMContentLoaded", () => {
     !(saveBtn instanceof HTMLButtonElement) ||
     !(minutesInput instanceof HTMLInputElement) ||
     !(alternativesInput instanceof HTMLTextAreaElement) ||
-    !(redirectInput instanceof HTMLInputElement) ||
-    !(btnTextInput instanceof HTMLInputElement) ||
     !(grayscaleCheckbox instanceof HTMLInputElement) ||
-    !(showRedirectCheckbox instanceof HTMLInputElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
     !(gateList instanceof HTMLElement)
   ) {
@@ -529,11 +521,8 @@ document.addEventListener("DOMContentLoaded", () => {
         blockedSites: DEFAULT_BLOCKED_SITES,
         tempAllowMinutes: DEFAULT_TEMP_ALLOW_MINUTES,
         accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
-        showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
         showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
         blockPageAlternatives: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
-        redirectUrl: DEFAULT_REDIRECT_URL,
-        redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT,
         grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
         llmProvider: DEFAULT_LLM_PROVIDER,
         llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
@@ -549,13 +538,10 @@ document.addEventListener("DOMContentLoaded", () => {
           textarea.value = storedBlockedSites.join("\n");
           minutesInput.value = String(syncData.tempAllowMinutes);
           initializeDefaultGateActionId(syncData.accessGateActionId);
-          showRedirectCheckbox.checked = syncData.showCareerTrackerRedirect !== false;
           showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
           alternativesInput.value = normalizeStoredAlternatives(
             syncData.blockPageAlternatives
           ).join("\n");
-          redirectInput.value = syncData.redirectUrl;
-          btnTextInput.value = syncData.redirectBtnText;
           grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
 
           setSelectedLlmProvider(syncData.llmProvider);
@@ -599,11 +585,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const accessGateActionId = normalizeDefaultGateActionId(defaultGateActionId);
     const minutes = parseInt(minutesInput.value, 10) || DEFAULT_TEMP_ALLOW_MINUTES;
-    const redirectUrl = redirectInput.value.trim();
-    const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;
     const blockPageAlternatives = normalizeAlternativeLines(alternativesInput.value);
     const grayscaleOnTemporaryAllow = Boolean(grayscaleCheckbox.checked);
-    const showCareerTrackerRedirect = Boolean(showRedirectCheckbox.checked);
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
     const llmProvider = getSelectedLlmProvider();
     const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessInput.value);
@@ -616,11 +599,8 @@ document.addEventListener("DOMContentLoaded", () => {
         blockedSites: normalizedSites,
         tempAllowMinutes: minutes,
         accessGateActionId,
-        showCareerTrackerRedirect,
         showChatGptPeek,
         blockPageAlternatives,
-        redirectUrl,
-        redirectBtnText,
         grayscaleOnTemporaryAllow,
         llmProvider,
         llmReviewStrictness,

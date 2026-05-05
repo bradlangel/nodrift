@@ -8,8 +8,6 @@ if (site) {
   if (h2) h2.textContent = `🚫 ${site} is blocked!`;
 }
 
-const DEFAULT_REDIRECT_URL = "http://localhost:5173";
-const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
@@ -21,6 +19,7 @@ const DEFAULT_ALTERNATIVE_ITEMS = [
   "🏃‍♀️ Go for a run",
   "✅ Complete a task",
   "📝 Improve a skill",
+  "💼 Go to Career Tracker | http://localhost:5173",
 ];
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
@@ -321,21 +320,6 @@ const maybeRecordBlockedAttempt = () => {
         return;
       }
       refreshStats();
-    }
-  );
-};
-
-const wireRedirectButton = () => {
-  chrome.storage.sync.get(
-    { redirectUrl: DEFAULT_REDIRECT_URL, redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT },
-    (data) => {
-      const target = data.redirectUrl || DEFAULT_REDIRECT_URL;
-      const btn = document.getElementById("redirect-btn");
-      if (!btn) return;
-      btn.textContent = data.redirectBtnText || DEFAULT_REDIRECT_BTN_TEXT;
-      btn.addEventListener("click", () => {
-        navigateToDestination(target);
-      });
     }
   );
 };
@@ -679,10 +663,6 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
 
 const wireActions = (actions) => {
   actions.forEach((action) => {
-    if (action.type === "redirect") {
-      wireRedirectButton();
-      return;
-    }
     if (action.type === "peek-chatgpt") {
       wirePeekChatGptButton();
       return;

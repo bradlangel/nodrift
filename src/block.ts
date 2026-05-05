@@ -60,14 +60,13 @@ const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
   "🏃‍♀️ Go for a run",
   "✅ Complete a task",
   "📝 Improve a skill",
+  "💼 Go to Career Tracker | http://localhost:5173",
 ];
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
 const DEFAULT_TEMP_ALLOW_MINUTES = 10;
-const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
-const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_LLM_PROVIDER = "chrome-local";
 const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 
@@ -372,10 +371,8 @@ const getBlockPageActions = async (): Promise<{
 }> => {
   const syncData = await getSyncStorageItems({
     [STORAGE_KEYS.accessGateActionId]: DEFAULT_ACCESS_GATE_ACTION_ID,
-    [STORAGE_KEYS.showCareerTrackerRedirect]: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
     [STORAGE_KEYS.showChatGptPeek]: DEFAULT_SHOW_CHATGPT_PEEK,
     [STORAGE_KEYS.blockPageAlternatives]: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
-    [STORAGE_KEYS.redirectBtnText]: DEFAULT_REDIRECT_BTN_TEXT,
     [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
     [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
   });
@@ -413,7 +410,6 @@ const getBlockPageActions = async (): Promise<{
       : null;
 
   const secondaryActionIds = [
-    syncData[STORAGE_KEYS.showCareerTrackerRedirect] !== false ? "redirect" : null,
     syncData[STORAGE_KEYS.showChatGptPeek] !== false ? "peek-chatgpt" : null,
   ];
   const secondaryActions = secondaryActionIds
@@ -421,12 +417,6 @@ const getBlockPageActions = async (): Promise<{
       if (!actionId) return null;
       const action = getBlockPageActionCapability(actionId);
       if (!action) return null;
-      if (action.id === "redirect") {
-        return {
-          ...action,
-          label: String(syncData[STORAGE_KEYS.redirectBtnText] || DEFAULT_REDIRECT_BTN_TEXT),
-        };
-      }
       return { ...action };
     })
     .filter((action): action is BlockPageActionView => !!action);
