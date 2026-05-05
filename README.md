@@ -104,22 +104,24 @@ contents, then extracts the artifact to `release/validate/nodrift-chrome-${VERSI
 Load that extracted directory in `chrome://extensions` with Developer mode
 enabled.
 
-After the release commit is merged to `main`, create the GitHub prerelease from
-the manifest version:
+After the release commit is merged to `main`, create the GitHub release from the
+manifest version:
 
 ```sh
-VERSION="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); console.log(m.version_name || m.version);")"
-TAG="v${VERSION}"
-ZIP="release/nodrift-chrome-${VERSION}.zip"
+npm run release:github
+```
 
-git tag -a "$TAG" -m "NoDrift $TAG"
-git push origin "$TAG"
+`release:github` runs `release:validate`, derives the tag and ZIP path from
+`manifest.version_name` or `manifest.version`, creates an annotated Git tag,
+pushes it to `origin`, and creates a GitHub Release with the Chrome ZIP
+attached. Versions with a prerelease suffix, such as `1.0.0-rc.1`, are created
+as GitHub prereleases. The command refuses dirty worktrees and non-`main`
+branches by default, and asks you to type the tag before publishing.
 
-gh release create "$TAG" "$ZIP" \
-  --repo bradlangel/nodrift \
-  --title "NoDrift $TAG" \
-  --notes "Release candidate for NoDrift ${VERSION}." \
-  --prerelease
+Preview the GitHub release commands without creating anything:
+
+```sh
+npm run release:github -- --dry-run
 ```
 
 ## Load In Chrome
