@@ -1,5 +1,5 @@
 {
-  "name": "no-distractions-chrome-extension",
+  "name": "nodrift",
   "private": true,
   "type": "module",
   "scripts": {

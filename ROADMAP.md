@@ -1,4 +1,4 @@
-# Website Blocker Roadmap
+# NoDrift Roadmap
 
 This extension should stay a small, soft website blocker: inconvenient enough to
 interrupt autopilot, but not a hard lock when access is legitimate.
