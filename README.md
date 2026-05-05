@@ -1,4 +1,4 @@
-# Website Blocker Chrome Extension
+# NoDrift Chrome Extension
 
 Chrome-only for v1. Firefox support is intentionally post-v1.
 
@@ -72,7 +72,7 @@ npx tsc --watch
 1. Open `chrome://extensions`.
 2. Enable Developer mode.
 3. Click Load unpacked.
-4. Select this directory: `the-lab/no-distractions-chrome-extension`.
+4. Select this directory: `bradlangel/nodrift`.
 5. After rebuilding, click the reload button on the extension card.
 
 If Chrome reports manifest or service-worker errors, rebuild with

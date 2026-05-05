@@ -857,15 +857,15 @@ const setTemporaryAllowBadge = (
     chrome.action.setTitle({
       title: host
         ? elapsedTitleText === null
-          ? `Website Blocker: temporary allow active for ${host}`
-          : `Website Blocker: temporary allow active for ${host} (${elapsedTitleText})`
-        : "Website Blocker: temporary allow active",
+          ? `NoDrift: temporary allow active for ${host}`
+          : `NoDrift: temporary allow active for ${host} (${elapsedTitleText})`
+        : "NoDrift: temporary allow active",
     });
     return;
   }
 
   chrome.action.setBadgeText({ text: "" });
-  chrome.action.setTitle({ title: "Website Blocker" });
+  chrome.action.setTitle({ title: "NoDrift" });
 };
 
 const refreshBadgeForActiveTab = () => {
