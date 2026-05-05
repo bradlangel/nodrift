@@ -15,6 +15,7 @@ const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
+const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_ALTERNATIVE_ITEMS = [
   "📖 Read a book",
   "🏃‍♀️ Go for a run",
@@ -496,7 +497,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     currentUrl: document.referrer || null,
     currentSite: site,
     purpose,
-    requestedMinutes: defaultAccessMinutes || 30,
+    requestedMinutes: defaultAccessMinutes || DEFAULT_TEMP_ALLOW_MINUTES,
     followUpAnswer: null,
     followUpCount: 1,
   });
@@ -619,9 +620,9 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     launcher.addEventListener("click", () => openRequestAccess(launcher, { scroll: true, focus: true }));
   });
 
-  chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
+  chrome.storage.sync.get({ tempAllowMinutes: DEFAULT_TEMP_ALLOW_MINUTES }, (data) => {
     const minutes = Number(data.tempAllowMinutes);
-    defaultAccessMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : 30;
+    defaultAccessMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : DEFAULT_TEMP_ALLOW_MINUTES;
     if (configuredGateAction?.type === "request-access") {
       openRequestAccess(configuredGateAction);
       return;

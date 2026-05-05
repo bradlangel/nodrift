@@ -26,6 +26,7 @@ const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
+const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
@@ -526,7 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.storage.sync.get(
       {
         blockedSites: DEFAULT_BLOCKED_SITES,
-        tempAllowMinutes: 30,
+        tempAllowMinutes: DEFAULT_TEMP_ALLOW_MINUTES,
         accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
         showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
         showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
@@ -597,7 +598,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateSitesSummary();
 
     const accessGateActionId = normalizeDefaultGateActionId(defaultGateActionId);
-    const minutes = parseInt(minutesInput.value, 10) || 30;
+    const minutes = parseInt(minutesInput.value, 10) || DEFAULT_TEMP_ALLOW_MINUTES;
     const redirectUrl = redirectInput.value.trim();
     const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;
     const blockPageAlternatives = normalizeAlternativeLines(alternativesInput.value);

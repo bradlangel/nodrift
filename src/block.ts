@@ -64,6 +64,7 @@ const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
+const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
@@ -272,8 +273,8 @@ const getTempAllowMinutes = (): Promise<number> =>
     if (tempAllowMinutes !== null) {
       resolve(tempAllowMinutes);
     } else {
-      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: 30 }, (data: StorageItems) => {
-        const minutes = Number(data[STORAGE_KEYS.tempAllowMinutes]) || 30;
+      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: DEFAULT_TEMP_ALLOW_MINUTES }, (data: StorageItems) => {
+        const minutes = Number(data[STORAGE_KEYS.tempAllowMinutes]) || DEFAULT_TEMP_ALLOW_MINUTES;
         tempAllowMinutes = minutes;
         resolve(minutes);
       });
