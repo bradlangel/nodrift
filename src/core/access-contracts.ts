@@ -124,7 +124,6 @@ export type BlockPageActionType =
   | "temporary-allow"
   | "request-access"
   | "peek-chatgpt"
-  | "redirect"
   | "custom";
 
 export type BlockPageActionCapability = {

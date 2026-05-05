@@ -7,6 +7,8 @@ configured distracting domains to a block page, offers a small set of deliberate
 access gates, and keeps local stats so patterns are visible without remote
 telemetry.
 
+See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
+
 ## Architecture At A Glance
 
 The extension is built around compiled-in access gates. A gate is a small
@@ -67,6 +69,63 @@ For an edit loop, run TypeScript in watch mode:
 npx tsc --watch
 ```
 
+## Release Package
+
+Build and package a runtime-only Chrome Web Store ZIP:
+
+```sh
+npm run release:zip
+```
+
+The package script runs the release confidence checks first, then writes a ZIP
+to `release/nodrift-chrome-${VERSION}.zip`, where `VERSION` comes from
+`manifest.version_name` and falls back to `manifest.version`.
+
+Inspect the artifact before uploading or publishing:
+
+```sh
+VERSION="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); console.log(m.version_name || m.version);")"
+ZIP="release/nodrift-chrome-${VERSION}.zip"
+unzip -l "$ZIP"
+```
+
+The ZIP should contain `manifest.json` at the root, compiled files under
+`dist/`, root extension pages, and runtime JavaScript such as `popup.js` and
+`redirect.js`. It should not contain source files, tests, dependency folders,
+package metadata, docs, or Git metadata.
+
+To build, verify, and extract a local Chrome-loadable release directory in one
+step, run:
+
+```sh
+npm run release:validate
+```
+
+The validation script runs `npm run release:zip`, checks ZIP integrity and
+contents, then extracts the artifact to `release/validate/nodrift-chrome-${VERSION}`.
+Load that extracted directory in `chrome://extensions` with Developer mode
+enabled.
+
+After the release commit is merged to `main`, create the GitHub release from the
+manifest version:
+
+```sh
+npm run release:github
+```
+
+`release:github` runs `release:validate`, derives the tag and ZIP path from
+`manifest.version_name` or `manifest.version`, creates an annotated Git tag,
+pushes it to `origin`, and creates a GitHub Release with the Chrome ZIP
+attached. Versions with a prerelease suffix, such as `1.0.0-rc.1`, are created
+as GitHub prereleases. The command refuses dirty worktrees and non-`main`
+branches by default, and asks you to type the tag before publishing.
+
+Preview the GitHub release commands without creating anything:
+
+```sh
+npm run release:github -- --dry-run
+```
+
 ## Load In Chrome
 
 1. Open `chrome://extensions`.
@@ -86,21 +145,22 @@ domains, pasted URLs are normalized where possible, duplicate entries are
 removed, and overlapping domain entries are called out before saving.
 
 Temporary allow grants wall-clock access for the configured duration. Stats
-separately track active usage time, which means a 30 minute grant can expire
-after 30 real minutes even if only a few minutes were spent on the site. The
+separately track active usage time, which means a 10 minute grant can expire
+after 10 real minutes even if only a few minutes were spent on the site. The
 grayscale setting applies a temporary CSS filter while access is active.
 
 The Gate Library chooses the primary access gate shown on the block page:
 
 - One-click temporary allow grants domain access for the configured duration.
 - Local intent check reviews the stated purpose locally with no provider setup.
-- LLM-reviewed request uses an explicit provider configuration. OpenAI sends a
-  compact review request through your API key. Chrome local LLM uses Chrome's
-  on-device Prompt API path when available.
+- LLM-reviewed request uses an explicit provider configuration. Chrome local LLM
+  uses Chrome's on-device Prompt API path when available. External providers,
+  such as OpenAI, send a compact review request through your provider API key.
 
-The block page can also show secondary actions: the configured redirect button
-and Peek with ChatGPT. Peek opens ChatGPT with a generated prompt and page
-snapshot so the user can inspect information without fully browsing the site.
+The block page can also show configured alternatives, including clickable links,
+plus the optional Peek with ChatGPT action. Peek opens ChatGPT with a generated
+prompt and page snapshot so the user can inspect information without fully
+browsing the site.
 
 The Local Stats page shows today's summary, top blocked domains, per-site
 details, top temporary access domains, gate usage, recent decisions, and local
@@ -113,8 +173,8 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
 - `declarativeNetRequest` and `declarativeNetRequestWithHostAccess`: redirect
   configured blocked domains to the extension block page and apply temporary
   allow rules.
-- `storage`: save settings, local stats, temporary allow state, and the OpenAI
-  API key.
+- `storage`: save settings, local stats, temporary allow state, and LLM provider
+  API keys when configured.
 - `tabs` and `webNavigation`: track the attempted page, reopen or reload tabs
   after access decisions, maintain the badge, and measure active temporary
   access usage time.
@@ -132,14 +192,16 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
 ## Privacy And Local Data
 
 The extension does not send remote telemetry by default. Settings, daily stats,
-recent decisions, temporary allow state, and the OpenAI API key are stored in
-Chrome storage on this browser profile.
+recent decisions, temporary allow state, and LLM provider API keys are stored in
+Chrome extension storage. Some settings may sync across browser profiles if
+Chrome sync is enabled. See [PRIVACY.md](PRIVACY.md) for the full privacy
+policy.
 
 The LLM-reviewed gate sends data only when that gate is selected and used. For
-OpenAI, the review payload includes the requested purpose, requested URL/domain,
-requested minutes, current time/day, provider/model settings, and compact local
-stats context. For Chrome local LLM, review runs through Chrome's local Prompt
-API path when available.
+external providers, such as OpenAI, the review payload includes the requested
+purpose, requested URL/domain, requested minutes, current time/day,
+provider/model settings, and compact local stats context. For Chrome local LLM,
+review runs through Chrome's local Prompt API path when available.
 
 Peek with ChatGPT is optional. When used, the extension may fetch a small page
 snapshot, build a prompt, open ChatGPT, and try to insert that prompt. If prompt

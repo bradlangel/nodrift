@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "version_name": "1.0.0-rc.1",
   "description": "A soft, open-source website blocker for intentional browsing.",
+  "homepage_url": "https://github.com/bradlangel/nodrift",
   "incognito": "split",
   "permissions": [
     "declarativeNetRequest",

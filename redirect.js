@@ -8,13 +8,28 @@ if (site) {
   if (h2) h2.textContent = `🚫 ${site} is blocked!`;
 }
 
-const DEFAULT_REDIRECT_URL = "http://localhost:5173";
-const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
+const DEFAULT_TEMP_ALLOW_MINUTES = 10;
+const DEFAULT_ALTERNATIVE_ITEMS = [
+  "📖 Read a book",
+  "🏃‍♀️ Go for a run",
+  "✅ Complete a task",
+  "📝 Improve a skill",
+  "💼 Go to Career Tracker | http://localhost:5173",
+];
+const LEGACY_ALTERNATIVE_LABELS = new Map([
+  ["Read a book", "📖 Read a book"],
+  ["Go for a walk", "🏃‍♀️ Go for a run"],
+  ["Go for a run", "🏃‍♀️ Go for a run"],
+  ["Complete a task", "✅ Complete a task"],
+  ["Practice a skill", "📝 Improve a skill"],
+  ["Improve a skill", "📝 Improve a skill"],
+  ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
@@ -41,6 +56,7 @@ const FALLBACK_BLOCK_PAGE_ACTIONS = {
     },
   ],
   secondaryActions: [],
+  alternativeItems: DEFAULT_ALTERNATIVE_ITEMS,
 };
 
 const ensureHttpUrl = (raw) => {
@@ -177,6 +193,48 @@ const configureOptionsLink = () => {
   optionsLink.href = chrome.runtime.getURL("options.html");
 };
 
+const normalizeAlternativeItems = (items) =>
+  Array.isArray(items)
+    ? items.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
+    : DEFAULT_ALTERNATIVE_ITEMS;
+
+const normalizeAlternativeLabel = (label) =>
+  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+
+const normalizeAlternativeLine = (line) => {
+  const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return `[${normalizeAlternativeLabel(markdownLink[1])}](${markdownLink[2].trim()})`;
+  }
+
+  const pipeLink = line.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return `${normalizeAlternativeLabel(pipeLink[1])} | ${pipeLink[2].trim()}`;
+  }
+
+  return normalizeAlternativeLabel(line);
+};
+
+const parseAlternativeItem = (item) => {
+  const markdownLink = item.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return {
+      label: markdownLink[1].trim(),
+      url: ensureHttpUrl(markdownLink[2]),
+    };
+  }
+
+  const pipeLink = item.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return {
+      label: pipeLink[1].trim(),
+      url: ensureHttpUrl(pipeLink[2]),
+    };
+  }
+
+  return { label: item, url: null };
+};
+
 const loadConfiguredActions = (callback) => {
   chrome.runtime.sendMessage({ type: "get-block-page-actions" }, (response) => {
     if (chrome.runtime.lastError || !response?.ok) {
@@ -191,12 +249,14 @@ const loadConfiguredActions = (callback) => {
     callback({
       primaryActions: Array.isArray(response.primaryActions) ? response.primaryActions : [],
       secondaryActions: Array.isArray(response.secondaryActions) ? response.secondaryActions : [],
+      alternativeItems: normalizeAlternativeItems(response.alternativeItems),
     });
   });
 };
 
 const renderActionButton = (action, groupClassName = "") => {
   const button = document.createElement("button");
+  button.type = "button";
   button.id = action.buttonId;
   button.textContent = action.label;
   button.dataset.actionId = action.id;
@@ -212,20 +272,52 @@ const renderActionButton = (action, groupClassName = "") => {
   return button;
 };
 
-const renderActions = ({ primaryActions, secondaryActions }) => {
+const appendAlternativeTextItem = (root, configuredItem) => {
+  const parsedItem = parseAlternativeItem(configuredItem);
+  if (!parsedItem.label) return;
+
+  const item = document.createElement("li");
+  if (parsedItem.url) {
+    const link = document.createElement("a");
+    link.href = parsedItem.url;
+    link.textContent = parsedItem.label;
+    item.appendChild(link);
+  } else {
+    item.textContent = parsedItem.label;
+  }
+  root.appendChild(item);
+};
+
+const appendAlternativeActionItem = (root, action) => {
+  const item = document.createElement("li");
+  item.appendChild(renderActionButton(action, "alternative-action"));
+  root.appendChild(item);
+};
+
+const renderAlternatives = (alternativeItems, secondaryActions) => {
+  const root = document.getElementById("alternative-list");
+  const title = document.getElementById("alternatives-title");
+  if (!root) return;
+
+  root.innerHTML = "";
+  normalizeAlternativeItems(alternativeItems).forEach((item) => {
+    appendAlternativeTextItem(root, item);
+  });
+  secondaryActions.forEach((action) => {
+    appendAlternativeActionItem(root, action);
+  });
+
+  const hasAlternatives = root.children.length > 0;
+  root.hidden = !hasAlternatives;
+  if (title) title.hidden = !hasAlternatives;
+};
+
+const renderActions = ({ primaryActions, secondaryActions, alternativeItems }) => {
   const root = document.getElementById("actions");
   if (!root) return;
 
   root.innerHTML = "";
-
-  if (secondaryActions.length > 0) {
-    const secondaryGroup = document.createElement("div");
-    secondaryGroup.className = "actions-secondary";
-    secondaryActions.forEach((action) => {
-      secondaryGroup.appendChild(renderActionButton(action, "secondary-action"));
-    });
-    root.appendChild(secondaryGroup);
-  }
+  renderAlternatives(alternativeItems, secondaryActions);
 
   const gateActions = primaryActions.filter((action) => action.type !== "request-access");
   if (gateActions.length > 0) {
@@ -254,21 +346,6 @@ const maybeRecordBlockedAttempt = () => {
         return;
       }
       refreshStats();
-    }
-  );
-};
-
-const wireRedirectButton = () => {
-  chrome.storage.sync.get(
-    { redirectUrl: DEFAULT_REDIRECT_URL, redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT },
-    (data) => {
-      const target = data.redirectUrl || DEFAULT_REDIRECT_URL;
-      const btn = document.getElementById("redirect-btn");
-      if (!btn) return;
-      btn.textContent = data.redirectBtnText || DEFAULT_REDIRECT_BTN_TEXT;
-      btn.addEventListener("click", () => {
-        window.location = target;
-      });
     }
   );
 };
@@ -430,7 +507,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     currentUrl: document.referrer || null,
     currentSite: site,
     purpose,
-    requestedMinutes: defaultAccessMinutes || 30,
+    requestedMinutes: defaultAccessMinutes || DEFAULT_TEMP_ALLOW_MINUTES,
     followUpAnswer: null,
     followUpCount: 1,
   });
@@ -553,9 +630,9 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     launcher.addEventListener("click", () => openRequestAccess(launcher, { scroll: true, focus: true }));
   });
 
-  chrome.storage.sync.get({ tempAllowMinutes: 30 }, (data) => {
+  chrome.storage.sync.get({ tempAllowMinutes: DEFAULT_TEMP_ALLOW_MINUTES }, (data) => {
     const minutes = Number(data.tempAllowMinutes);
-    defaultAccessMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : 30;
+    defaultAccessMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : DEFAULT_TEMP_ALLOW_MINUTES;
     if (configuredGateAction?.type === "request-access") {
       openRequestAccess(configuredGateAction);
       return;
@@ -612,10 +689,6 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
 
 const wireActions = (actions) => {
   actions.forEach((action) => {
-    if (action.type === "redirect") {
-      wireRedirectButton();
-      return;
-    }
     if (action.type === "peek-chatgpt") {
       wirePeekChatGptButton();
       return;

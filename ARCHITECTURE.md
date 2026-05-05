@@ -1,8 +1,17 @@
-# No Distractions Extension Architecture Notes
+# NoDrift Architecture Notes
 
 This extension keeps a **compiled-in internal module system**. New gates are
 added as TypeScript modules under `src/gates/` and compiled into the service
 worker bundle. There is no runtime plugin marketplace.
+
+## Source And Release Artifacts
+
+TypeScript source lives under `src/` and compiles to `dist/`. Chrome loads the
+compiled service worker and page modules from `dist/`, while root HTML and
+runtime JavaScript files provide the extension surfaces. Release ZIPs are
+runtime-only Chrome artifacts: they include `manifest.json`, root HTML/runtime
+JavaScript, compiled `dist/`, and manifest-referenced assets, but not source,
+tests, docs, dependency folders, or repository metadata.
 
 ## Core Registry Flow
 
@@ -113,8 +122,9 @@ gates.
 ## LLM-reviewed gate notes
 
 - The LLM-reviewed request gate is selectable as a primary block-page action.
-- It remains unavailable unless provider/model/API-key settings are configured.
-- API keys are stored in local storage, not sync storage.
+- It remains unavailable unless the selected provider settings are ready.
+- Provider API keys, when required, are stored in local storage, not sync
+  storage.
 - Provider payload is intentionally minimal: blocked domain, requested URL, purpose, requested minutes, local time/day, and compact local stats.
 - Model output is validated and clamped to the extension's configured duration limits, with invalid output failing closed.
 - The flow allows at most one follow-up question before requiring a terminal decision.

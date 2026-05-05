@@ -46,20 +46,37 @@ import {
 
 const DEFAULT_BLOCKED_SITES = [
   "reddit.com",
-  "old.reddit.com",
-  "www.reddit.com",
   "www.youtube.com",
-  "www.yahoo.com",
   "news.ycombinator.com",
+  "www.yahoo.com",
+  "x.com",
+  "instagram.com",
+  "facebook.com",
+  "tiktok.com",
 ];
 
+const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
+  "📖 Read a book",
+  "🏃‍♀️ Go for a run",
+  "✅ Complete a task",
+  "📝 Improve a skill",
+  "💼 Go to Career Tracker | http://localhost:5173",
+];
+const LEGACY_ALTERNATIVE_LABELS = new Map([
+  ["Read a book", "📖 Read a book"],
+  ["Go for a walk", "🏃‍♀️ Go for a run"],
+  ["Go for a run", "🏃‍♀️ Go for a run"],
+  ["Complete a task", "✅ Complete a task"],
+  ["Practice a skill", "📝 Improve a skill"],
+  ["Improve a skill", "📝 Improve a skill"],
+  ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
-const DEFAULT_SHOW_CAREER_TRACKER_REDIRECT = true;
+const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_SHOW_CHATGPT_PEEK = true;
-const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
-const DEFAULT_LLM_PROVIDER = "openai";
+const DEFAULT_LLM_PROVIDER = "chrome-local";
 const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 
 const ACCESS_GATE_ACTION_IDS = new Set(
@@ -264,8 +281,8 @@ const getTempAllowMinutes = (): Promise<number> =>
     if (tempAllowMinutes !== null) {
       resolve(tempAllowMinutes);
     } else {
-      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: 30 }, (data: StorageItems) => {
-        const minutes = Number(data[STORAGE_KEYS.tempAllowMinutes]) || 30;
+      chrome.storage.sync.get({ [STORAGE_KEYS.tempAllowMinutes]: DEFAULT_TEMP_ALLOW_MINUTES }, (data: StorageItems) => {
+        const minutes = Number(data[STORAGE_KEYS.tempAllowMinutes]) || DEFAULT_TEMP_ALLOW_MINUTES;
         tempAllowMinutes = minutes;
         resolve(minutes);
       });
@@ -308,6 +325,28 @@ type BlockPageActionView = BlockPageActionCapability & {
   disabledReason?: string;
   reviewerLabel?: string | null;
 };
+
+const normalizeAlternativeLabel = (label: string): string =>
+  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+
+const normalizeAlternativeLine = (line: string): string => {
+  const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return `[${normalizeAlternativeLabel(markdownLink[1])}](${markdownLink[2].trim()})`;
+  }
+
+  const pipeLink = line.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return `${normalizeAlternativeLabel(pipeLink[1])} | ${pipeLink[2].trim()}`;
+  }
+
+  return normalizeAlternativeLabel(line);
+};
+
+const normalizeBlockPageAlternatives = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
+    : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const normalizeAccessGateActionId = (actionId: unknown): string => {
   if (actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID) {
@@ -353,13 +392,13 @@ const getBlockPageActions = async (): Promise<{
   ok: true;
   primaryActions: BlockPageActionView[];
   secondaryActions: BlockPageActionView[];
+  alternativeItems: string[];
   accessGateActions: BlockPageActionCapability[];
 }> => {
   const syncData = await getSyncStorageItems({
     [STORAGE_KEYS.accessGateActionId]: DEFAULT_ACCESS_GATE_ACTION_ID,
-    [STORAGE_KEYS.showCareerTrackerRedirect]: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
     [STORAGE_KEYS.showChatGptPeek]: DEFAULT_SHOW_CHATGPT_PEEK,
-    [STORAGE_KEYS.redirectBtnText]: DEFAULT_REDIRECT_BTN_TEXT,
+    [STORAGE_KEYS.blockPageAlternatives]: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
     [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
     [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
   });
@@ -397,7 +436,6 @@ const getBlockPageActions = async (): Promise<{
       : null;
 
   const secondaryActionIds = [
-    syncData[STORAGE_KEYS.showCareerTrackerRedirect] !== false ? "redirect" : null,
     syncData[STORAGE_KEYS.showChatGptPeek] !== false ? "peek-chatgpt" : null,
   ];
   const secondaryActions = secondaryActionIds
@@ -405,12 +443,6 @@ const getBlockPageActions = async (): Promise<{
       if (!actionId) return null;
       const action = getBlockPageActionCapability(actionId);
       if (!action) return null;
-      if (action.id === "redirect") {
-        return {
-          ...action,
-          label: String(syncData[STORAGE_KEYS.redirectBtnText] || DEFAULT_REDIRECT_BTN_TEXT),
-        };
-      }
       return { ...action };
     })
     .filter((action): action is BlockPageActionView => !!action);
@@ -419,6 +451,9 @@ const getBlockPageActions = async (): Promise<{
     ok: true,
     primaryActions: effectivePrimaryAction ? [effectivePrimaryAction] : [],
     secondaryActions,
+    alternativeItems: normalizeBlockPageAlternatives(
+      syncData[STORAGE_KEYS.blockPageAlternatives]
+    ),
     accessGateActions: GATE_BLOCK_PAGE_ACTION_CAPABILITIES,
   };
 };
@@ -1446,7 +1481,7 @@ const requestLlmReviewedAccess = async (
   }>((resolve) => {
     chrome.storage.sync.get(
       {
-        [STORAGE_KEYS.llmProvider]: "openai",
+        [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
         [STORAGE_KEYS.llmReviewStrictness]: "3",
         [STORAGE_KEYS.llmLeisureAllowance]: "3",
         [STORAGE_KEYS.openAiModel]: "gpt-5-nano",
@@ -1454,7 +1489,7 @@ const requestLlmReviewedAccess = async (
       (syncData: StorageItems) => {
         chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
           resolve({
-            provider: String(syncData[STORAGE_KEYS.llmProvider] || "openai"),
+            provider: String(syncData[STORAGE_KEYS.llmProvider] || DEFAULT_LLM_PROVIDER),
             model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-5-nano"),
             apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
             reviewStrictnessLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmReviewStrictness]),

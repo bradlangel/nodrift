@@ -32,8 +32,12 @@ Use this before a v1 release candidate. v1 is Chrome-only.
       or saving.
 - [ ] Confirm duplicate blocked-site entries are removed.
 - [ ] Confirm overlapping domains produce the settings warning text.
-- [ ] Save changes to temporary allow minutes, grayscale, redirect URL/text, and
-      secondary action toggles, then reload Settings and confirm values persist.
+- [ ] Save changes to temporary allow minutes, grayscale, block-page
+      alternatives, and secondary action toggles, then reload Settings and
+      confirm values persist.
+- [ ] Add a block-page alternative with a link using
+      `Label | https://example.com`, save, and confirm the block page renders it
+      as a clickable list item.
 - [ ] Change the default Gate Library selection, save, reload Settings, and
       confirm the selected gate remains the default.
 - [ ] Confirm Settings links to Local Stats.
@@ -66,9 +70,13 @@ Use this before a v1 release candidate. v1 is Chrome-only.
 
 ## LLM-Reviewed Gate
 
-- [ ] Select LLM-reviewed request without provider setup and confirm Settings
-      marks it as needing setup.
-- [ ] Save LLM-reviewed request as the default without required setup and
+- [ ] Select LLM-reviewed request with Chrome local LLM selected and confirm
+      Settings marks it as ready without an API key.
+- [ ] Save LLM-reviewed request as the default with Chrome local LLM selected
+      and confirm the block page shows the request form.
+- [ ] Switch to OpenAI provider without an API key and confirm Settings marks
+      LLM-reviewed request as needing setup.
+- [ ] Save LLM-reviewed request as the default with incomplete OpenAI setup and
       confirm the block page disables the request with a setup message.
 - [ ] Configure OpenAI provider with a model and API key, save, reload Settings,
       and confirm it remains ready.

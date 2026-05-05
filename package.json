@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node tests/access-decisions.test.mjs && node tests/stats.test.mjs && node tests/gates/registry.test.mjs && node tests/gates/temporary-allow/gate.test.mjs && node tests/gates/local-intent/gate.test.mjs && node tests/gates/llm-reviewed/decision.test.mjs && node tests/gates/llm-reviewed/providers/openai.test.mjs && node tests/gates/llm-reviewed/providers/chrome-local.test.mjs"
+    "test": "npm run build && node tests/access-decisions.test.mjs && node tests/stats.test.mjs && node tests/gates/registry.test.mjs && node tests/gates/temporary-allow/gate.test.mjs && node tests/gates/local-intent/gate.test.mjs && node tests/gates/llm-reviewed/decision.test.mjs && node tests/gates/llm-reviewed/providers/openai.test.mjs && node tests/gates/llm-reviewed/providers/chrome-local.test.mjs",
+    "release:zip": "npm test && node scripts/package-release.mjs",
+    "release:validate": "node scripts/validate-release.mjs",
+    "release:github": "node scripts/publish-github-release.mjs"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

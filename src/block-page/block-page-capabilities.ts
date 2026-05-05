@@ -17,18 +17,8 @@ const PEEK_CHATGPT_ACTION_CAPABILITY: BlockPageActionCapability = {
     "Opens ChatGPT with your prompt and a quick page snapshot so you can review and send it yourself",
 };
 
-const REDIRECT_ACTION_CAPABILITY: BlockPageActionCapability = {
-  id: "redirect",
-  type: "redirect",
-  visibleByDefault: false,
-  description: "Open the configured redirect destination.",
-  label: "Go to Career Tracker",
-  buttonId: "redirect-btn",
-};
-
 export const BLOCK_PAGE_ACTION_CAPABILITIES: BlockPageActionCapability[] = [
   ...GATE_BLOCK_PAGE_ACTION_CAPABILITIES,
-  REDIRECT_ACTION_CAPABILITY,
   PEEK_CHATGPT_ACTION_CAPABILITY,
 ];
 

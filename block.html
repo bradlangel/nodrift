@@ -43,6 +43,34 @@
       max-width: 320px;
       padding-left: 22px;
     }
+    .alternative-list li {
+      margin-bottom: 4px;
+    }
+    .alternative-list a,
+    .alternative-list button {
+      border: 0;
+      background: transparent;
+      color: #2563eb;
+      cursor: pointer;
+      display: inline;
+      font: inherit;
+      font-weight: 650;
+      line-height: inherit;
+      margin: 0;
+      min-height: 0;
+      padding: 0;
+      text-align: left;
+      text-decoration: none;
+      width: auto;
+    }
+    .alternative-list a:hover,
+    .alternative-list button:hover {
+      text-decoration: underline;
+    }
+    .alternative-list button:disabled {
+      cursor: wait;
+      opacity: 0.75;
+    }
     .actions {
       margin-top: 15px;
       display: flex;
@@ -216,6 +244,11 @@
     button.secondary-action {
       background-color: #374151;
     }
+    .alternative-list button.secondary,
+    .alternative-list button.secondary-action {
+      background: transparent;
+      color: #2563eb;
+    }
     button:disabled {
       cursor: not-allowed;
       opacity: 0.7;
@@ -246,7 +279,7 @@
   <div class="popup">
     <h2>🚫 This site is blocked!</h2>
     <h3 id="alternatives-title" class="section-title">Maybe do one of these instead</h3>
-    <ul class="alternative-list">
+    <ul id="alternative-list" class="alternative-list">
       <li>📖 Read a book</li>
       <li>🏃‍♀️ Go for a run</li>
       <li>✅ Complete a task</li>
