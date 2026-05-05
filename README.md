@@ -7,6 +7,8 @@ configured distracting domains to a block page, offers a small set of deliberate
 access gates, and keeps local stats so patterns are visible without remote
 telemetry.
 
+See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
+
 ## Architecture At A Glance
 
 The extension is built around compiled-in access gates. A gate is a small
@@ -151,9 +153,9 @@ The Gate Library chooses the primary access gate shown on the block page:
 
 - One-click temporary allow grants domain access for the configured duration.
 - Local intent check reviews the stated purpose locally with no provider setup.
-- LLM-reviewed request uses an explicit provider configuration. OpenAI sends a
-  compact review request through your API key. Chrome local LLM uses Chrome's
-  on-device Prompt API path when available.
+- LLM-reviewed request uses an explicit provider configuration. Chrome local LLM
+  uses Chrome's on-device Prompt API path when available. External providers,
+  such as OpenAI, send a compact review request through your provider API key.
 
 The block page can also show configured alternatives, including clickable links,
 plus the optional Peek with ChatGPT action. Peek opens ChatGPT with a generated
@@ -171,8 +173,8 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
 - `declarativeNetRequest` and `declarativeNetRequestWithHostAccess`: redirect
   configured blocked domains to the extension block page and apply temporary
   allow rules.
-- `storage`: save settings, local stats, temporary allow state, and the OpenAI
-  API key.
+- `storage`: save settings, local stats, temporary allow state, and LLM provider
+  API keys when configured.
 - `tabs` and `webNavigation`: track the attempted page, reopen or reload tabs
   after access decisions, maintain the badge, and measure active temporary
   access usage time.
@@ -190,14 +192,16 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
 ## Privacy And Local Data
 
 The extension does not send remote telemetry by default. Settings, daily stats,
-recent decisions, temporary allow state, and the OpenAI API key are stored in
-Chrome storage on this browser profile.
+recent decisions, temporary allow state, and LLM provider API keys are stored in
+Chrome extension storage. Some settings may sync across browser profiles if
+Chrome sync is enabled. See [PRIVACY.md](PRIVACY.md) for the full privacy
+policy.
 
 The LLM-reviewed gate sends data only when that gate is selected and used. For
-OpenAI, the review payload includes the requested purpose, requested URL/domain,
-requested minutes, current time/day, provider/model settings, and compact local
-stats context. For Chrome local LLM, review runs through Chrome's local Prompt
-API path when available.
+external providers, such as OpenAI, the review payload includes the requested
+purpose, requested URL/domain, requested minutes, current time/day,
+provider/model settings, and compact local stats context. For Chrome local LLM,
+review runs through Chrome's local Prompt API path when available.
 
 Peek with ChatGPT is optional. When used, the extension may fetch a small page
 snapshot, build a prompt, open ChatGPT, and try to insert that prompt. If prompt
