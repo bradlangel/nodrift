@@ -15,6 +15,12 @@ const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
+const DEFAULT_ALTERNATIVE_ITEMS = [
+  "Read a book",
+  "Go for a walk",
+  "Complete a task",
+  "Practice a skill",
+];
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
@@ -41,6 +47,7 @@ const FALLBACK_BLOCK_PAGE_ACTIONS = {
     },
   ],
   secondaryActions: [],
+  alternativeItems: DEFAULT_ALTERNATIVE_ITEMS,
 };
 
 const ensureHttpUrl = (raw) => {
@@ -177,6 +184,31 @@ const configureOptionsLink = () => {
   optionsLink.href = chrome.runtime.getURL("options.html");
 };
 
+const normalizeAlternativeItems = (items) =>
+  Array.isArray(items)
+    ? items.map((item) => String(item).trim()).filter(Boolean)
+    : DEFAULT_ALTERNATIVE_ITEMS;
+
+const parseAlternativeItem = (item) => {
+  const markdownLink = item.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
+  if (markdownLink) {
+    return {
+      label: markdownLink[1].trim(),
+      url: ensureHttpUrl(markdownLink[2]),
+    };
+  }
+
+  const pipeLink = item.match(/^(.+?)\s+\|\s+(https?:\/\/.+)$/i);
+  if (pipeLink) {
+    return {
+      label: pipeLink[1].trim(),
+      url: ensureHttpUrl(pipeLink[2]),
+    };
+  }
+
+  return { label: item, url: null };
+};
+
 const loadConfiguredActions = (callback) => {
   chrome.runtime.sendMessage({ type: "get-block-page-actions" }, (response) => {
     if (chrome.runtime.lastError || !response?.ok) {
@@ -191,12 +223,14 @@ const loadConfiguredActions = (callback) => {
     callback({
       primaryActions: Array.isArray(response.primaryActions) ? response.primaryActions : [],
       secondaryActions: Array.isArray(response.secondaryActions) ? response.secondaryActions : [],
+      alternativeItems: normalizeAlternativeItems(response.alternativeItems),
     });
   });
 };
 
 const renderActionButton = (action, groupClassName = "") => {
   const button = document.createElement("button");
+  button.type = "button";
   button.id = action.buttonId;
   button.textContent = action.label;
   button.dataset.actionId = action.id;
@@ -212,20 +246,52 @@ const renderActionButton = (action, groupClassName = "") => {
   return button;
 };
 
-const renderActions = ({ primaryActions, secondaryActions }) => {
+const appendAlternativeTextItem = (root, configuredItem) => {
+  const parsedItem = parseAlternativeItem(configuredItem);
+  if (!parsedItem.label) return;
+
+  const item = document.createElement("li");
+  if (parsedItem.url) {
+    const link = document.createElement("a");
+    link.href = parsedItem.url;
+    link.textContent = parsedItem.label;
+    item.appendChild(link);
+  } else {
+    item.textContent = parsedItem.label;
+  }
+  root.appendChild(item);
+};
+
+const appendAlternativeActionItem = (root, action) => {
+  const item = document.createElement("li");
+  item.appendChild(renderActionButton(action, "alternative-action"));
+  root.appendChild(item);
+};
+
+const renderAlternatives = (alternativeItems, secondaryActions) => {
+  const root = document.getElementById("alternative-list");
+  const title = document.getElementById("alternatives-title");
+  if (!root) return;
+
+  root.innerHTML = "";
+  normalizeAlternativeItems(alternativeItems).forEach((item) => {
+    appendAlternativeTextItem(root, item);
+  });
+  secondaryActions.forEach((action) => {
+    appendAlternativeActionItem(root, action);
+  });
+
+  const hasAlternatives = root.children.length > 0;
+  root.hidden = !hasAlternatives;
+  if (title) title.hidden = !hasAlternatives;
+};
+
+const renderActions = ({ primaryActions, secondaryActions, alternativeItems }) => {
   const root = document.getElementById("actions");
   if (!root) return;
 
   root.innerHTML = "";
-
-  if (secondaryActions.length > 0) {
-    const secondaryGroup = document.createElement("div");
-    secondaryGroup.className = "actions-secondary";
-    secondaryActions.forEach((action) => {
-      secondaryGroup.appendChild(renderActionButton(action, "secondary-action"));
-    });
-    root.appendChild(secondaryGroup);
-  }
+  renderAlternatives(alternativeItems, secondaryActions);
 
   const gateActions = primaryActions.filter((action) => action.type !== "request-access");
   if (gateActions.length > 0) {
@@ -267,7 +333,7 @@ const wireRedirectButton = () => {
       if (!btn) return;
       btn.textContent = data.redirectBtnText || DEFAULT_REDIRECT_BTN_TEXT;
       btn.addEventListener("click", () => {
-        window.location = target;
+        navigateToDestination(target);
       });
     }
   );

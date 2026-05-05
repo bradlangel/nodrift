@@ -55,6 +55,12 @@ const DEFAULT_BLOCKED_SITES = [
   "tiktok.com",
 ];
 
+const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
+  "Read a book",
+  "Go for a walk",
+  "Complete a task",
+  "Practice a skill",
+];
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
 const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
@@ -311,6 +317,11 @@ type BlockPageActionView = BlockPageActionCapability & {
   reviewerLabel?: string | null;
 };
 
+const normalizeBlockPageAlternatives = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((item) => String(item).trim()).filter(Boolean)
+    : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
+
 const normalizeAccessGateActionId = (actionId: unknown): string => {
   if (actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID) {
     return "local-intent-request-access";
@@ -355,12 +366,14 @@ const getBlockPageActions = async (): Promise<{
   ok: true;
   primaryActions: BlockPageActionView[];
   secondaryActions: BlockPageActionView[];
+  alternativeItems: string[];
   accessGateActions: BlockPageActionCapability[];
 }> => {
   const syncData = await getSyncStorageItems({
     [STORAGE_KEYS.accessGateActionId]: DEFAULT_ACCESS_GATE_ACTION_ID,
     [STORAGE_KEYS.showCareerTrackerRedirect]: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
     [STORAGE_KEYS.showChatGptPeek]: DEFAULT_SHOW_CHATGPT_PEEK,
+    [STORAGE_KEYS.blockPageAlternatives]: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
     [STORAGE_KEYS.redirectBtnText]: DEFAULT_REDIRECT_BTN_TEXT,
     [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
     [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
@@ -421,6 +434,9 @@ const getBlockPageActions = async (): Promise<{
     ok: true,
     primaryActions: effectivePrimaryAction ? [effectivePrimaryAction] : [],
     secondaryActions,
+    alternativeItems: normalizeBlockPageAlternatives(
+      syncData[STORAGE_KEYS.blockPageAlternatives]
+    ),
     accessGateActions: GATE_BLOCK_PAGE_ACTION_CAPABILITIES,
   };
 };

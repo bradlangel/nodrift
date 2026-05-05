@@ -34,6 +34,9 @@ Use this before a v1 release candidate. v1 is Chrome-only.
 - [ ] Confirm overlapping domains produce the settings warning text.
 - [ ] Save changes to temporary allow minutes, grayscale, redirect URL/text, and
       secondary action toggles, then reload Settings and confirm values persist.
+- [ ] Add a block-page alternative with a link using
+      `Label | https://example.com`, save, and confirm the block page renders it
+      as a clickable list item.
 - [ ] Change the default Gate Library selection, save, reload Settings, and
       confirm the selected gate remains the default.
 - [ ] Confirm Settings links to Local Stats.

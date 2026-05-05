@@ -17,6 +17,12 @@ const DEFAULT_BLOCKED_SITES = [
   "tiktok.com",
 ];
 
+const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
+  "Read a book",
+  "Go for a walk",
+  "Complete a task",
+  "Practice a skill",
+];
 const DEFAULT_REDIRECT_URL = "http://localhost:5173";
 const DEFAULT_REDIRECT_BTN_TEXT = "Go to Career Tracker";
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
@@ -138,6 +144,17 @@ const findOverlappingSites = (sites: string[]): string[] => {
   });
   return overlaps;
 };
+
+const normalizeAlternativeLines = (value: unknown): string[] =>
+  String(value)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+const normalizeStoredAlternatives = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.map((line) => String(line).trim()).filter(Boolean)
+    : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const escapeHtml = (value: unknown): string =>
   String(value)
@@ -284,6 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const cleanSitesBtn = document.getElementById("clean-sites");
   const saveBtn = document.getElementById("save");
   const minutesInput = document.getElementById("temp-allow-minutes");
+  const alternativesInput = document.getElementById("block-page-alternatives");
   const redirectInput = document.getElementById("redirect-url");
   const btnTextInput = document.getElementById("redirect-btn-text");
   const grayscaleCheckbox = document.getElementById("grayscale-temp-allow");
@@ -297,6 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
     !(cleanSitesBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
     !(minutesInput instanceof HTMLInputElement) ||
+    !(alternativesInput instanceof HTMLTextAreaElement) ||
     !(redirectInput instanceof HTMLInputElement) ||
     !(btnTextInput instanceof HTMLInputElement) ||
     !(grayscaleCheckbox instanceof HTMLInputElement) ||
@@ -511,6 +530,7 @@ document.addEventListener("DOMContentLoaded", () => {
         accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
         showCareerTrackerRedirect: DEFAULT_SHOW_CAREER_TRACKER_REDIRECT,
         showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
+        blockPageAlternatives: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
         redirectUrl: DEFAULT_REDIRECT_URL,
         redirectBtnText: DEFAULT_REDIRECT_BTN_TEXT,
         grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
@@ -530,6 +550,9 @@ document.addEventListener("DOMContentLoaded", () => {
           initializeDefaultGateActionId(syncData.accessGateActionId);
           showRedirectCheckbox.checked = syncData.showCareerTrackerRedirect !== false;
           showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
+          alternativesInput.value = normalizeStoredAlternatives(
+            syncData.blockPageAlternatives
+          ).join("\n");
           redirectInput.value = syncData.redirectUrl;
           btnTextInput.value = syncData.redirectBtnText;
           grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
@@ -577,6 +600,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const minutes = parseInt(minutesInput.value, 10) || 30;
     const redirectUrl = redirectInput.value.trim();
     const redirectBtnText = btnTextInput.value.trim() || DEFAULT_REDIRECT_BTN_TEXT;
+    const blockPageAlternatives = normalizeAlternativeLines(alternativesInput.value);
     const grayscaleOnTemporaryAllow = Boolean(grayscaleCheckbox.checked);
     const showCareerTrackerRedirect = Boolean(showRedirectCheckbox.checked);
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
@@ -593,6 +617,7 @@ document.addEventListener("DOMContentLoaded", () => {
         accessGateActionId,
         showCareerTrackerRedirect,
         showChatGptPeek,
+        blockPageAlternatives,
         redirectUrl,
         redirectBtnText,
         grayscaleOnTemporaryAllow,
