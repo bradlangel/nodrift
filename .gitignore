@@ -6,6 +6,9 @@ dist/
 # local release artifacts
 release/
 
+# generated render sources for Chrome Web Store asset PNGs
+store-assets/source/
+
 # node modules
 node_modules/
 
