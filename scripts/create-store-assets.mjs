@@ -652,7 +652,7 @@ function screenshotSettingsDocument() {
     body: `<div class="page">
   <div class="browser-bar">
     <div class="window-dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
-    <div class="address"><span>chrome-extension://nodrift/options.html</span></div>
+    <div class="address"><span>chrome-extension://nodrift/pages/options.html</span></div>
     <div class="brand-chip"><span class="brand-mark">N</span>NoDrift</div>
   </div>
   <main class="content">
@@ -847,7 +847,7 @@ function screenshotStatsDocument() {
     body: `<div class="page">
   <div class="browser-bar">
     <div class="window-dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
-    <div class="address"><span>chrome-extension://nodrift/stats.html</span></div>
+    <div class="address"><span>chrome-extension://nodrift/pages/stats.html</span></div>
     <div class="brand-chip"><span class="brand-mark">N</span>NoDrift</div>
   </div>
   <main class="content">

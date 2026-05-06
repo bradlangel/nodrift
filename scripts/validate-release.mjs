@@ -12,15 +12,15 @@ const releaseDir = path.join(repoRoot, "release");
 
 const requiredEntries = [
   "manifest.json",
-  "block.html",
-  "options.html",
-  "popup.html",
-  "stats.html",
-  "popup.js",
-  "redirect.js",
+  "pages/block.html",
+  "pages/options.html",
+  "pages/popup.html",
+  "pages/stats.html",
   "dist/",
   "dist/block.js",
   "dist/options.js",
+  "dist/popup.js",
+  "dist/redirect.js",
   "dist/stats-dashboard.js",
   "dist/stats.js",
 ];

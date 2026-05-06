@@ -453,7 +453,7 @@ const buildRule = (
       transform: {
         scheme: "chrome-extension",
         host: chrome.runtime.id,
-        path: "/block.html",
+        path: "/pages/block.html",
         queryTransform: {
           addOrReplaceParams: [
             { key: "rid", value: String(id) },

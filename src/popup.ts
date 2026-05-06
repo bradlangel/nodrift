@@ -1,16 +1,32 @@
-let activeTab = null;
+type ActiveTab = {
+  id?: number;
+  url?: string | null;
+};
 
-const siteEl = document.getElementById("current-site");
-const statusEl = document.getElementById("status");
+type ActiveGrantDetails = {
+  ok?: boolean;
+  active?: boolean;
+  scope?: string;
+  model?: string;
+  elapsedSeconds?: number;
+  remainingSeconds?: number;
+  reason?: string;
+  purpose?: string;
+};
+
+let activeTab: ActiveTab | null = null;
+
+const siteEl = document.getElementById("current-site") as HTMLElement;
+const statusEl = document.getElementById("status") as HTMLElement;
 const activeGrantEl = document.getElementById("active-grant");
-const allowBtn = document.getElementById("temporarily-allow");
-const reblockBtn = document.getElementById("reblock-now");
+const allowBtn = document.getElementById("temporarily-allow") as HTMLButtonElement;
+const reblockBtn = document.getElementById("reblock-now") as HTMLButtonElement;
 
-const setStatus = (message) => {
+const setStatus = (message: string): void => {
   statusEl.textContent = message;
 };
 
-const getHostLabel = (url) => {
+const getHostLabel = (url?: string | null): string => {
   if (!url) return "No active site";
   try {
     const parsed = new URL(url);
@@ -25,15 +41,18 @@ const getHostLabel = (url) => {
   return "No active site";
 };
 
-const formatDuration = (seconds) => {
-  const totalSeconds = Number.isFinite(seconds) ? Math.max(Math.floor(seconds), 0) : 0;
+const formatDuration = (seconds?: number): string => {
+  const totalSeconds =
+    typeof seconds === "number" && Number.isFinite(seconds)
+      ? Math.max(Math.floor(seconds), 0)
+      : 0;
   const minutes = Math.floor(totalSeconds / 60);
   const remainingSeconds = totalSeconds % 60;
   if (minutes > 0) return `${minutes}m ${remainingSeconds}s`;
   return `${remainingSeconds}s`;
 };
 
-const renderActiveGrant = (details) => {
+const renderActiveGrant = (details: ActiveGrantDetails): void => {
   if (!activeGrantEl) return;
   activeGrantEl.textContent = "";
   if (!details?.ok || !details.active) {
@@ -46,7 +65,7 @@ const renderActiveGrant = (details) => {
   title.textContent = "Temporary access active";
   activeGrantEl.appendChild(title);
 
-  const appendRow = (label, value) => {
+  const appendRow = (label: string, value?: string): void => {
     if (!value) return;
     const row = document.createElement("div");
     row.className = "grant-row";
@@ -68,7 +87,7 @@ const renderActiveGrant = (details) => {
   activeGrantEl.className = "grant visible";
 };
 
-const sendTabMessage = (type) => {
+const sendTabMessage = (type: string): void => {
   if (!activeTab?.url) {
     setStatus("No active site found.");
     return;
@@ -84,7 +103,7 @@ const sendTabMessage = (type) => {
       tabId: activeTab.id,
       url: activeTab.url,
     },
-    (response) => {
+    (response: { ok?: boolean; error?: string }) => {
       allowBtn.disabled = false;
       reblockBtn.disabled = false;
 
@@ -103,7 +122,7 @@ const sendTabMessage = (type) => {
   );
 };
 
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs: ActiveTab[]) => {
   activeTab = tabs?.[0] || null;
   siteEl.textContent = getHostLabel(activeTab?.url);
   chrome.runtime.sendMessage(
@@ -111,7 +130,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       type: "get-active-temporary-allow",
       url: activeTab?.url || null,
     },
-    (response) => {
+    (response: ActiveGrantDetails) => {
       if (chrome.runtime.lastError) return;
       renderActiveGrant(response);
     }
