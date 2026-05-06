@@ -12,14 +12,11 @@ const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
-const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
+const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request access";
 const DEFAULT_TEMP_ALLOW_MINUTES = 10;
 const DEFAULT_ALTERNATIVE_ITEMS = [
   "📖 Read a book",
   "🏃‍♀️ Go for a run",
-  "✅ Complete a task",
-  "📝 Improve a skill",
-  "💼 Go to Career Tracker | http://localhost:5173",
 ];
 const LEGACY_ALTERNATIVE_LABELS = new Map([
   ["Read a book", "📖 Read a book"],
@@ -29,6 +26,10 @@ const LEGACY_ALTERNATIVE_LABELS = new Map([
   ["Practice a skill", "📝 Improve a skill"],
   ["Improve a skill", "📝 Improve a skill"],
   ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
+const RETIRED_ALTERNATIVE_LABELS = new Set([
+  "✅ Complete a task",
+  "📝 Improve a skill",
 ]);
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
@@ -195,11 +196,21 @@ const configureOptionsLink = () => {
 
 const normalizeAlternativeItems = (items) =>
   Array.isArray(items)
-    ? items.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
+    ? items
+        .map((item) => normalizeAlternativeLine(String(item).trim()))
+        .filter((item) => item && !RETIRED_ALTERNATIVE_LABELS.has(item))
     : DEFAULT_ALTERNATIVE_ITEMS;
 
 const normalizeAlternativeLabel = (label) =>
   LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+
+const stripDecorativeEmoji = (label) =>
+  label
+    .replace(
+      /^[\u{1f000}-\u{1faff}\u{2600}-\u{27bf}]\ufe0f?\s+/u,
+      ""
+    )
+    .trim();
 
 const normalizeAlternativeLine = (line) => {
   const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
@@ -277,13 +288,14 @@ const appendAlternativeTextItem = (root, configuredItem) => {
   if (!parsedItem.label) return;
 
   const item = document.createElement("li");
+  const displayLabel = stripDecorativeEmoji(parsedItem.label);
   if (parsedItem.url) {
     const link = document.createElement("a");
     link.href = parsedItem.url;
-    link.textContent = parsedItem.label;
+    link.textContent = displayLabel;
     item.appendChild(link);
   } else {
-    item.textContent = parsedItem.label;
+    item.textContent = displayLabel;
   }
   root.appendChild(item);
 };
@@ -527,7 +539,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
       return;
     }
 
-    setResult("Approved. Opening site...", "pass");
+    setResult("Approved for a focused, time-boxed task. Opening site...", "pass");
 
     const responseDestination = ensureHttpUrl(response.destination);
     const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
@@ -584,7 +596,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     activeRequestMessageType = getRequestMessageType(requestAction);
     const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
     if (formTitle) {
-      formTitle.textContent = isLlmMode ? "Request reviewed access" : "Request focused access";
+      formTitle.textContent = isLlmMode ? "LLM-reviewed request" : "Intent check";
     }
     if (providerEl) {
       const reviewerLabel = isLlmMode ? getReviewerLabel(requestAction) : "";
@@ -644,7 +656,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     const purpose = purposeEl.value.trim();
 
     if (!purpose) {
-      setResult("Add a short purpose so we can route this request.", "fail");
+      setResult("Add a short request first.", "fail");
       return;
     }
 

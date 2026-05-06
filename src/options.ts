@@ -20,9 +20,6 @@ const DEFAULT_BLOCKED_SITES = [
 const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
   "📖 Read a book",
   "🏃‍♀️ Go for a run",
-  "✅ Complete a task",
-  "📝 Improve a skill",
-  "💼 Go to Career Tracker | http://localhost:5173",
 ];
 const LEGACY_ALTERNATIVE_LABELS = new Map([
   ["Read a book", "📖 Read a book"],
@@ -32,6 +29,10 @@ const LEGACY_ALTERNATIVE_LABELS = new Map([
   ["Practice a skill", "📝 Improve a skill"],
   ["Improve a skill", "📝 Improve a skill"],
   ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
+const RETIRED_ALTERNATIVE_LABELS = new Set([
+  "✅ Complete a task",
+  "📝 Improve a skill",
 ]);
 const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 const DEFAULT_TEMP_ALLOW_MINUTES = 10;
@@ -158,7 +159,7 @@ const normalizeAlternativeLines = (value: unknown): string[] =>
     .split("\n")
     .map((line) => line.trim())
     .map(normalizeAlternativeLine)
-    .filter(Boolean);
+    .filter((line) => line && !RETIRED_ALTERNATIVE_LABELS.has(line));
 
 const normalizeAlternativeLabel = (label: string): string =>
   LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
@@ -179,7 +180,9 @@ const normalizeAlternativeLine = (line: string): string => {
 
 const normalizeStoredAlternatives = (value: unknown): string[] =>
   Array.isArray(value)
-    ? value.map((line) => normalizeAlternativeLine(String(line).trim())).filter(Boolean)
+    ? value
+        .map((line) => normalizeAlternativeLine(String(line).trim()))
+        .filter((line) => line && !RETIRED_ALTERNATIVE_LABELS.has(line))
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const escapeHtml = (value: unknown): string =>

@@ -58,9 +58,6 @@ const DEFAULT_BLOCKED_SITES = [
 const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
   "📖 Read a book",
   "🏃‍♀️ Go for a run",
-  "✅ Complete a task",
-  "📝 Improve a skill",
-  "💼 Go to Career Tracker | http://localhost:5173",
 ];
 const LEGACY_ALTERNATIVE_LABELS = new Map([
   ["Read a book", "📖 Read a book"],
@@ -70,6 +67,10 @@ const LEGACY_ALTERNATIVE_LABELS = new Map([
   ["Practice a skill", "📝 Improve a skill"],
   ["Improve a skill", "📝 Improve a skill"],
   ["Go to Career Tracker", "💼 Go to Career Tracker"],
+]);
+const RETIRED_ALTERNATIVE_LABELS = new Set([
+  "✅ Complete a task",
+  "📝 Improve a skill",
 ]);
 const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
@@ -345,7 +346,9 @@ const normalizeAlternativeLine = (line: string): string => {
 
 const normalizeBlockPageAlternatives = (value: unknown): string[] =>
   Array.isArray(value)
-    ? value.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
+    ? value
+        .map((item) => normalizeAlternativeLine(String(item).trim()))
+        .filter((item) => item && !RETIRED_ALTERNATIVE_LABELS.has(item))
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const normalizeAccessGateActionId = (actionId: unknown): string => {
@@ -381,11 +384,11 @@ const getLocalStorageItems = (
 
 const formatLlmReviewerLabel = (provider: string, model: string): string => {
   if (provider === "chrome-local") {
-    return "Using Chrome local LLM · Gemini Nano";
+    return "Provider: Chrome local Nano";
   }
   const modelLabel =
     typeof model === "string" && model.trim().length > 0 ? model.trim() : DEFAULT_OPENAI_MODEL;
-  return `Using OpenAI · ${modelLabel}`;
+  return `Provider: OpenAI · ${modelLabel}`;
 };
 
 const getBlockPageActions = async (): Promise<{
