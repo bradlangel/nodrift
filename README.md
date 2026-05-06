@@ -89,10 +89,10 @@ ZIP="release/nodrift-chrome-${VERSION}.zip"
 unzip -l "$ZIP"
 ```
 
-The ZIP should contain `manifest.json` at the root, compiled files under
-`dist/`, root extension pages, and runtime JavaScript such as `popup.js` and
-`redirect.js`. It should not contain source files, tests, dependency folders,
-package metadata, docs, or Git metadata.
+The ZIP should contain `manifest.json` at the root, packaged extension pages
+under `pages/`, compiled files under `dist/`, and manifest-referenced runtime
+assets. It should not contain source files, tests, dependency folders, package
+metadata, docs, or Git metadata.
 
 To build, verify, and extract a local Chrome-loadable release directory in one
 step, run:

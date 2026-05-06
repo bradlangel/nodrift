@@ -1,5 +1,20 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import {
+  DEFAULT_ACCESS_GATE_ACTION_ID,
+  DEFAULT_BLOCKED_SITES,
+  DEFAULT_BLOCK_PAGE_ALTERNATIVES,
+  DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+  DEFAULT_LLM_LEISURE_ALLOWANCE,
+  DEFAULT_LLM_PROVIDER,
+  DEFAULT_LLM_REVIEW_STRICTNESS,
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_SHOW_CHATGPT_PEEK,
+  DEFAULT_TEMP_ALLOW_MINUTES,
+  LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
+  LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
+  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
+} from "./defaults.js";
+import {
   AccessGateDecision,
   AccessReviewProgressStage,
   BlockPageActionCapability,
@@ -44,41 +59,6 @@ import {
   sanitizeSite,
 } from "./url-domain.js";
 
-const DEFAULT_BLOCKED_SITES = [
-  "reddit.com",
-  "www.youtube.com",
-  "news.ycombinator.com",
-  "www.yahoo.com",
-  "x.com",
-  "instagram.com",
-  "facebook.com",
-  "tiktok.com",
-];
-
-const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
-  "📖 Read a book",
-  "🏃‍♀️ Go for a run",
-  "✅ Complete a task",
-  "📝 Improve a skill",
-  "💼 Go to Career Tracker | http://localhost:5173",
-];
-const LEGACY_ALTERNATIVE_LABELS = new Map([
-  ["Read a book", "📖 Read a book"],
-  ["Go for a walk", "🏃‍♀️ Go for a run"],
-  ["Go for a run", "🏃‍♀️ Go for a run"],
-  ["Complete a task", "✅ Complete a task"],
-  ["Practice a skill", "📝 Improve a skill"],
-  ["Improve a skill", "📝 Improve a skill"],
-  ["Go to Career Tracker", "💼 Go to Career Tracker"],
-]);
-const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
-const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
-const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
-const DEFAULT_TEMP_ALLOW_MINUTES = 10;
-const DEFAULT_SHOW_CHATGPT_PEEK = true;
-const DEFAULT_LLM_PROVIDER = "chrome-local";
-const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
-
 const ACCESS_GATE_ACTION_IDS = new Set(
   GATE_BLOCK_PAGE_ACTION_CAPABILITIES.map((action) => action.id)
 );
@@ -104,7 +84,6 @@ let blockedSitesLoaded = false;
 let temporaryAllowStateLoaded = false;
 let dailyStatsUpdateQueue: Promise<unknown> = Promise.resolve();
 
-const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
 
 const GRAYSCALE_CSS = "html { filter: grayscale(1) !important; }";
@@ -327,7 +306,7 @@ type BlockPageActionView = BlockPageActionCapability & {
 };
 
 const normalizeAlternativeLabel = (label: string): string =>
-  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+  label.trim();
 
 const normalizeAlternativeLine = (line: string): string => {
   const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
@@ -350,7 +329,7 @@ const normalizeBlockPageAlternatives = (value: unknown): string[] =>
 
 const normalizeAccessGateActionId = (actionId: unknown): string => {
   if (actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID) {
-    return "local-intent-request-access";
+    return LOCAL_INTENT_ACCESS_GATE_ACTION_ID;
   }
   return typeof actionId === "string" ? actionId : DEFAULT_ACCESS_GATE_ACTION_ID;
 };
@@ -381,11 +360,11 @@ const getLocalStorageItems = (
 
 const formatLlmReviewerLabel = (provider: string, model: string): string => {
   if (provider === "chrome-local") {
-    return "Using Chrome local LLM · Gemini Nano";
+    return "Provider: Chrome local Nano";
   }
   const modelLabel =
     typeof model === "string" && model.trim().length > 0 ? model.trim() : DEFAULT_OPENAI_MODEL;
-  return `Using OpenAI · ${modelLabel}`;
+  return `Provider: OpenAI · ${modelLabel}`;
 };
 
 const getBlockPageActions = async (): Promise<{
@@ -474,7 +453,7 @@ const buildRule = (
       transform: {
         scheme: "chrome-extension",
         host: chrome.runtime.id,
-        path: "/block.html",
+        path: "/pages/block.html",
         queryTransform: {
           addOrReplaceParams: [
             { key: "rid", value: String(id) },
@@ -1482,15 +1461,15 @@ const requestLlmReviewedAccess = async (
     chrome.storage.sync.get(
       {
         [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
-        [STORAGE_KEYS.llmReviewStrictness]: "3",
-        [STORAGE_KEYS.llmLeisureAllowance]: "3",
-        [STORAGE_KEYS.openAiModel]: "gpt-5-nano",
+        [STORAGE_KEYS.llmReviewStrictness]: DEFAULT_LLM_REVIEW_STRICTNESS,
+        [STORAGE_KEYS.llmLeisureAllowance]: DEFAULT_LLM_LEISURE_ALLOWANCE,
+        [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
       },
       (syncData: StorageItems) => {
         chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
           resolve({
             provider: String(syncData[STORAGE_KEYS.llmProvider] || DEFAULT_LLM_PROVIDER),
-            model: String(syncData[STORAGE_KEYS.openAiModel] || "gpt-5-nano"),
+            model: String(syncData[STORAGE_KEYS.openAiModel] || DEFAULT_OPENAI_MODEL),
             apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
             reviewStrictnessLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmReviewStrictness]),
             leisureAllowanceLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmLeisureAllowance]),

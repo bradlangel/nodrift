@@ -9,7 +9,7 @@ const test = (name, run) => {
 };
 
 const blockUrl = (ruleId, site) =>
-  `chrome-extension://extension-id/block.html?rid=${ruleId}&site=${encodeURIComponent(site)}`;
+  `chrome-extension://extension-id/pages/block.html?rid=${ruleId}&site=${encodeURIComponent(site)}`;
 
 test("local intent check passes deliberate legitimate request", () => {
   const decision = localIntentAccessGate.decide({

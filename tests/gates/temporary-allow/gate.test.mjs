@@ -9,7 +9,7 @@ const test = (name, run) => {
 };
 
 const blockUrl = (ruleId, site) =>
-  `chrome-extension://extension-id/block.html?rid=${ruleId}&site=${encodeURIComponent(site)}`;
+  `chrome-extension://extension-id/pages/block.html?rid=${ruleId}&site=${encodeURIComponent(site)}`;
 
 test("temporary allow gate exposes the shared access gate contract", () => {
   const decision = temporaryAllowGate.decide({

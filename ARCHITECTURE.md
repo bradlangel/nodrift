@@ -7,11 +7,11 @@ worker bundle. There is no runtime plugin marketplace.
 ## Source And Release Artifacts
 
 TypeScript source lives under `src/` and compiles to `dist/`. Chrome loads the
-compiled service worker and page modules from `dist/`, while root HTML and
-runtime JavaScript files provide the extension surfaces. Release ZIPs are
-runtime-only Chrome artifacts: they include `manifest.json`, root HTML/runtime
-JavaScript, compiled `dist/`, and manifest-referenced assets, but not source,
-tests, docs, dependency folders, or repository metadata.
+compiled service worker and page modules from `dist/`, while packaged HTML
+entrypoints live under `pages/`. Release ZIPs are runtime-only Chrome artifacts:
+they include `manifest.json`, packaged pages, compiled `dist/`, and
+manifest-referenced assets, but not source, tests, docs, dependency folders, or
+repository metadata.
 
 ## Core Registry Flow
 
@@ -32,8 +32,8 @@ flowchart LR
   Registry --> GateLookup["Gate lookup by action/message id"]
 
   Capabilities --> ActionModel["src/block.ts\nget-block-page-actions"]
-  ActionModel --> BlockPage["redirect.js + block.html\nprimary gate action"]
-  OptionsMeta --> OptionsPage["src/options.ts + options.html\nGate Library"]
+  ActionModel --> BlockPage["src/redirect.ts + pages/block.html\nprimary gate action"]
+  OptionsMeta --> OptionsPage["src/options.ts + pages/options.html\nGate Library"]
 
   GateLookup --> Requests["src/block.ts\nrequest handling"]
   BlockPage --> Requests
@@ -63,9 +63,9 @@ service worker owns Chrome orchestration, side effects, and persistence.
 - Block-page gate capabilities are derived from the gate registry. Optional
   non-gate integrations, such as ChatGPT peek, still live in
   `src/block-page/block-page-capabilities.ts`.
-- `redirect.js` asks the service worker for the current block-page action model
+- `src/redirect.ts` asks the service worker for the current block-page action model
   instead of carrying its own gate registry.
-- `options.js` is compiled from `src/options.ts` and renders the Gate Library
+- `dist/options.js` is compiled from `src/options.ts` and renders the Gate Library
   from compiled-in gate module metadata, including each gate's options
   definition.
 

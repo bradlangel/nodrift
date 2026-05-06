@@ -1,3 +1,55 @@
+// @ts-nocheck
+import {
+  DEFAULT_BLOCK_PAGE_ALTERNATIVES,
+  DEFAULT_TEMP_ALLOW_MINUTES,
+} from "./defaults.js";
+
+type BlockPageAction = {
+  id: string;
+  type: string;
+  buttonId: string;
+  label: string;
+  pendingLabel?: string;
+  scope?: string;
+  messageType?: string;
+  disabledReason?: string;
+  reviewerLabel?: string | null;
+};
+
+type BlockPageActionsResponse = {
+  ok?: boolean;
+  primaryActions?: BlockPageAction[];
+  secondaryActions?: BlockPageAction[];
+  alternativeItems?: string[];
+  accessGateActions?: BlockPageAction[];
+};
+
+type StatsDecision = {
+  timestamp: number;
+  action: string;
+  minutes?: number;
+  site?: string;
+};
+
+type LocalStats = {
+  blockedAttemptsToday?: number;
+  temporaryAllowsToday?: number;
+  temporaryAllowUsedSecondsToday?: number;
+  recentDecisions?: StatsDecision[];
+};
+
+type AccessReviewProgressStage =
+  | "preparing"
+  | "analyzing"
+  | "reviewing"
+  | "finalizing"
+  | "complete";
+
+type AccessReviewProgressMessage = {
+  type?: string;
+  stage?: AccessReviewProgressStage;
+};
+
 // Show where we came from (optional)
 const params = new URLSearchParams(location.search);
 const site = params.get("site");
@@ -12,28 +64,11 @@ const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
-const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request LLM review";
-const DEFAULT_TEMP_ALLOW_MINUTES = 10;
-const DEFAULT_ALTERNATIVE_ITEMS = [
-  "📖 Read a book",
-  "🏃‍♀️ Go for a run",
-  "✅ Complete a task",
-  "📝 Improve a skill",
-  "💼 Go to Career Tracker | http://localhost:5173",
-];
-const LEGACY_ALTERNATIVE_LABELS = new Map([
-  ["Read a book", "📖 Read a book"],
-  ["Go for a walk", "🏃‍♀️ Go for a run"],
-  ["Go for a run", "🏃‍♀️ Go for a run"],
-  ["Complete a task", "✅ Complete a task"],
-  ["Practice a skill", "📝 Improve a skill"],
-  ["Improve a skill", "📝 Improve a skill"],
-  ["Go to Career Tracker", "💼 Go to Career Tracker"],
-]);
+const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request access";
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
-const ACCESS_REVIEW_PROGRESS_MESSAGES = {
+const ACCESS_REVIEW_PROGRESS_MESSAGES: Record<AccessReviewProgressStage, string> = {
   preparing: "Preparing request...",
   analyzing: "Checking request and local usage stats...",
   reviewing: "Reviewing access decision...",
@@ -56,13 +91,13 @@ const FALLBACK_BLOCK_PAGE_ACTIONS = {
     },
   ],
   secondaryActions: [],
-  alternativeItems: DEFAULT_ALTERNATIVE_ITEMS,
+  alternativeItems: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
 };
 
-const ensureHttpUrl = (raw) => {
+const ensureHttpUrl = (raw: unknown): string | null => {
   if (!raw) return null;
   try {
-    const parsed = new URL(raw);
+    const parsed = new URL(String(raw));
     if (parsed.protocol === "http:" || parsed.protocol === "https:") {
       return parsed.toString();
     }
@@ -74,13 +109,13 @@ const ensureHttpUrl = (raw) => {
 
 let currentTabId = null;
 if (chrome.tabs?.getCurrent) {
-  chrome.tabs.getCurrent((tab) => {
+  chrome.tabs.getCurrent((tab: chrome.tabs.Tab) => {
     if (chrome.runtime.lastError) return;
     currentTabId = typeof tab?.id === "number" ? tab.id : null;
   });
 }
 
-const navigateToDestination = (destination) => {
+const navigateToDestination = (destination: unknown): boolean => {
   const target = ensureHttpUrl(destination);
   if (!target) return false;
 
@@ -89,7 +124,7 @@ const navigateToDestination = (destination) => {
   };
 
   if (chrome.tabs?.getCurrent && chrome.tabs?.update) {
-    chrome.tabs.getCurrent((tab) => {
+    chrome.tabs.getCurrent((tab: chrome.tabs.Tab) => {
       const tabId = typeof tab?.id === "number" ? tab.id : currentTabId;
       if (chrome.runtime.lastError || typeof tabId !== "number") {
         navigateInWindow();
@@ -109,7 +144,7 @@ const navigateToDestination = (destination) => {
   return true;
 };
 
-const formatDecisionLabel = (decision) => {
+const formatDecisionLabel = (decision: StatsDecision): string => {
   if (decision.action === "temporary-allow") {
     const mins = Number.isFinite(decision.minutes) ? Math.max(decision.minutes, 0) : 0;
     return mins > 0 ? `Temporarily allowed (${mins}m)` : "Temporarily allowed";
@@ -117,7 +152,7 @@ const formatDecisionLabel = (decision) => {
   return "Blocked";
 };
 
-const formatUsedTime = (seconds) => {
+const formatUsedTime = (seconds: unknown): string => {
   const value = Number.isFinite(seconds) ? Math.max(seconds, 0) : 0;
   const totalSeconds = Math.floor(value);
   const hours = Math.floor(totalSeconds / 3600);
@@ -133,7 +168,7 @@ const formatUsedTime = (seconds) => {
   return `${remainingSeconds}s`;
 };
 
-const renderStats = (stats) => {
+const renderStats = (stats: LocalStats): void => {
   const statsRoot = document.getElementById("stats");
   if (!statsRoot || !stats) return;
 
@@ -170,7 +205,7 @@ const renderStats = (stats) => {
   });
 };
 
-const refreshStats = () => {
+const refreshStats = (): void => {
   chrome.runtime.sendMessage({ type: "get-local-stats" }, (response) => {
     if (chrome.runtime.lastError) {
       console.warn("Could not load local stats", chrome.runtime.lastError.message);
@@ -184,24 +219,32 @@ const refreshStats = () => {
 const configureStatsLink = () => {
   const statsLink = document.getElementById("stats-more-link");
   if (!(statsLink instanceof HTMLAnchorElement)) return;
-  statsLink.href = chrome.runtime.getURL("stats.html");
+  statsLink.href = chrome.runtime.getURL("pages/stats.html");
 };
 
 const configureOptionsLink = () => {
   const optionsLink = document.getElementById("options-link");
   if (!(optionsLink instanceof HTMLAnchorElement)) return;
-  optionsLink.href = chrome.runtime.getURL("options.html");
+  optionsLink.href = chrome.runtime.getURL("pages/options.html");
 };
 
-const normalizeAlternativeItems = (items) =>
+const normalizeAlternativeItems = (items: unknown): string[] =>
   Array.isArray(items)
     ? items.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
-    : DEFAULT_ALTERNATIVE_ITEMS;
+    : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
-const normalizeAlternativeLabel = (label) =>
-  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+const normalizeAlternativeLabel = (label: string): string =>
+  label.trim();
 
-const normalizeAlternativeLine = (line) => {
+const stripDecorativeEmoji = (label: string): string =>
+  label
+    .replace(
+      /^[\u{1f000}-\u{1faff}\u{2600}-\u{27bf}]\ufe0f?\s+/u,
+      ""
+    )
+    .trim();
+
+const normalizeAlternativeLine = (line: string): string => {
   const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
   if (markdownLink) {
     return `[${normalizeAlternativeLabel(markdownLink[1])}](${markdownLink[2].trim()})`;
@@ -277,13 +320,14 @@ const appendAlternativeTextItem = (root, configuredItem) => {
   if (!parsedItem.label) return;
 
   const item = document.createElement("li");
+  const displayLabel = stripDecorativeEmoji(parsedItem.label);
   if (parsedItem.url) {
     const link = document.createElement("a");
     link.href = parsedItem.url;
-    link.textContent = parsedItem.label;
+    link.textContent = displayLabel;
     item.appendChild(link);
   } else {
-    item.textContent = parsedItem.label;
+    item.textContent = displayLabel;
   }
   root.appendChild(item);
 };
@@ -527,7 +571,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
       return;
     }
 
-    setResult("Approved. Opening site...", "pass");
+    setResult("Approved for a focused, time-boxed task. Opening site...", "pass");
 
     const responseDestination = ensureHttpUrl(response.destination);
     const siteUrl = site ? ensureHttpUrl(`https://${site}`) : null;
@@ -584,7 +628,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     activeRequestMessageType = getRequestMessageType(requestAction);
     const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
     if (formTitle) {
-      formTitle.textContent = isLlmMode ? "Request reviewed access" : "Request focused access";
+      formTitle.textContent = isLlmMode ? "LLM-reviewed request" : "Intent check";
     }
     if (providerEl) {
       const reviewerLabel = isLlmMode ? getReviewerLabel(requestAction) : "";
@@ -644,7 +688,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     const purpose = purposeEl.value.trim();
 
     if (!purpose) {
-      setResult("Add a short purpose so we can route this request.", "fail");
+      setResult("Add a short request first.", "fail");
       return;
     }
 

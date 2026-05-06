@@ -17,7 +17,7 @@ const test = (name, run) => {
 };
 
 const blockUrl = (ruleId, site) =>
-  `chrome-extension://extension-id/block.html?rid=${ruleId}&site=${encodeURIComponent(site)}`;
+  `chrome-extension://extension-id/pages/block.html?rid=${ruleId}&site=${encodeURIComponent(site)}`;
 
 test("parent-domain blocked site matching includes subdomains", () => {
   assert.equal(hostMatchesSite("youtube.com", "youtube.com"), true);
