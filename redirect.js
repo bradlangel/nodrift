@@ -14,23 +14,12 @@ const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request access";
 const DEFAULT_TEMP_ALLOW_MINUTES = 10;
+// Keep this fallback in sync with src/defaults.ts. The block page loads this
+// file directly, so it cannot import the compiled extension defaults yet.
 const DEFAULT_ALTERNATIVE_ITEMS = [
-  "📖 Read a book",
-  "🏃‍♀️ Go for a run",
+  "Read a book",
+  "Go for a run",
 ];
-const LEGACY_ALTERNATIVE_LABELS = new Map([
-  ["Read a book", "📖 Read a book"],
-  ["Go for a walk", "🏃‍♀️ Go for a run"],
-  ["Go for a run", "🏃‍♀️ Go for a run"],
-  ["Complete a task", "✅ Complete a task"],
-  ["Practice a skill", "📝 Improve a skill"],
-  ["Improve a skill", "📝 Improve a skill"],
-  ["Go to Career Tracker", "💼 Go to Career Tracker"],
-]);
-const RETIRED_ALTERNATIVE_LABELS = new Set([
-  "✅ Complete a task",
-  "📝 Improve a skill",
-]);
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
@@ -196,13 +185,11 @@ const configureOptionsLink = () => {
 
 const normalizeAlternativeItems = (items) =>
   Array.isArray(items)
-    ? items
-        .map((item) => normalizeAlternativeLine(String(item).trim()))
-        .filter((item) => item && !RETIRED_ALTERNATIVE_LABELS.has(item))
+    ? items.map((item) => normalizeAlternativeLine(String(item).trim())).filter(Boolean)
     : DEFAULT_ALTERNATIVE_ITEMS;
 
 const normalizeAlternativeLabel = (label) =>
-  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+  label.trim();
 
 const stripDecorativeEmoji = (label) =>
   label

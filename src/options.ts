@@ -4,47 +4,23 @@ import type {
   GateOptionsRangeField,
   GateOptionsTextField,
 } from "./core/options-contracts.js";
+import {
+  DEFAULT_ACCESS_GATE_ACTION_ID,
+  DEFAULT_BLOCKED_SITES,
+  DEFAULT_BLOCK_PAGE_ALTERNATIVES,
+  DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+  DEFAULT_LLM_LEISURE_ALLOWANCE,
+  DEFAULT_LLM_PROVIDER,
+  DEFAULT_LLM_REVIEW_STRICTNESS,
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_SHOW_CHATGPT_PEEK,
+  DEFAULT_TEMP_ALLOW_MINUTES,
+  LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
+  LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
+  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
+} from "./defaults.js";
 import { GATE_MODULES } from "./gates/registry.js";
 
-const DEFAULT_BLOCKED_SITES = [
-  "reddit.com",
-  "www.youtube.com",
-  "news.ycombinator.com",
-  "www.yahoo.com",
-  "x.com",
-  "instagram.com",
-  "facebook.com",
-  "tiktok.com",
-];
-
-const DEFAULT_BLOCK_PAGE_ALTERNATIVES = [
-  "📖 Read a book",
-  "🏃‍♀️ Go for a run",
-];
-const LEGACY_ALTERNATIVE_LABELS = new Map([
-  ["Read a book", "📖 Read a book"],
-  ["Go for a walk", "🏃‍♀️ Go for a run"],
-  ["Go for a run", "🏃‍♀️ Go for a run"],
-  ["Complete a task", "✅ Complete a task"],
-  ["Practice a skill", "📝 Improve a skill"],
-  ["Improve a skill", "📝 Improve a skill"],
-  ["Go to Career Tracker", "💼 Go to Career Tracker"],
-]);
-const RETIRED_ALTERNATIVE_LABELS = new Set([
-  "✅ Complete a task",
-  "📝 Improve a skill",
-]);
-const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
-const DEFAULT_TEMP_ALLOW_MINUTES = 10;
-const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
-const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
-const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
-const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";
-const DEFAULT_SHOW_CHATGPT_PEEK = true;
-const DEFAULT_LLM_PROVIDER = "chrome-local";
-const DEFAULT_LLM_REVIEW_STRICTNESS = "3";
-const DEFAULT_LLM_LEISURE_ALLOWANCE = "3";
-const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 const ACCESS_GATE_ACTIONS = GATE_MODULES.map((module) => module.action);
 const LLM_REVIEW_STRICTNESS_VALUES = new Set(["1", "2", "3", "4", "5"]);
 const PURPOSE_SCRUTINY_LABELS = {
@@ -159,10 +135,10 @@ const normalizeAlternativeLines = (value: unknown): string[] =>
     .split("\n")
     .map((line) => line.trim())
     .map(normalizeAlternativeLine)
-    .filter((line) => line && !RETIRED_ALTERNATIVE_LABELS.has(line));
+    .filter(Boolean);
 
 const normalizeAlternativeLabel = (label: string): string =>
-  LEGACY_ALTERNATIVE_LABELS.get(label.trim()) || label.trim();
+  label.trim();
 
 const normalizeAlternativeLine = (line: string): string => {
   const markdownLink = line.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/i);
@@ -180,9 +156,7 @@ const normalizeAlternativeLine = (line: string): string => {
 
 const normalizeStoredAlternatives = (value: unknown): string[] =>
   Array.isArray(value)
-    ? value
-        .map((line) => normalizeAlternativeLine(String(line).trim()))
-        .filter((line) => line && !RETIRED_ALTERNATIVE_LABELS.has(line))
+    ? value.map((line) => normalizeAlternativeLine(String(line).trim())).filter(Boolean)
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const escapeHtml = (value: unknown): string =>
