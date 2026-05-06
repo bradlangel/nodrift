@@ -110,6 +110,10 @@ make the current block, stats, and settings loop feel complete.
 - [x] Rework the stats page around clear questions: what happened today, which
       sites are creating pressure, what access was granted, and what gates
       decided recently.
+- [ ] Improve user-facing AI copy by replacing "LLM" with clearer language
+      such as "AI-reviewed request" where users need quick comprehension, while
+      keeping "LLM" in technical docs, provider internals, and developer-facing
+      diagnostics where the precision is useful.
 - [x] Add final v1 readiness documentation for Chrome-only setup, permissions,
       privacy/local data, and manual QA.
 
