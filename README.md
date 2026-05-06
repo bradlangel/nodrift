@@ -208,3 +208,25 @@ snapshot, build a prompt, open ChatGPT, and try to insert that prompt. If prompt
 insertion fails, it falls back to the clipboard.
 
 Use [MANUAL_QA.md](MANUAL_QA.md) before tagging or shipping v1.
+
+## Chrome Web Store Assets
+
+The extension icon source and Chrome Web Store listing mockups are kept in the
+repo so listing updates stay reproducible. The screenshot PNGs are promotional
+store assets and may lead the product UI; do not treat them as canonical UI
+screenshots.
+
+Regenerate the store icon, listing screenshots, and optional promo tiles:
+
+```sh
+npm run store:assets
+```
+
+Render only selected assets by passing their basename:
+
+```sh
+npm run store:assets -- screenshot-block-page screenshot-settings
+```
+
+Final listing PNGs live in `store-assets/`. Temporary HTML render sources are
+written under `store-assets/source/` and ignored by Git.
