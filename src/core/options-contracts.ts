@@ -37,6 +37,7 @@ export type GateOptionsDefinition = {
   detailsSummary: string;
   notes?: string[];
   providerGroup?: GateOptionsProviderGroup;
+  textFields?: GateOptionsTextField[];
   rangeFields?: GateOptionsRangeField[];
   statusId?: string;
 };

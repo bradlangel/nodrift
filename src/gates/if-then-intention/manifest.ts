@@ -1,4 +1,5 @@
 import { BlockPageActionCapability } from "../../core/access-contracts.js";
+import { IF_THEN_INTENTION_TEMPLATE } from "./gate.js";
 
 export const ifThenIntentionGateAction: BlockPageActionCapability = {
   id: "if-then-intention-request-access",
@@ -10,7 +11,7 @@ export const ifThenIntentionGateAction: BlockPageActionCapability = {
   settingsLabel: "If/then intention",
   buttonId: "if-then-request-access-gate-btn",
   formTitle: "If/then intention",
-  formPlaceholder:
-    "I am using this site to...\nI will stop when...\nIf I notice myself drifting into...\nThen I will...",
+  formPlaceholder: "Fill in each line, then commit to the plan.",
+  formInitialValue: IF_THEN_INTENTION_TEMPLATE,
   submitLabel: "Commit and request access",
 };

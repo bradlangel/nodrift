@@ -8,6 +8,8 @@ import {
   DEFAULT_ACCESS_GATE_ACTION_ID,
   DEFAULT_BLOCKED_SITES,
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
+  DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES,
+  DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
   DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
   DEFAULT_LLM_LEISURE_ALLOWANCE,
   DEFAULT_LLM_PROVIDER,
@@ -19,7 +21,9 @@ import {
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
   LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
+import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import { GATE_MODULES } from "./gates/registry.js";
+import { STORAGE_KEYS } from "./storage-constants.js";
 
 const ACCESS_GATE_ACTIONS = GATE_MODULES.map((module) => module.action);
 const LLM_REVIEW_STRICTNESS_VALUES = new Set(["1", "2", "3", "4", "5"]);
@@ -37,6 +41,8 @@ const LEISURE_ALLOWANCE_LABELS = {
   4: "Flexible",
   5: "Open",
 };
+const GITHUB_RECENT_WINDOW_MINUTES_MIN = 15;
+const GITHUB_RECENT_WINDOW_MINUTES_MAX = 480;
 
 type RangeLabels = Record<string, string>;
 
@@ -68,6 +74,17 @@ const formatRangeLabel = (value: string, labels: RangeLabels): string =>
 const normalizeOpenAiModel = (model: unknown): string => {
   const trimmed = typeof model === "string" ? model.trim() : "";
   return trimmed || DEFAULT_OPENAI_MODEL;
+};
+
+const normalizeGithubContributionWindowMinutes = (value: unknown): number => {
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES;
+  }
+  return Math.min(
+    Math.max(parsed, GITHUB_RECENT_WINDOW_MINUTES_MIN),
+    GITHUB_RECENT_WINDOW_MINUTES_MAX
+  );
 };
 
 const singularize = (
@@ -246,6 +263,9 @@ const renderGateOptions = (module: GateModule) => {
   const rangeMarkup = options.rangeFields?.length
     ? `<div class="field-row">${options.rangeFields.map(renderRangeField).join("")}</div>`
     : "";
+  const textFieldsMarkup = options.textFields?.length
+    ? options.textFields.map(renderTextField).join("")
+    : "";
 
   const statusMarkup = options.statusId
     ? `<p id="${escapeHtml(options.statusId)}" class="hint warning" aria-live="polite"></p>`
@@ -254,6 +274,7 @@ const renderGateOptions = (module: GateModule) => {
     providerMarkup || rangeMarkup || statusMarkup
       ? `<div class="llm-panel">
           ${providerMarkup}
+          ${textFieldsMarkup}
           ${rangeMarkup}
           ${statusMarkup}
         </div>`
@@ -335,6 +356,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const openAiModelInput = document.getElementById("openai-model");
   const openAiApiKeyInput = document.getElementById("openai-api-key");
   const llmConfigStatus = document.getElementById("llm-config-status");
+  const githubContributionUsernameInput = document.getElementById("github-contribution-username");
+  const githubContributionRecentWindowInput = document.getElementById(
+    "github-contribution-recent-window-minutes"
+  );
+  const githubContributionRecentWindowLabel = document.getElementById(
+    "github-contribution-recent-window-minutes-label"
+  );
 
   if (
     llmProviderInputs.length === 0 ||
@@ -342,7 +370,9 @@ document.addEventListener("DOMContentLoaded", () => {
     !(llmReviewStrictnessInput instanceof HTMLInputElement) ||
     !(llmLeisureAllowanceInput instanceof HTMLInputElement) ||
     !(openAiModelInput instanceof HTMLInputElement) ||
-    !(openAiApiKeyInput instanceof HTMLInputElement)
+    !(openAiApiKeyInput instanceof HTMLInputElement) ||
+    !(githubContributionUsernameInput instanceof HTMLInputElement) ||
+    !(githubContributionRecentWindowInput instanceof HTMLInputElement)
   ) {
     return;
   }
@@ -519,6 +549,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const updateGithubContributionRangeLabel = (): void => {
+    const minutes = normalizeGithubContributionWindowMinutes(
+      githubContributionRecentWindowInput.value
+    );
+    githubContributionRecentWindowInput.value = String(minutes);
+    if (githubContributionRecentWindowLabel) {
+      githubContributionRecentWindowLabel.textContent = `${minutes} minutes`;
+    }
+  };
+
   const loadSettings = (): void => {
     chrome.storage.sync.get(
       {
@@ -532,6 +572,9 @@ document.addEventListener("DOMContentLoaded", () => {
         llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
         llmLeisureAllowance: DEFAULT_LLM_LEISURE_ALLOWANCE,
         openAiModel: DEFAULT_OPENAI_MODEL,
+        [STORAGE_KEYS.githubContributionUsername]: DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
+        [STORAGE_KEYS.githubContributionRecentWindowMinutes]:
+          DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES,
       },
       (syncData: Record<string, any>) => {
         chrome.storage.local.get({ openAiApiKey: "" }, (localData: Record<string, any>) => {
@@ -552,10 +595,19 @@ document.addEventListener("DOMContentLoaded", () => {
           llmReviewStrictnessInput.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
           llmLeisureAllowanceInput.value = normalizeLlmReviewStrictness(syncData.llmLeisureAllowance);
           openAiModelInput.value = normalizeOpenAiModel(syncData.openAiModel);
+          githubContributionUsernameInput.value =
+            normalizeGithubUsername(syncData[STORAGE_KEYS.githubContributionUsername]) ??
+            DEFAULT_GITHUB_CONTRIBUTION_USERNAME;
+          githubContributionRecentWindowInput.value = String(
+            normalizeGithubContributionWindowMinutes(
+              syncData[STORAGE_KEYS.githubContributionRecentWindowMinutes]
+            )
+          );
           openAiApiKeyInput.value =
             typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
           updateSitesSummary();
           updateReviewRangeLabels();
+          updateGithubContributionRangeLabel();
           updateGateLibraryState();
         });
       }
@@ -573,6 +625,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   llmReviewStrictnessInput.addEventListener("input", updateReviewRangeLabels);
   llmLeisureAllowanceInput.addEventListener("input", updateReviewRangeLabels);
+  githubContributionRecentWindowInput.addEventListener(
+    "input",
+    updateGithubContributionRangeLabel
+  );
 
   document.querySelectorAll<HTMLButtonElement>("[data-set-default]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -597,6 +653,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const llmLeisureAllowance = normalizeLlmReviewStrictness(llmLeisureAllowanceInput.value);
     const openAiModel = normalizeOpenAiModel(openAiModelInput.value);
     const openAiApiKey = openAiApiKeyInput.value.trim();
+    const githubContributionUsername =
+      normalizeGithubUsername(githubContributionUsernameInput.value) ??
+      DEFAULT_GITHUB_CONTRIBUTION_USERNAME;
+    const githubContributionRecentWindowMinutes =
+      normalizeGithubContributionWindowMinutes(githubContributionRecentWindowInput.value);
+    githubContributionUsernameInput.value = githubContributionUsername;
+    githubContributionRecentWindowInput.value = String(githubContributionRecentWindowMinutes);
+    updateGithubContributionRangeLabel();
 
     chrome.storage.sync.set(
       {
@@ -610,6 +674,9 @@ document.addEventListener("DOMContentLoaded", () => {
         llmReviewStrictness,
         llmLeisureAllowance,
         openAiModel,
+        [STORAGE_KEYS.githubContributionUsername]: githubContributionUsername,
+        [STORAGE_KEYS.githubContributionRecentWindowMinutes]:
+          githubContributionRecentWindowMinutes,
       },
       () => {
         if (chrome.runtime.lastError) {

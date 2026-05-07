@@ -6,7 +6,11 @@ import { ifThenIntentionGate } from "./gate.js";
 import { ifThenIntentionGateAction } from "./manifest.js";
 import { ifThenIntentionGateOptions } from "./options.js";
 
-export { ifThenIntentionGate } from "./gate.js";
+export {
+  IF_THEN_INTENTION_TEMPLATE,
+  ifThenIntentionGate,
+  parseIfThenIntentionFields,
+} from "./gate.js";
 export { ifThenIntentionGateAction } from "./manifest.js";
 export { ifThenIntentionGateOptions } from "./options.js";
 

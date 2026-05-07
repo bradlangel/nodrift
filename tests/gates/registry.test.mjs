@@ -68,6 +68,15 @@ test("registry exposes gate options metadata", () => {
     findGateModuleByActionId("temporary-allow-domain")?.options?.detailsSummary,
     "Details"
   );
+  const githubGate = findGateModuleByActionId("github-contribution-request-access");
+  assert.deepEqual(
+    githubGate?.options?.textFields?.map((field) => field.id),
+    ["github-contribution-username"]
+  );
+  assert.deepEqual(
+    githubGate?.options?.rangeFields?.map((field) => field.id),
+    ["github-contribution-recent-window-minutes"]
+  );
 });
 
 let failures = 0;
