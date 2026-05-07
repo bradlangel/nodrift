@@ -47,6 +47,9 @@ const SOURCE_LABELS: Record<AccessDecisionSource, string> = {
   "one-click": "One-click Temporary Allow",
   "local-intent": "Local Intent Check",
   "llm-reviewed": "LLM-reviewed Request",
+  "if-then-intention": "If/then Intention",
+  "github-contribution": "GitHub Contribution",
+  "ai-study-quiz": "AI Study Quiz",
 };
 
 const formatSourceLabel = (source: AccessDecisionSource): string =>

@@ -6,7 +6,13 @@ export type AccessDecisionAction =
   | "temporary-allow"
   | "request-denied"
   | "request-follow-up";
-export type AccessDecisionSource = "one-click" | "local-intent" | "llm-reviewed";
+export type AccessDecisionSource =
+  | "one-click"
+  | "local-intent"
+  | "llm-reviewed"
+  | "if-then-intention"
+  | "github-contribution"
+  | "ai-study-quiz";
 export type AccessDecisionCategory =
   | "work"
   | "learning"
@@ -143,6 +149,9 @@ const ACCESS_DECISION_SOURCES: AccessDecisionSource[] = [
   "one-click",
   "local-intent",
   "llm-reviewed",
+  "if-then-intention",
+  "github-contribution",
+  "ai-study-quiz",
 ];
 
 const EVENT_NAMES: LocalStatsEventName[] = [
@@ -250,12 +259,10 @@ const normalizeDecisionCategory = (value: unknown): AccessDecisionCategory => {
     : "unclear";
 };
 
-const normalizeSource = (value: unknown): AccessDecisionSource | null => {
-  if (value === "one-click" || value === "local-intent" || value === "llm-reviewed") {
-    return value;
-  }
-  return null;
-};
+const normalizeSource = (value: unknown): AccessDecisionSource | null =>
+  ACCESS_DECISION_SOURCES.includes(value as AccessDecisionSource)
+    ? (value as AccessDecisionSource)
+    : null;
 
 const normalizeScope = (value: unknown): "domain" | "url" | "none" | null => {
   if (value === "domain" || value === "url" || value === "none") return value;

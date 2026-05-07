@@ -65,6 +65,9 @@ const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
 const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request access";
+const DEFAULT_REQUEST_ACCESS_TITLE = "Intent check";
+const DEFAULT_REQUEST_ACCESS_PLACEHOLDER =
+  "Describe why you need access to this site and for how long.";
 const LLM_REVIEW_WAITING_TEXT =
   "Reviewing locally. Local LLM responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
@@ -307,6 +310,10 @@ const renderActionButton = (action, groupClassName = "") => {
   if (action.title) button.title = action.title;
   if (action.messageType) button.dataset.messageType = action.messageType;
   if (action.reviewerLabel) button.dataset.reviewerLabel = action.reviewerLabel;
+  if (action.formTitle) button.dataset.formTitle = action.formTitle;
+  if (action.formPlaceholder) button.dataset.formPlaceholder = action.formPlaceholder;
+  if (action.submitLabel) button.dataset.submitLabel = action.submitLabel;
+  if (action.waitingLabel) button.dataset.waitingLabel = action.waitingLabel;
   if (action.disabledReason) {
     button.disabled = true;
     button.dataset.disabledReason = action.disabledReason;
@@ -527,7 +534,10 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   }
 
   let activeRequestMessageType = REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+  let activeSubmitLabel = DEFAULT_REQUEST_ACCESS_BTN_TEXT;
+  let activeWaitingLabel = "Reviewing...";
   let defaultAccessMinutes = null;
+  let pendingFollowUp = null;
 
   const setResult = (message, tone = "") => {
     if (!resultEl) return;
@@ -538,10 +548,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   const resetSubmitButton = () => {
     submitBtn.disabled = false;
     purposeEl.disabled = false;
-    submitBtn.textContent =
-      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
-        ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
-        : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
+    submitBtn.textContent = pendingFollowUp?.submitLabel || activeSubmitLabel;
   };
 
   const buildRequestPayload = (purpose) => ({
@@ -550,10 +557,11 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     tabId: currentTabId,
     currentUrl: document.referrer || null,
     currentSite: site,
-    purpose,
+    purpose: pendingFollowUp?.purpose || purpose,
     requestedMinutes: defaultAccessMinutes || DEFAULT_TEMP_ALLOW_MINUTES,
-    followUpAnswer: null,
-    followUpCount: 1,
+    followUpAnswer: pendingFollowUp ? purpose : null,
+    followUpCount: pendingFollowUp ? 1 : 0,
+    challengeId: pendingFollowUp?.challengeId || null,
   });
 
   const handleRequestAccessResponse = (response) => {
@@ -565,6 +573,23 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     }
 
     const decision = response.decision;
+    if (decision?.decision === "ASK_FOLLOWUP") {
+      const question = response.question || decision.message || "Add one more detail.";
+      pendingFollowUp = {
+        purpose: response.topic || purposeEl.value.trim(),
+        challengeId: response.challengeId || null,
+        submitLabel: response.challengeId ? "Submit answer" : "Send follow-up",
+      };
+      setResult(question, "thinking");
+      purposeEl.value = "";
+      purposeEl.placeholder = response.challengeId
+        ? "Type your answer"
+        : "Answer the follow-up";
+      resetSubmitButton();
+      purposeEl.focus();
+      return;
+    }
+
     if (!response.ok) {
       const message = decision?.message || response.error || "No access was granted.";
       setResult(`Staying blocked. ${message}`, "fail");
@@ -624,12 +649,31 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   const getReviewerLabel = (requestAction) =>
     requestAction?.reviewerLabel || requestAction?.dataset?.reviewerLabel || "";
 
+  const getFormTitle = (requestAction) =>
+    requestAction?.formTitle || requestAction?.dataset?.formTitle || "";
+
+  const getFormPlaceholder = (requestAction) =>
+    requestAction?.formPlaceholder || requestAction?.dataset?.formPlaceholder || "";
+
+  const getSubmitLabel = (requestAction) =>
+    requestAction?.submitLabel || requestAction?.dataset?.submitLabel || "";
+
+  const getWaitingLabel = (requestAction) =>
+    requestAction?.waitingLabel || requestAction?.dataset?.waitingLabel || "";
+
   const setRequestMode = (requestAction) => {
     activeRequestMessageType = getRequestMessageType(requestAction);
     const isLlmMode = activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE;
+    activeSubmitLabel =
+      getSubmitLabel(requestAction) ||
+      (isLlmMode ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT : DEFAULT_REQUEST_ACCESS_BTN_TEXT);
+    activeWaitingLabel = getWaitingLabel(requestAction) || "Reviewing...";
     if (formTitle) {
-      formTitle.textContent = isLlmMode ? "LLM-reviewed request" : "Intent check";
+      formTitle.textContent =
+        getFormTitle(requestAction) ||
+        (isLlmMode ? "LLM-reviewed request" : DEFAULT_REQUEST_ACCESS_TITLE);
     }
+    purposeEl.placeholder = getFormPlaceholder(requestAction) || DEFAULT_REQUEST_ACCESS_PLACEHOLDER;
     if (providerEl) {
       const reviewerLabel = isLlmMode ? getReviewerLabel(requestAction) : "";
       providerEl.textContent = reviewerLabel;
@@ -639,13 +683,12 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
       metaEl.textContent = "";
       metaEl.hidden = true;
     }
-    submitBtn.textContent = isLlmMode
-      ? DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT
-      : DEFAULT_REQUEST_ACCESS_BTN_TEXT;
+    submitBtn.textContent = activeSubmitLabel;
   };
 
   const openRequestAccess = (requestAction, options = {}) => {
     setRequestMode(requestAction);
+    pendingFollowUp = null;
     setResult("", "");
 
     if (requestSection) requestSection.hidden = false;
@@ -694,7 +737,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
 
     submitBtn.disabled = true;
     purposeEl.disabled = true;
-    submitBtn.textContent = "Reviewing...";
+    submitBtn.textContent = activeWaitingLabel;
     const payload = buildRequestPayload(purpose);
 
     if (

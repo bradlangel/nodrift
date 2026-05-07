@@ -4,9 +4,7 @@ import {
   DEFAULT_BLOCKED_SITES,
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
   DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
-  DEFAULT_LLM_LEISURE_ALLOWANCE,
   DEFAULT_LLM_PROVIDER,
-  DEFAULT_LLM_REVIEW_STRICTNESS,
   DEFAULT_OPENAI_MODEL,
   DEFAULT_SHOW_CHATGPT_PEEK,
   DEFAULT_TEMP_ALLOW_MINUTES,
@@ -19,9 +17,12 @@ import {
   AccessReviewProgressStage,
   BlockPageActionCapability,
 } from "./core/access-contracts.js";
+import { decideAiStudyQuizRequest } from "./gates/ai-study-quiz/request.js";
+import { decideGithubContributionRequest } from "./gates/github-contribution/request.js";
+import { decideIfThenIntentionRequest } from "./gates/if-then-intention/request.js";
 import { temporaryAllowGate } from "./gates/temporary-allow/index.js";
-import { localIntentAccessGate } from "./gates/local-intent/index.js";
-import { llmReviewedAccessGate } from "./gates/llm-reviewed/index.js";
+import { decideLocalIntentRequest } from "./gates/local-intent/request.js";
+import { decideLlmReviewedRequest } from "./gates/llm-reviewed/request.js";
 import { GATE_BLOCK_PAGE_ACTION_CAPABILITIES } from "./gates/registry.js";
 import { buildDecisionApplication } from "./core/decision-application.js";
 import { BLOCK_PAGE_ACTION_CAPABILITIES, OPTIONAL_INTEGRATIONS } from "./block-page/block-page-capabilities.js";
@@ -38,15 +39,10 @@ import {
   withTemporaryAllowUsedSeconds,
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
-import {
-  hasChromeLocalProviderConfig,
-  requestChromeLocalAccessReview,
-} from "./gates/llm-reviewed/providers/chrome-local.js";
-import {
-  hasOpenAiProviderConfig,
-  requestOpenAiAccessReview,
-} from "./gates/llm-reviewed/providers/openai.js";
-import { normalizeReviewLevel } from "./gates/llm-reviewed/policy.js";
+import type {
+  RequestGateDecisionResult,
+  RequestGateInput,
+} from "./gates/shared/request-runtime.js";
 import {
   buildExactUrlRegexFilter,
   buildParentDomainUrlFilter,
@@ -398,7 +394,8 @@ const getBlockPageActions = async (): Promise<{
     : DEFAULT_ACCESS_GATE_ACTION_ID;
   const primaryAction = getAccessGateActionCapability(configuredActionId);
   const reviewerLabel =
-    primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID
+    primaryAction?.id === LLM_REVIEWED_ACCESS_GATE_ACTION_ID ||
+    primaryAction?.id === "ai-study-quiz-request-access"
       ? formatLlmReviewerLabel(provider, model)
       : null;
   const effectivePrimaryAction: BlockPageActionView | null =
@@ -409,6 +406,14 @@ const getBlockPageActions = async (): Promise<{
           label: "LLM-reviewed request (setup required)",
           disabledReason:
             "LLM-reviewed request is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
+        }
+      : primaryAction?.id === "ai-study-quiz-request-access" && !llmConfigured
+      ? {
+          ...primaryAction,
+          reviewerLabel,
+          label: "AI study quiz (setup required)",
+          disabledReason:
+            "AI study quiz is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
         }
       : primaryAction
       ? { ...primaryAction, reviewerLabel }
@@ -1401,183 +1406,90 @@ const temporarilyAllowFromUrl = async (
   return applyTemporaryAllowDecision(decision);
 };
 
+const getRequestUrlContext = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<{ currentUrl: string | null; currentSite: string | null }> => {
+  const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
+  const fallbackCurrentUrl =
+    tabId !== null ? getLastNavigatedUrlForTab(tabId) || (await getTabNavigatedHttpUrl(tabId)) : null;
+  return {
+    currentUrl: ensureHttpUrl(payload.currentUrl) || fallbackCurrentUrl,
+    currentSite: sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender)),
+  };
+};
+
+const buildRequestGateInput = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<RequestGateInput> => {
+  const defaultMinutes = await getTempAllowMinutes();
+  const { currentUrl, currentSite } = await getRequestUrlContext(payload, sender);
+  const stats = await getDailyStats();
+  return {
+    rawUrl: payload.url,
+    requestedUrl: currentUrl,
+    currentSite,
+    blockedSites,
+    defaultMinutes,
+    requestedText: typeof payload.purpose === "string" ? payload.purpose : "",
+    requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
+    followUpAnswer: payload.followUpAnswer,
+    followUpCount: Number(payload.followUpCount) || 0,
+    challengeId: payload.challengeId,
+    stats: buildAccessGateStatsContext(stats, currentSite),
+  };
+};
+
+const applyRequestGateDecision = async (
+  result: RequestGateDecisionResult
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const allowResult = await applyTemporaryAllowDecision(result.decision);
+  return { ...allowResult, ...result };
+};
+
+const requestIfThenIntentionAccess = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const input = await buildRequestGateInput(payload, sender);
+  return applyRequestGateDecision(decideIfThenIntentionRequest(input));
+};
+
+const requestGithubContributionAccess = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const input = await buildRequestGateInput(payload, sender);
+  const result = await decideGithubContributionRequest(input);
+  return applyRequestGateDecision(result);
+};
+
+const requestAiStudyQuizAccess = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const input = await buildRequestGateInput(payload, sender);
+  const result = await decideAiStudyQuizRequest(input);
+  return applyRequestGateDecision(result);
+};
 
 const requestLocalIntentAccess = async (
   payload: RequestLocalIntentAccessMessage,
   sender?: any
-): Promise<TemporaryAllowResult & { decision: AccessGateDecision }> => {
-  const defaultMinutes = await getTempAllowMinutes();
-  const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
-  const fallbackCurrentUrl =
-    tabId !== null ? getLastNavigatedUrlForTab(tabId) || (await getTabNavigatedHttpUrl(tabId)) : null;
-  const currentUrl = ensureHttpUrl(payload.currentUrl) || fallbackCurrentUrl;
-  const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
-  const stats = await getDailyStats();
-  const siteStats = buildAccessGateStatsContext(stats, currentSite);
-
-  const decision = localIntentAccessGate.decide({
-    rawUrl: payload.url,
-    requestedScope: "domain",
-    requestedUrl: currentUrl,
-    blockedSites,
-    defaultMinutes,
-    requestedPurpose: typeof payload.purpose === "string" ? payload.purpose : "",
-    requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
-    currentUrl,
-    currentSite,
-    followUpAnswer: payload.followUpAnswer,
-    stats: siteStats,
-  });
-
-  const allowResult = await applyTemporaryAllowDecision(decision);
-  return {
-    ...allowResult,
-    decision,
-  };
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const input = await buildRequestGateInput(payload, sender);
+  return applyRequestGateDecision(decideLocalIntentRequest(input));
 };
 
 const requestLlmReviewedAccess = async (
   payload: RequestLocalIntentAccessMessage,
   sender?: any,
   onProgress?: (stage: AccessReviewProgressStage) => void
-): Promise<TemporaryAllowResult & { decision: AccessGateDecision }> => {
-  onProgress?.("preparing");
-  const defaultMinutes = await getTempAllowMinutes();
-  const maxMinutes = defaultMinutes;
-  const tabId = typeof sender?.tab?.id === "number" ? sender.tab.id : null;
-  const fallbackCurrentUrl =
-    tabId !== null ? getLastNavigatedUrlForTab(tabId) || (await getTabNavigatedHttpUrl(tabId)) : null;
-  const currentUrl = ensureHttpUrl(payload.currentUrl) || fallbackCurrentUrl;
-  const currentSite = sanitizeSite(payload.currentSite) || sanitizeSite(parseSiteFromSender(sender));
-  const stats = await getDailyStats();
-
-  const provider = await new Promise<{
-    provider: string;
-    model: string;
-    apiKey: string;
-    reviewStrictnessLevel: 1 | 2 | 3 | 4 | 5;
-    leisureAllowanceLevel: 1 | 2 | 3 | 4 | 5;
-  }>((resolve) => {
-    chrome.storage.sync.get(
-      {
-        [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
-        [STORAGE_KEYS.llmReviewStrictness]: DEFAULT_LLM_REVIEW_STRICTNESS,
-        [STORAGE_KEYS.llmLeisureAllowance]: DEFAULT_LLM_LEISURE_ALLOWANCE,
-        [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
-      },
-      (syncData: StorageItems) => {
-        chrome.storage.local.get({ [STORAGE_KEYS.openAiApiKey]: "" }, (localData: StorageItems) => {
-          resolve({
-            provider: String(syncData[STORAGE_KEYS.llmProvider] || DEFAULT_LLM_PROVIDER),
-            model: String(syncData[STORAGE_KEYS.openAiModel] || DEFAULT_OPENAI_MODEL),
-            apiKey: String(localData[STORAGE_KEYS.openAiApiKey] || ""),
-            reviewStrictnessLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmReviewStrictness]),
-            leisureAllowanceLevel: normalizeReviewLevel(syncData[STORAGE_KEYS.llmLeisureAllowance]),
-          });
-        });
-      }
-    );
-  });
-
-  const modelLabel = hasChromeLocalProviderConfig(provider)
-    ? "Chrome local LLM (Gemini Nano)"
-    : provider.model;
-
-  if (!hasOpenAiProviderConfig(provider) && !hasChromeLocalProviderConfig(provider)) {
-    return {
-      ok: false,
-      host: null,
-      url: null,
-      scope: "none",
-      minutes: defaultMinutes,
-      provider: provider.provider,
-      model: modelLabel,
-      decision: {
-        decision: "FAIL",
-        scope: "none",
-        minutes: defaultMinutes,
-        host: null,
-        url: null,
-        ruleIds: [],
-        message: "LLM-reviewed request is selected, but provider settings are incomplete.",
-      },
-    };
-  }
-
-  const requestedPurpose = typeof payload.purpose === "string" ? payload.purpose : "";
-  const followUpCount = Math.max(0, Number(payload.followUpCount) || 0);
-  const siteStats = buildAccessGateStatsContext(stats, currentSite);
-
-  let modelDecision: unknown;
-  try {
-    const reviewContext = {
-      blockedDomain: currentSite || "unknown",
-      requestedUrl: currentUrl,
-      requestedPurpose,
-      requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
-      reviewStrictnessLevel: provider.reviewStrictnessLevel,
-      leisureAllowanceLevel: provider.leisureAllowanceLevel,
-      followUpAnswer: payload.followUpAnswer,
-      followUpCount,
-      currentTimeIso: new Date().toISOString(),
-      dayOfWeek: new Date().toLocaleDateString("en-US", { weekday: "long" }),
-      stats: siteStats,
-    };
-    modelDecision = hasChromeLocalProviderConfig(provider)
-      ? await requestChromeLocalAccessReview(reviewContext, onProgress)
-      : await (async () => {
-          onProgress?.("reviewing");
-          return requestOpenAiAccessReview(provider.apiKey, provider.model, reviewContext);
-        })();
-    onProgress?.("finalizing");
-  } catch (error) {
-    console.warn("llm-reviewed-access request failed", error);
-    const message =
-      error instanceof Error && error.message
-        ? `The LLM review could not run: ${error.message}`
-        : "The LLM review is temporarily unavailable. Please try again shortly.";
-    return {
-      ok: false,
-      host: null,
-      url: null,
-      scope: "none",
-      minutes: defaultMinutes,
-      provider: provider.provider,
-      model: modelLabel,
-      decision: {
-        decision: "FAIL",
-        scope: "none",
-        minutes: defaultMinutes,
-        host: null,
-        url: null,
-        ruleIds: [],
-        message,
-      },
-    };
-  }
-
-  const decision = llmReviewedAccessGate.decide({
-    rawUrl: payload.url,
-    requestedScope: "domain",
-    requestedUrl: currentUrl,
-    blockedSites,
-    defaultMinutes,
-    requestedPurpose,
-    requestedMinutes: Number(payload.requestedMinutes) || defaultMinutes,
-    currentUrl,
-    currentSite,
-    followUpAnswer: payload.followUpAnswer,
-    followUpCount,
-    maxMinutes,
-    modelDecision,
-    stats: siteStats,
-  });
-
-  const allowResult = await applyTemporaryAllowDecision(decision);
-  return {
-    ...allowResult,
-    decision,
-  };
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const input = await buildRequestGateInput(payload, sender);
+  const result = await decideLlmReviewedRequest(input, onProgress);
+  return applyRequestGateDecision(result);
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
@@ -1683,7 +1595,13 @@ type RecordBlockedAttemptMessage = {
 };
 
 type RequestLocalIntentAccessMessage = {
-  type: "request-local-intent-access" | "request-agentic-access" | "request-llm-reviewed-access";
+  type:
+    | "request-local-intent-access"
+    | "request-agentic-access"
+    | "request-llm-reviewed-access"
+    | "request-if-then-intention-access"
+    | "request-github-contribution-access"
+    | "request-ai-study-quiz-access";
   url?: string | null;
   currentUrl?: string | null;
   currentSite?: string | null;
@@ -1691,6 +1609,7 @@ type RequestLocalIntentAccessMessage = {
   requestedMinutes?: number | null;
   followUpAnswer?: string | null;
   followUpCount?: number | null;
+  challengeId?: string | null;
 };
 
 const TEMPORARY_ALLOW_MESSAGE_TYPE =
@@ -1709,6 +1628,15 @@ const REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE =
 const REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "llm-reviewed-request-access")
     ?.messageType ?? "request-llm-reviewed-access";
+const REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "if-then-intention-request-access")
+    ?.messageType ?? "request-if-then-intention-access";
+const REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "github-contribution-request-access")
+    ?.messageType ?? "request-github-contribution-access";
+const REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "ai-study-quiz-request-access")
+    ?.messageType ?? "request-ai-study-quiz-access";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
 
 const stripTags = (value: string): string =>
@@ -2439,6 +2367,12 @@ const handleRequestAccessMessage = async (
   const source =
     message.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
       ? "llm-reviewed"
+      : message.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE
+      ? "if-then-intention"
+      : message.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE
+      ? "github-contribution"
+      : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
+      ? "ai-study-quiz"
       : "local-intent";
   const requestedSite =
     sanitizeSite(message.currentSite) || sanitizeSite(parseSiteFromSender(sender));
@@ -2463,6 +2397,12 @@ const handleRequestAccessMessage = async (
     .then(() =>
       message.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE
         ? requestLlmReviewedAccess(message, sender, onProgress)
+        : message.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE
+        ? requestIfThenIntentionAccess(message, sender)
+        : message.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE
+        ? requestGithubContributionAccess(message, sender)
+        : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
+        ? requestAiStudyQuizAccess(message, sender)
         : requestLocalIntentAccess(message, sender)
     );
 
@@ -2524,6 +2464,9 @@ const handleRequestAccessMessage = async (
     ok: allowResult.ok,
     decision,
     destination,
+    challengeId: (allowResult as any).challengeId,
+    question: (allowResult as any).question,
+    topic: (allowResult as any).topic,
   };
 };
 
@@ -2649,6 +2592,9 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
   if (
     message?.type === REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
+    message?.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE ||
+    message?.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE ||
+    message?.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE ||
     message?.type === "request-agentic-access"
   ) {
     handleRequestAccessMessage(message as RequestLocalIntentAccessMessage, sender)
@@ -2689,6 +2635,9 @@ if (chrome.runtime.onConnect) {
       if (
         message?.type !== REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE &&
+        message?.type !== REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE &&
+        message?.type !== REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE &&
+        message?.type !== REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE &&
         message?.type !== "request-agentic-access"
       ) {
         postMessage({ type: "result", response: { ok: false, error: "Unsupported request type" } });

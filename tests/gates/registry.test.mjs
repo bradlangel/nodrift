@@ -16,7 +16,14 @@ const test = (name, run) => {
 test("registry exposes all compiled-in access gates", () => {
   assert.deepEqual(
     GATE_MODULES.map((module) => module.id),
-    ["temporary-allow", "local-intent-access", "llm-reviewed-access"]
+    [
+      "temporary-allow",
+      "local-intent-access",
+      "llm-reviewed-access",
+      "if-then-intention-access",
+      "github-contribution-access",
+      "ai-study-quiz-access",
+    ]
   );
 });
 
@@ -27,6 +34,9 @@ test("registry derives block-page gate capabilities", () => {
       "temporary-allow-domain",
       "local-intent-request-access",
       "llm-reviewed-request-access",
+      "if-then-intention-request-access",
+      "github-contribution-request-access",
+      "ai-study-quiz-request-access",
     ]
   );
 });
@@ -39,6 +49,10 @@ test("registry resolves gates by action id and message type", () => {
   assert.equal(
     findGateModuleByMessageType("request-local-intent-access")?.id,
     "local-intent-access"
+  );
+  assert.equal(
+    findGateModuleByMessageType("request-ai-study-quiz-access")?.id,
+    "ai-study-quiz-access"
   );
   assert.equal(findGateModuleByActionId("missing"), null);
 });
