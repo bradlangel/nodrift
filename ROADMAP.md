@@ -46,33 +46,49 @@ These are post-v1 or v1.x gate ideas to explore now that the extension has a
 compiled-in gate module shape. The goal is playful, configurable friction, not a
 default wall of chores.
 
-- Random gate: choose from enabled gates with weights, cooldowns, and difficulty
-  settings.
-- If-then implementation intention gate: ask the user to define a concrete
-  "if this happens, then I will do that" plan before access.
-- Accomplishment threshold gate: use an LLM to judge whether today's configured
-  goals or self-reported accomplishments are enough for access.
-- GitHub contribution gate: check commits, pull requests, reviews, or issues
-  against a daily threshold.
-- LLM/work artifact gate: ask for a summary or evidence of useful work completed
-  today and have an LLM judge whether it clears the user's bar.
-- LeetCode/problem-solving gate: require a coding challenge or short algorithm
-  exercise before access.
-- Riddle or logic-puzzle gate: lightweight novelty friction for short access
-  windows.
-- Tiny debugging gate: present a short broken snippet and ask the user to spot
-  or fix the bug.
-- Reading comprehension gate: show a short passage and ask one question before
-  granting access.
-- Typing accuracy gate: require a short focused typing prompt with an error
-  threshold.
-- Cooldown timer gate: require a short intentional pause before the request can
-  continue.
-- Daily budget gate: spend from a configured leisure/access budget and make the
-  remaining budget visible.
-- Gate-specific stats panels: let each compiled-in gate register its own
-  dashboard projection or detail panel once there are enough gates to justify
-  more than the shared gate usage summary.
+Use personal usefulness as the first filter. "V1.1 strength" is a working
+hypothesis, not a final priority.
+
+| Gate idea | What it asks | Why it might be useful personally | Setup/data needed | Build effort | Product risk | V1.1 strength |
+| --- | --- | --- | --- | --- | --- | --- |
+| If-then implementation intention gate | Write a concrete "if this happens, then I will do that" plan before access. | Strong reflective friction without feeling punitive; fits the NoDrift philosophy. | None or a short saved template list. | Medium | Can feel repetitive if prompts do not vary. | High |
+| Commitment receipt gate | Write "I am using this site to ___, and I will stop when ___" before access. | Creates a concrete receipt for intentional access without making the user solve a chore. | Text input, optional receipt display during access. | Low-medium | Can become rote if repeated too often. | High |
+| Return ticket gate | Choose what to return to after the access window ends. | Gives temporary access an exit destination instead of just a timer. | Text input and expiry reminder copy. | Low-medium | Needs careful copy so it feels supportive, not scolding. | High |
+| Anti-feed gate | Request an exact URL, search target, or task instead of opening a feed/homepage. | Especially useful for YouTube, Reddit, X, and other feed-heavy sites. | Current URL, optional URL/search input. | Medium | Can be awkward when the homepage is legitimately needed. | High |
+| One-page objective gate | State the exact page/task needed, then grant URL-scoped access when possible. | Matches real "I need one answer, then I leave" use; uses existing URL-scope work. | Requested URL and duration. | Medium | May overlap with existing AI-reviewed request flow. | High |
+| Cooldown timer gate | Wait through a short pause before the request can continue. | Good for interrupting autopilot and testing async gate UI. | Duration setting. | Low | Pure waiting can feel annoying instead of reflective. | High |
+| Friction ladder gate | Escalate from light prompts to stronger gates after repeated requests, recent denials, or high access pressure. | Adapts friction to the moment instead of making every access request equally hard. | Recent stats, enabled gates, escalation rules. | Medium-high | Can feel unpredictable if the ladder is not visible and configurable. | High |
+| North Star check gate | Choose which personal priority this access serves before continuing. | Re-centers access around user-defined values instead of generic productivity. | User priorities list. | Low-medium | Too abstract if priorities are vague. | Medium-high |
+| Study quiz gate | Choose a topic, answer an AI-generated quiz, and get access only after all answers are correct. | Turns procrastination friction into practice on something the user says matters. | Topic setting, AI provider, JSON quiz/answer validation, retry flow. | Medium-high | Can be frustrating if questions are ambiguous or model grading feels unfair. | Medium-high |
+| AI tutor gate | Choose a topic and answer an adaptive AI-generated question with explanation and retry. | Turns friction into learning while being more humane than pass/fail quiz grading. | Topic setting, AI provider, quiz JSON, answer validation, retry flow. | Medium-high | Model ambiguity can make grading feel unfair. | Medium-high |
+| AI CAT practice gate | Generate a timed, adaptive quiz on a chosen topic and require a passing score before access. | Feels more like deliberate practice than arbitrary friction; useful for test prep or skill sharpening. | Topic, difficulty, timer, AI provider, scoring rubric, per-topic progress. | High | Timed tests can feel stressful and unfair if generation or grading is inconsistent. | Medium-high |
+| Learning deck gate | Answer 1-3 user-authored flashcards before access. | Fair, predictable, and personally meaningful without requiring AI. | Flashcard storage/import and answer validation. | Medium | Requires users to maintain cards. | Medium-high |
+| Memory recall gate | Review facts or notes the user says matter, with spaced-repetition-style prompts. | Turns distraction into practice on durable knowledge. | User notes/facts, review schedule, answer validation. | Medium-high | Can grow into a whole study app if scope is not controlled. | Medium-high |
+| Daily budget gate | Spend from a configured leisure/access budget and show remaining budget. | Useful if the problem is total time, not single decisions. | Daily minutes budget and usage state. | Medium | Can feel like calorie counting for browsing. | Medium-high |
+| Random gate | Choose from enabled gates with weights, cooldowns, and difficulty settings. | Adds novelty after there are enough useful gates to rotate through. | Enabled gates, weights, cooldown settings. | Medium | Too early if there are not enough good gates. | Medium-high later |
+| Tiny next action gate | Write one concrete next action to do after the access session. | Keeps the user connected to what comes after browsing. | Text input. | Low | Can overlap with return ticket or commitment receipt gates. | Medium-high |
+| Exit-intention gate | Before access, name the condition that means "I am done here." | Helps prevent open-ended browsing after a legitimate reason. | Text input, optional follow-up after access. | Medium | Could become naggy if post-access prompts are too frequent. | Medium |
+| AI plan validator gate | Write a plan for using the site and have AI check whether it is specific, bounded, and aligned. | Keeps AI focused on plan quality rather than judging the user's worthiness. | AI provider, plan rubric, local context. | Medium | May overlap heavily with AI-reviewed request. | Medium |
+| Two-option honesty gate | Choose between "I need this for ___" and "I am avoiding ___"; if avoiding, pick a tiny next step instead. | Makes drift visible without shaming the user. | Short prompt and alternative next-step flow. | Low-medium | Binary framing can feel too blunt. | Medium |
+| Future-self question gate | Answer whether this access will feel worthwhile 30 minutes from now, with a specific reason. | Very lightweight reflection that can interrupt autopilot. | Short prompt. | Low | May be too easy to click through. | Medium |
+| Stated tradeoff gate | Complete "Opening this means I am choosing it over ___." | Makes opportunity cost visible in one sentence. | Short prompt. | Low | Can feel guilt-inducing if overused. | Medium |
+| One-sentence journal gate | Write one sentence about current state before access. | Helps reveal whether the urge is curiosity, fatigue, avoidance, or real need. | Text input, optional local stats category. | Low-medium | Could feel like journaling homework. | Medium |
+| Priority budget gate | Spend time from user-defined buckets such as work, learning, maintenance, and leisure. | More nuanced than a single leisure budget and can validate intentional downtime. | Priority buckets and per-bucket budgets. | Medium-high | More settings complexity. | Medium |
+| Done list gate | Add one real completed item or choose planned leisure before access. | Encourages recognition of progress before drifting. | Local done-list storage. | Medium | Can become performative. | Medium |
+| Launch checklist gate | Confirm task, source, and stop condition before opening work-adjacent sites. | Helps with docs, tutorials, and research where access can be legitimate or drift. | Checklist fields and optional per-site defaults. | Low-medium | Extra form fields can slow legitimate access. | Medium |
+| Pairing gate | Pair access with another action, such as notes open, timer running, or a specific doc URL. | Supports intentional browsing instead of pure blocking. | Configured companion action or URL. | Medium | Hard to verify without broad permissions or integrations. | Medium |
+| Reading comprehension gate | Read a short passage and answer one question before access. | Productive friction that is calmer than puzzles or chores. | Passage bank or generated local prompts. | Medium | Content needs to stay lightweight and not school-like. | Medium |
+| Tiny debugging gate | Spot or fix a small broken code snippet. | Potentially useful for a developer-user and tests skill-based gates. | Snippet bank and answer validation. | Medium | Too niche for non-developers. | Medium |
+| Typing accuracy gate | Type a short focused prompt with an error threshold. | Low-stakes physical friction; simple to understand. | Prompt text and accuracy threshold. | Low-medium | Can feel like busywork. | Medium |
+| Accomplishment threshold gate | Report today's goals or accomplishments and have AI judge whether access clears the bar. | Could support "earn access after real work" without external integrations. | User goals, self-report, AI provider. | Medium-high | Risks moralizing productivity or over-trusting AI judgment. | Medium |
+| Work artifact gate | Provide a short summary or evidence of useful work completed today for AI review. | More grounded than vague self-report if the user wants accountability. | Text artifact, optional links, AI provider. | Medium-high | Can become performative or privacy-sensitive. | Medium |
+| GitHub contribution gate | Check commits, pull requests, reviews, or issues against a daily threshold. | Useful if GitHub activity is a real personal goal. | GitHub auth/config and thresholds. | High | Pulls NoDrift toward integrations and account data. | Medium-low |
+| Scheduled access window gate | Allow access only during configured windows, or ask for a stronger reason outside them. | Helpful if some sites are fine at night/weekends but harmful during work. | Schedule settings. | Medium | Time rules can become fiddly. | Medium-low |
+| Deep work proof gate | Unlock access after a manually confirmed focus session or timer. | Useful when the user wants access to follow meaningful work rather than replace it. | Focus timer/session state. | Medium | Easy to fake and can feel bureaucratic. | Medium-low |
+| LeetCode/problem-solving gate | Complete a short coding or algorithm exercise before access. | High friction for serious avoidance patterns. | Problem bank and validation. | High | Too heavy for frequent use. | Low-medium |
+| Riddle or logic-puzzle gate | Solve a lightweight novelty puzzle before access. | Fun occasionally and easy to understand. | Puzzle bank and validation. | Medium | Users may optimize around it or find it gimmicky. | Low-medium |
+| Body check gate | Confirm a short reset action, such as standing up, drinking water, or taking a breath. | Useful when browsing pressure is tied to fatigue or restlessness. | Configurable reset prompts. | Low | Can feel paternalistic if copy is not careful. | Low-medium |
+| Gate-specific stats panels | Let each gate register its own dashboard projection or detail panel. | Useful once multiple gates exist and the user wants to compare what works. | Gate stats contracts and dashboard slots. | Medium-high | Premature before there are enough gates. | Later support |
 
 ## Order of Operations
 
@@ -137,6 +153,9 @@ Possible module types:
   challenge proof.
 - Context providers: local stats, current time/day, recent decisions, requested
   URL, blocked domain.
+- Gate-owned storage: each gate can define its own settings and local state,
+  such as quiz topics, flashcards, progress, budgets, cooldowns, or difficulty,
+  without leaking those details into the core blocker.
 - Actions: peek with ChatGPT, redirect, temporary allow, scoped allow,
   copy original URL.
 - UI panels: stats summary, request-access form, gate result, options sections,
@@ -175,6 +194,22 @@ Refactor milestones:
 - [x] Add settings controls for compiled-in gate defaults and optional
       block-page actions such as ChatGPT peek and the redirect button.
 - [x] Add a short architecture note explaining how to add a new access gate.
+- [ ] Add a gate-owned storage helper so gates can persist their own settings
+      and local state without adding one-off storage plumbing to the service
+      worker.
+
+## Development Workflow
+
+Add this after a few more useful gates exist, so the automated review artifacts
+cover real gate variation instead of only the current v1 surfaces.
+
+- [ ] Add visual regression screenshots for core extension surfaces and common
+      gate states.
+- [ ] Add a PR preview artifact with screenshots and a short sped-up walkthrough
+      video so review can focus on behavior and UI rather than local manual
+      setup.
+- [ ] Include block page, settings, local stats, popup, and at least two gate
+      flows in the generated review artifact.
 
 ## Local Stats
 
