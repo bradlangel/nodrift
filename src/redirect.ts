@@ -14,6 +14,11 @@ type BlockPageAction = {
   messageType?: string;
   disabledReason?: string;
   reviewerLabel?: string | null;
+  formTitle?: string;
+  formPlaceholder?: string;
+  formInitialValue?: string;
+  submitLabel?: string;
+  waitingLabel?: string;
 };
 
 type BlockPageActionsResponse = {
@@ -80,6 +85,7 @@ const ACCESS_REVIEW_PROGRESS_MESSAGES: Record<AccessReviewProgressStage, string>
 };
 const REQUEST_LOCAL_INTENT_MESSAGE_TYPE = "request-local-intent-access";
 const REQUEST_LLM_REVIEWED_MESSAGE_TYPE = "request-llm-reviewed-access";
+const REQUEST_AI_STUDY_QUIZ_MESSAGE_TYPE = "request-ai-study-quiz-access";
 
 const FALLBACK_BLOCK_PAGE_ACTIONS = {
   primaryActions: [
@@ -312,6 +318,7 @@ const renderActionButton = (action, groupClassName = "") => {
   if (action.reviewerLabel) button.dataset.reviewerLabel = action.reviewerLabel;
   if (action.formTitle) button.dataset.formTitle = action.formTitle;
   if (action.formPlaceholder) button.dataset.formPlaceholder = action.formPlaceholder;
+  if (action.formInitialValue) button.dataset.formInitialValue = action.formInitialValue;
   if (action.submitLabel) button.dataset.submitLabel = action.submitLabel;
   if (action.waitingLabel) button.dataset.waitingLabel = action.waitingLabel;
   if (action.disabledReason) {
@@ -536,6 +543,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   let activeRequestMessageType = REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
   let activeSubmitLabel = DEFAULT_REQUEST_ACCESS_BTN_TEXT;
   let activeWaitingLabel = "Reviewing...";
+  let activeFormPlaceholder = DEFAULT_REQUEST_ACCESS_PLACEHOLDER;
   let defaultAccessMinutes = null;
   let pendingFollowUp = null;
 
@@ -550,6 +558,9 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     purposeEl.disabled = false;
     submitBtn.textContent = pendingFollowUp?.submitLabel || activeSubmitLabel;
   };
+
+  const getActiveWaitingLabel = () =>
+    pendingFollowUp?.waitingLabel || activeWaitingLabel;
 
   const buildRequestPayload = (purpose) => ({
     type: activeRequestMessageType,
@@ -578,12 +589,13 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
       pendingFollowUp = {
         purpose: response.topic || purposeEl.value.trim(),
         challengeId: response.challengeId || null,
-        submitLabel: response.challengeId ? "Submit answer" : "Send follow-up",
+        submitLabel: response.challengeId ? "Submit answers" : "Send follow-up",
+        waitingLabel: response.challengeId ? "Checking answers..." : activeWaitingLabel,
       };
-      setResult(question, "thinking");
+      setResult(question, response.challengeId ? "" : "thinking");
       purposeEl.value = "";
       purposeEl.placeholder = response.challengeId
-        ? "Type your answer"
+        ? "Answer each question on a new line, or type A B C"
         : "Answer the follow-up";
       resetSubmitButton();
       purposeEl.focus();
@@ -592,6 +604,15 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
 
     if (!response.ok) {
       const message = decision?.message || response.error || "No access was granted.";
+      if (
+        pendingFollowUp?.challengeId &&
+        activeRequestMessageType === REQUEST_AI_STUDY_QUIZ_MESSAGE_TYPE
+      ) {
+        pendingFollowUp = null;
+        purposeEl.value = response.topic || "";
+        purposeEl.placeholder = activeFormPlaceholder;
+        resetSubmitButton();
+      }
       setResult(`Staying blocked. ${message}`, "fail");
       return;
     }
@@ -655,6 +676,9 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   const getFormPlaceholder = (requestAction) =>
     requestAction?.formPlaceholder || requestAction?.dataset?.formPlaceholder || "";
 
+  const getFormInitialValue = (requestAction) =>
+    requestAction?.formInitialValue || requestAction?.dataset?.formInitialValue || "";
+
   const getSubmitLabel = (requestAction) =>
     requestAction?.submitLabel || requestAction?.dataset?.submitLabel || "";
 
@@ -673,7 +697,9 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
         getFormTitle(requestAction) ||
         (isLlmMode ? "LLM-reviewed request" : DEFAULT_REQUEST_ACCESS_TITLE);
     }
-    purposeEl.placeholder = getFormPlaceholder(requestAction) || DEFAULT_REQUEST_ACCESS_PLACEHOLDER;
+    activeFormPlaceholder =
+      getFormPlaceholder(requestAction) || DEFAULT_REQUEST_ACCESS_PLACEHOLDER;
+    purposeEl.placeholder = activeFormPlaceholder;
     if (providerEl) {
       const reviewerLabel = isLlmMode ? getReviewerLabel(requestAction) : "";
       providerEl.textContent = reviewerLabel;
@@ -689,6 +715,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   const openRequestAccess = (requestAction, options = {}) => {
     setRequestMode(requestAction);
     pendingFollowUp = null;
+    purposeEl.value = getFormInitialValue(requestAction);
     setResult("", "");
 
     if (requestSection) requestSection.hidden = false;
@@ -737,7 +764,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
 
     submitBtn.disabled = true;
     purposeEl.disabled = true;
-    submitBtn.textContent = activeWaitingLabel;
+    submitBtn.textContent = getActiveWaitingLabel();
     const payload = buildRequestPayload(purpose);
 
     if (
@@ -748,12 +775,11 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
       return;
     }
 
-    setResult(
-      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE
-        ? LLM_REVIEW_WAITING_TEXT
-        : "",
-      activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE ? "thinking" : ""
-    );
+    if (activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE) {
+      setResult(LLM_REVIEW_WAITING_TEXT, "thinking");
+    } else if (!pendingFollowUp) {
+      setResult("", "");
+    }
 
     chrome.runtime.sendMessage(
       payload,

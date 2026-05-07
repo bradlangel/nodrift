@@ -18,6 +18,9 @@ export const STORAGE_KEYS = {
   lastPeekSite: "lastPeekSite",
   lastPeekUrl: "lastPeekUrl",
   localDailyStats: "localDailyStats",
+  aiStudyQuizChallenges: "aiStudyQuizChallenges",
+  githubContributionUsername: "githubContributionUsername",
+  githubContributionRecentWindowMinutes: "githubContributionRecentWindowMinutes",
 } as const;
 
 export const ALARM_NAMES = {

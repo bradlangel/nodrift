@@ -10,7 +10,7 @@ import {
   pickRequestedUrl,
   resolveHostAndRules,
 } from "../shared/access-request.js";
-import { isCorrectQuizAnswer } from "./quiz.js";
+import { areCorrectQuizAnswers } from "./quiz.js";
 
 export const aiStudyQuizGate: AccessGate<AiStudyQuizAccessRequestContext> = {
   id: "ai-study-quiz-access",
@@ -30,11 +30,11 @@ export const aiStudyQuizGate: AccessGate<AiStudyQuizAccessRequestContext> = {
       return failDecision(minutes, "Choose a study topic first.", host, ruleIds);
     }
 
-    if (!context.expectedAnswers?.length) {
+    if (!context.expectedAnswers?.length || context.expectedAnswers.length < 2) {
       return failDecision(minutes, "The quiz question was not ready yet.", host, ruleIds);
     }
 
-    if (!isCorrectQuizAnswer(context.answer, context.expectedAnswers)) {
+    if (!areCorrectQuizAnswers(context.answer, context.expectedAnswers)) {
       return {
         decision: "ASK_FOLLOWUP",
         scope: "none",
@@ -42,7 +42,7 @@ export const aiStudyQuizGate: AccessGate<AiStudyQuizAccessRequestContext> = {
         host,
         url: null,
         ruleIds,
-        message: "That answer was not correct yet. Try the question again.",
+        message: `Answer all ${context.expectedAnswers.length} questions correctly to continue.`,
       };
     }
 
@@ -53,7 +53,7 @@ export const aiStudyQuizGate: AccessGate<AiStudyQuizAccessRequestContext> = {
       host,
       url: pickRequestedUrl(context),
       ruleIds,
-      message: "Correct. Approved after study practice.",
+      message: "All quiz answers were correct. Approved after study practice.",
     };
   },
 };

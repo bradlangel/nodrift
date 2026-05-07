@@ -3,6 +3,7 @@ import {
   DEFAULT_ACCESS_GATE_ACTION_ID,
   DEFAULT_BLOCKED_SITES,
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
+  DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
   DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
   DEFAULT_LLM_PROVIDER,
   DEFAULT_OPENAI_MODEL,
@@ -19,6 +20,7 @@ import {
 } from "./core/access-contracts.js";
 import { decideAiStudyQuizRequest } from "./gates/ai-study-quiz/request.js";
 import { decideGithubContributionRequest } from "./gates/github-contribution/request.js";
+import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import { decideIfThenIntentionRequest } from "./gates/if-then-intention/request.js";
 import { temporaryAllowGate } from "./gates/temporary-allow/index.js";
 import { decideLocalIntentRequest } from "./gates/local-intent/request.js";
@@ -376,12 +378,16 @@ const getBlockPageActions = async (): Promise<{
     [STORAGE_KEYS.blockPageAlternatives]: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
     [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
     [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
+    [STORAGE_KEYS.githubContributionUsername]: DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
   });
   const localData = await getLocalStorageItems({ [STORAGE_KEYS.openAiApiKey]: "" });
 
   const provider = String(syncData[STORAGE_KEYS.llmProvider] || DEFAULT_LLM_PROVIDER);
   const model = String(syncData[STORAGE_KEYS.openAiModel] || DEFAULT_OPENAI_MODEL);
   const apiKey = String(localData[STORAGE_KEYS.openAiApiKey] || "");
+  const githubContributionUsername =
+    normalizeGithubUsername(syncData[STORAGE_KEYS.githubContributionUsername]) ??
+    DEFAULT_GITHUB_CONTRIBUTION_USERNAME;
   const llmConfigured =
     provider === "chrome-local" ||
     (provider === "openai" && model.trim().length > 0 && apiKey.trim().length > 0);
@@ -416,7 +422,17 @@ const getBlockPageActions = async (): Promise<{
             "AI study quiz is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
         }
       : primaryAction
-      ? { ...primaryAction, reviewerLabel }
+      ? {
+          ...primaryAction,
+          reviewerLabel,
+          ...(primaryAction.id === "github-contribution-request-access" &&
+          githubContributionUsername
+            ? {
+                formInitialValue: githubContributionUsername,
+                formPlaceholder: "GitHub username",
+              }
+            : {}),
+        }
       : null;
 
   const secondaryActionIds = [

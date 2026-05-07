@@ -4,6 +4,7 @@ import {
   githubContributionGate,
   normalizeGithubUsername,
 } from "../../../dist/gates/github-contribution/gate.js";
+import { countRecentGithubContributionEvents } from "../../../dist/gates/github-contribution/request.js";
 
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
@@ -27,20 +28,64 @@ test("normalizes public GitHub usernames", () => {
 test("github contribution gate approves positive contribution count", () => {
   const decision = githubContributionGate.decide({
     ...baseContext,
-    contributionCount: 1,
+    contributionCount: 20,
+    recentContributionCount: 0,
   });
 
   assert.equal(decision.decision, "PASS");
   assert.equal(decision.host, "x.com");
 });
 
-test("github contribution gate denies zero contribution count", () => {
+test("github contribution gate approves recent public contribution events", () => {
   const decision = githubContributionGate.decide({
     ...baseContext,
     contributionCount: 0,
+    recentContributionCount: 1,
+  });
+
+  assert.equal(decision.decision, "PASS");
+});
+
+test("github contribution gate denies when recent activity and daily threshold miss", () => {
+  const decision = githubContributionGate.decide({
+    ...baseContext,
+    contributionCount: 3,
+    recentContributionCount: 0,
   });
 
   assert.equal(decision.decision, "FAIL");
+});
+
+test("counts recent public GitHub contribution events", () => {
+  const now = Date.parse("2026-05-07T12:00:00Z");
+  const count = countRecentGithubContributionEvents(
+    [
+      {
+        type: "PushEvent",
+        created_at: "2026-05-07T11:30:00Z",
+        payload: { commits: [{ sha: "1" }, { sha: "2" }] },
+      },
+      {
+        type: "PullRequestReviewEvent",
+        created_at: "2026-05-07T10:15:00Z",
+        payload: { action: "submitted" },
+      },
+      {
+        type: "WatchEvent",
+        created_at: "2026-05-07T11:50:00Z",
+        payload: { action: "started" },
+      },
+      {
+        type: "IssuesEvent",
+        created_at: "2026-05-07T08:00:00Z",
+        payload: { action: "opened" },
+      },
+    ],
+    now,
+    120
+  );
+
+  assert.equal(count, 3);
 });
 
 let failures = 0;

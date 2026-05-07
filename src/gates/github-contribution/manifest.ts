@@ -5,7 +5,7 @@ export const githubContributionGateAction: BlockPageActionCapability = {
   type: "request-access",
   messageType: "request-github-contribution-access",
   visibleByDefault: false,
-  description: "Check today's public GitHub contribution activity before access.",
+  description: "Check recent or high-volume public GitHub contribution activity before access.",
   label: "GitHub contribution",
   settingsLabel: "GitHub contribution check",
   buttonId: "github-contribution-request-access-gate-btn",

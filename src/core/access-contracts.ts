@@ -84,13 +84,16 @@ export type GithubContributionAccessRequestContext = AccessRequestContext & {
   username: string;
   contributionDate: string;
   contributionCount: number | null;
+  recentContributionCount?: number | null;
+  recentContributionWindowMinutes?: number;
+  dailyContributionThreshold?: number;
   requestedMinutes: number;
 };
 
 export type AiStudyQuizAccessRequestContext = AccessRequestContext & {
   topic: string;
   answer?: string | null;
-  expectedAnswers?: string[];
+  expectedAnswers?: string[][];
   requestedMinutes: number;
 };
 
@@ -155,6 +158,7 @@ export type BlockPageActionCapability = {
   title?: string;
   formTitle?: string;
   formPlaceholder?: string;
+  formInitialValue?: string;
   submitLabel?: string;
   waitingLabel?: string;
 };
