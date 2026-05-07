@@ -80,6 +80,20 @@ export type LlmReviewedAccessRequestContext = AccessRequestContext & {
   modelDecision: unknown;
 };
 
+export type GithubContributionAccessRequestContext = AccessRequestContext & {
+  username: string;
+  contributionDate: string;
+  contributionCount: number | null;
+  requestedMinutes: number;
+};
+
+export type AiStudyQuizAccessRequestContext = AccessRequestContext & {
+  topic: string;
+  answer?: string | null;
+  expectedAnswers?: string[];
+  requestedMinutes: number;
+};
+
 export type AccessGateDecision = {
   decision: AccessDecision;
   scope: AccessDecisionScope;
@@ -139,6 +153,10 @@ export type BlockPageActionCapability = {
   scope?: AccessDecisionScope;
   className?: string;
   title?: string;
+  formTitle?: string;
+  formPlaceholder?: string;
+  submitLabel?: string;
+  waitingLabel?: string;
 };
 
 export type OptionalIntegration = {

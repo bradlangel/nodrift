@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node tests/access-decisions.test.mjs && node tests/stats.test.mjs && node tests/gates/registry.test.mjs && node tests/gates/temporary-allow/gate.test.mjs && node tests/gates/local-intent/gate.test.mjs && node tests/gates/llm-reviewed/decision.test.mjs && node tests/gates/llm-reviewed/providers/openai.test.mjs && node tests/gates/llm-reviewed/providers/chrome-local.test.mjs",
+    "test": "npm run build && node tests/access-decisions.test.mjs && node tests/stats.test.mjs && node tests/gates/registry.test.mjs && node tests/gates/temporary-allow/gate.test.mjs && node tests/gates/local-intent/gate.test.mjs && node tests/gates/if-then-intention/gate.test.mjs && node tests/gates/github-contribution/gate.test.mjs && node tests/gates/ai-study-quiz/gate.test.mjs && node tests/gates/llm-reviewed/decision.test.mjs && node tests/gates/llm-reviewed/providers/openai.test.mjs && node tests/gates/llm-reviewed/providers/chrome-local.test.mjs",
     "store:assets": "node scripts/create-store-assets.mjs",
     "release:zip": "npm test && node scripts/package-release.mjs",
     "release:validate": "node scripts/validate-release.mjs",
