@@ -145,8 +145,8 @@ domains, pasted URLs are normalized where possible, duplicate entries are
 removed, and overlapping domain entries are called out before saving.
 
 Temporary allow grants wall-clock access for the configured duration. Stats
-separately track active usage time, which means a 10 minute grant can expire
-after 10 real minutes even if only a few minutes were spent on the site. The
+separately track active usage time, which means a 1 minute grant can expire
+after 1 real minute even if only part of that minute was spent on the site. The
 grayscale setting applies a temporary CSS filter while access is active.
 
 The Gate Library chooses the primary access gate shown on the block page:
