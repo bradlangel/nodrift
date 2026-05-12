@@ -15,7 +15,7 @@ export const DEFAULT_BLOCK_PAGE_ALTERNATIVES: string[] = [
 ];
 
 export const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
-export const DEFAULT_TEMP_ALLOW_MINUTES = 10;
+export const DEFAULT_TEMP_ALLOW_MINUTES = 1;
 
 export const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 export const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
