@@ -56,6 +56,7 @@ import {
   parseSiteFromSender,
   sanitizeSite,
 } from "./url-domain.js";
+import { findRuleIdByHostname } from "./site-matching.js";
 
 const ACCESS_GATE_ACTION_IDS = new Set(
   GATE_BLOCK_PAGE_ACTION_CAPABILITIES.map((action) => action.id)
@@ -508,6 +509,14 @@ const buildRules = (sites: string[]): any[] =>
 
 const allRuleIds = () => blockedSites.map((_, idx) => idx + 1);
 
+const buildBlockPageUrl = (site: string, id: number): string => {
+  const params = new URLSearchParams({
+    rid: String(id),
+    site,
+  });
+  return chrome.runtime.getURL(`pages/block.html?${params.toString()}`);
+};
+
 const activeTemporaryAllowRuleIds = (): Set<number> => {
   const ids = new Set<number>();
   for (let i = 0; i < blockedSites.length; i++) {
@@ -698,6 +707,77 @@ const getTemporaryAllowedHostFromUrl = (rawUrl?: string | null): string | null =
     getTemporaryAllowMatchForHost(host)?.host ??
     (isUrlTemporarilyAllowed(rawUrl) ? host : null)
   );
+};
+
+const getBlockingRuleForUrl = (
+  rawUrl?: string | null
+): { id: number; site: string } | null => {
+  const host = parseHostnameFromUrl(rawUrl);
+  if (!host) return null;
+  if (isHostTemporarilyAllowed(host) || isUrlTemporarilyAllowed(rawUrl)) {
+    return null;
+  }
+
+  const id = findRuleIdByHostname(host, blockedSites);
+  if (!id) return null;
+  const site = blockedSites[id - 1];
+  return site ? { id, site } : null;
+};
+
+const redirectTabToBlockPageIfNeeded = (tab: ChromeTab) => {
+  if (typeof tab.id !== "number") return;
+  const currentUrl = tab.url ?? tab.pendingUrl;
+  const rule = getBlockingRuleForUrl(currentUrl);
+  if (!rule) return;
+
+  const navigatedUrl = ensureHttpUrl(currentUrl);
+  if (navigatedUrl) {
+    setLastNavigatedUrlForTab(tab.id, navigatedUrl, false);
+  }
+
+  chrome.tabs.update(
+    tab.id,
+    { url: buildBlockPageUrl(rule.site, rule.id) },
+    withLastErrorLog("tabs.update(block expired temporary allow)")
+  );
+};
+
+const queryTabsForHost = (
+  host: string,
+  callback: (tabs: ChromeTab[]) => void
+) => {
+  if (!chrome.tabs?.query) return;
+  chrome.tabs.query(
+    { url: [`*://${host}/*`, `*://*.${host}/*`] },
+    (tabs: ChromeTab[]) => {
+      if (chrome.runtime.lastError) {
+        console.warn(
+          "[tabs.query(block expired temporary allow)]",
+          chrome.runtime.lastError.message
+        );
+        return;
+      }
+      callback(tabs);
+    }
+  );
+};
+
+const redirectBlockedTabsForHost = (rawHost: string) => {
+  const host = normalizeHost(rawHost);
+  if (!host) return;
+  queryTabsForHost(host, (tabs) => {
+    tabs.forEach(redirectTabToBlockPageIfNeeded);
+  });
+};
+
+const redirectBlockedTabsForTemporaryUrl = (allow: TemporaryUrlAllowWindow) => {
+  queryTabsForHost(allow.host, (tabs) => {
+    tabs.forEach((tab) => {
+      const currentUrl = tab.url ?? tab.pendingUrl;
+      if (normalizeTemporaryAllowUrl(currentUrl) !== allow.url) return;
+      redirectTabToBlockPageIfNeeded(tab);
+    });
+  });
 };
 
 const normalizeTemporaryAllowUsageSession = (
@@ -1266,20 +1346,21 @@ const maybeApplyGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
   syncGrayscaleForUrl(tabId, rawUrl);
 };
 
-const refreshRules = () => {
+const refreshRules = (next?: () => void) => {
   pruneExpiredTemporarilyAllowedUrls();
   chrome.declarativeNetRequest.getDynamicRules((rules: DynamicRule[]) => {
     const ids = rules.map((r: DynamicRule) => r.id);
     chrome.declarativeNetRequest.updateDynamicRules(
       { removeRuleIds: ids, addRules: buildRulesForCurrentState() },
-      withLastErrorLog("refreshRules")
+      withLastErrorLog("refreshRules", next)
     );
   });
 };
 
-const refreshRulesIfReady = () => {
-  if (!blockedSitesLoaded || !temporaryAllowStateLoaded) return;
-  refreshRules();
+const refreshRulesIfReady = (next?: () => void) => {
+  if (!blockedSitesLoaded || !temporaryAllowStateLoaded) return false;
+  refreshRules(next);
+  return true;
 };
 
 const loadBlockedSites = () => {
@@ -2712,7 +2793,7 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
     if (allow) {
       temporarilyAllowedUrls.delete(id);
       persistTemporarilyAllowedUrls();
-      refreshRulesIfReady();
+      refreshRulesIfReady(() => redirectBlockedTabsForTemporaryUrl(allow));
       syncGrayscaleForHostTabs(allow.host);
       refreshBadgeForActiveTab();
       refreshActiveTemporaryAllowUsage();
@@ -2740,7 +2821,9 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
       }
       chrome.declarativeNetRequest.updateDynamicRules(
         { addRules: [buildRule(site, id)] },
-        withLastErrorLog("alarm addRules")
+        withLastErrorLog("alarm addRules", () => {
+          if (normalizedHost) redirectBlockedTabsForHost(normalizedHost);
+        })
       );
     }
   }
