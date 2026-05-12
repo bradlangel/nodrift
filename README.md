@@ -1,5 +1,7 @@
 # NoDrift Chrome Extension
 
+[Install NoDrift from the Chrome Web Store](https://chromewebstore.google.com/detail/hnehakhgloffpelfgleecfknkpkomhhl)
+
 Chrome-only for v1. Firefox support is intentionally post-v1.
 
 This is a soft website blocker for interrupting autopilot. It redirects
@@ -149,13 +151,10 @@ separately track active usage time, which means a 1 minute grant can expire
 after 1 real minute even if only part of that minute was spent on the site. The
 grayscale setting applies a temporary CSS filter while access is active.
 
-The Gate Library chooses the primary access gate shown on the block page:
-
-- One-click temporary allow grants domain access for the configured duration.
-- Local intent check reviews the stated purpose locally with no provider setup.
-- LLM-reviewed request uses an explicit provider configuration. Chrome local LLM
-  uses Chrome's on-device Prompt API path when available. External providers,
-  such as OpenAI, send a compact review request through your provider API key.
+The Gate Library chooses the primary access gate shown on the block page. The
+maintained overview of compiled-in gates lives in the
+[Gate Library (`src/gates/README.md`)](src/gates/README.md), and the in-extension
+Settings page shows the same library as selectable gate cards.
 
 The block page can also show configured alternatives, including clickable links,
 plus the optional Peek with ChatGPT action. Peek opens ChatGPT with a generated
@@ -173,7 +172,7 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
 - `declarativeNetRequest` and `declarativeNetRequestWithHostAccess`: redirect
   configured blocked domains to the extension block page and apply temporary
   allow rules.
-- `storage`: save settings, local stats, temporary allow state, and LLM provider
+- `storage`: save settings, local stats, temporary allow state, and AI provider
   API keys when configured.
 - `tabs` and `webNavigation`: track the attempted page, reopen or reload tabs
   after access decisions, maintain the badge, and measure active temporary
@@ -192,15 +191,15 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
 ## Privacy And Local Data
 
 The extension does not send remote telemetry by default. Settings, daily stats,
-recent decisions, temporary allow state, and LLM provider API keys are stored in
+recent decisions, temporary allow state, and AI provider API keys are stored in
 Chrome extension storage. Some settings may sync across browser profiles if
 Chrome sync is enabled. See [PRIVACY.md](PRIVACY.md) for the full privacy
 policy.
 
-The LLM-reviewed gate sends data only when that gate is selected and used. For
+The AI-reviewed gate sends data only when that gate is selected and used. For
 external providers, such as OpenAI, the review payload includes the requested
 purpose, requested URL/domain, requested minutes, current time/day,
-provider/model settings, and compact local stats context. For Chrome local LLM,
+provider/model settings, and compact local stats context. For Chrome local AI,
 review runs through Chrome's local Prompt API path when available.
 
 Peek with ChatGPT is optional. When used, the extension may fetch a small page
