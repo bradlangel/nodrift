@@ -5,8 +5,8 @@ export const llmReviewedGateAction: BlockPageActionCapability = {
   type: "request-access",
   messageType: "request-llm-reviewed-access",
   visibleByDefault: false,
-  description: "Use your configured LLM provider to review the access request.",
-  label: "LLM-reviewed request",
-  settingsLabel: "LLM-reviewed request",
+  description: "Use your configured AI provider to review the access request.",
+  label: "AI-reviewed request",
+  settingsLabel: "AI-reviewed request",
   buttonId: "llm-request-access-gate-btn",
 };

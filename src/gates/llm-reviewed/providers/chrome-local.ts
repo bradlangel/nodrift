@@ -250,12 +250,12 @@ export const requestChromeLocalAccessReview = async (
 ): Promise<unknown> => {
   const languageModel = (globalThis as any).LanguageModel;
   if (!languageModel?.availability || !languageModel?.create) {
-    throw new Error("Chrome local LLM is not available in this browser.");
+    throw new Error("Chrome local AI is not available in this browser.");
   }
 
   const availability = await languageModel.availability(LANGUAGE_MODEL_OPTIONS);
   if (availability === "unavailable") {
-    throw new Error("Chrome local LLM is unavailable on this device or Chrome profile.");
+    throw new Error("Chrome local AI is unavailable on this device or Chrome profile.");
   }
 
   let session: any = null;
@@ -264,17 +264,17 @@ export const requestChromeLocalAccessReview = async (
     onProgress?.("analyzing");
     const analysisResult = await session.prompt(buildChromeLocalAnalysisPrompt(context));
     if (typeof analysisResult !== "string" || !analysisResult.trim()) {
-      throw new Error("Chrome local LLM returned an empty analysis response.");
+      throw new Error("Chrome local AI returned an empty analysis response.");
     }
     const analysis = normalizeChromeLocalRequestAnalysis(analysisResult);
     if (!analysis) {
-      throw new Error("Chrome local LLM returned invalid analysis JSON.");
+      throw new Error("Chrome local AI returned invalid analysis JSON.");
     }
 
     onProgress?.("reviewing");
     const decisionResult = await session.prompt(buildChromeLocalDecisionPrompt(context, analysis));
     if (typeof decisionResult !== "string" || !decisionResult.trim()) {
-      throw new Error("Chrome local LLM returned an empty decision response.");
+      throw new Error("Chrome local AI returned an empty decision response.");
     }
     return extractJsonObjectText(decisionResult);
   } finally {

@@ -21,6 +21,8 @@ export const STORAGE_KEYS = {
   aiStudyQuizChallenges: "aiStudyQuizChallenges",
   githubContributionUsername: "githubContributionUsername",
   githubContributionRecentWindowMinutes: "githubContributionRecentWindowMinutes",
+  builtGatePrompt: "builtGatePrompt",
+  builtGateSpec: "builtGateSpec",
 } as const;
 
 export const ALARM_NAMES = {

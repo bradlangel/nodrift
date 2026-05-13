@@ -37,7 +37,7 @@ export const decideLlmReviewedRequest = async (
         host: null,
         url: null,
         ruleIds: [],
-        message: "LLM-reviewed request is selected, but provider settings are incomplete.",
+        message: "AI-reviewed request is selected, but provider settings are incomplete.",
       },
     };
   }
@@ -73,8 +73,8 @@ export const decideLlmReviewedRequest = async (
     console.warn("llm-reviewed-access request failed", error);
     const message =
       error instanceof Error && error.message
-        ? `The LLM review could not run: ${error.message}`
-        : "The LLM review is temporarily unavailable. Please try again shortly.";
+        ? `The AI review could not run: ${error.message}`
+        : "The AI review is temporarily unavailable. Please try again shortly.";
     return {
       provider: provider.provider,
       model: modelLabel,

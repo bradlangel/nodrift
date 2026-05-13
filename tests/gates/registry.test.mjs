@@ -21,6 +21,7 @@ test("registry exposes all compiled-in access gates", () => {
       "local-intent-access",
       "llm-reviewed-access",
       "if-then-intention-access",
+      "built-gate-access",
       "github-contribution-access",
       "ai-study-quiz-access",
     ]
@@ -35,6 +36,7 @@ test("registry derives block-page gate capabilities", () => {
       "local-intent-request-access",
       "llm-reviewed-request-access",
       "if-then-intention-request-access",
+      "built-gate-request-access",
       "github-contribution-request-access",
       "ai-study-quiz-request-access",
     ]
@@ -53,6 +55,10 @@ test("registry resolves gates by action id and message type", () => {
   assert.equal(
     findGateModuleByMessageType("request-ai-study-quiz-access")?.id,
     "ai-study-quiz-access"
+  );
+  assert.equal(
+    findGateModuleByMessageType("request-built-gate-access")?.id,
+    "built-gate-access"
   );
   assert.equal(findGateModuleByActionId("missing"), null);
 });
@@ -76,6 +82,12 @@ test("registry exposes gate options metadata", () => {
   assert.deepEqual(
     githubGate?.options?.rangeFields?.map((field) => field.id),
     ["github-contribution-recent-window-minutes"]
+  );
+  assert.deepEqual(
+    findGateModuleByActionId("built-gate-request-access")?.options?.textFields?.map(
+      (field) => field.id
+    ),
+    ["built-gate-prompt", "built-gate-spec"]
   );
 });
 

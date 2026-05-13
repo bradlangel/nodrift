@@ -46,8 +46,9 @@ const formatDecisionLabel = (decision: DailyBlockerStats["recentDecisions"][numb
 const SOURCE_LABELS: Record<AccessDecisionSource, string> = {
   "one-click": "One-click Temporary Allow",
   "local-intent": "Local Intent Check",
-  "llm-reviewed": "LLM-reviewed Request",
+  "llm-reviewed": "AI-reviewed Request",
   "if-then-intention": "If/then Intention",
+  "built-gate": "Built Gate",
   "github-contribution": "GitHub Contribution",
   "ai-study-quiz": "AI Study Quiz",
 };

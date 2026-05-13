@@ -157,7 +157,7 @@ const formatAiStudyQuizChallenge = (
 const requestChromeLocalQuiz = async (topic: string): Promise<unknown> => {
   const languageModel = (globalThis as any).LanguageModel;
   if (!languageModel?.availability || !languageModel?.create) {
-    throw new Error("Chrome local LLM is not available in this browser.");
+    throw new Error("Chrome local AI is not available in this browser.");
   }
 
   const options = {
@@ -166,7 +166,7 @@ const requestChromeLocalQuiz = async (topic: string): Promise<unknown> => {
   };
   const availability = await languageModel.availability(options);
   if (availability === "unavailable") {
-    throw new Error("Chrome local LLM is unavailable on this device or Chrome profile.");
+    throw new Error("Chrome local AI is unavailable on this device or Chrome profile.");
   }
 
   let session: any = null;
@@ -174,7 +174,7 @@ const requestChromeLocalQuiz = async (topic: string): Promise<unknown> => {
     session = await languageModel.create(options);
     const result = await session.prompt(buildAiStudyQuizPrompt(topic));
     if (typeof result !== "string" || !result.trim()) {
-      throw new Error("Chrome local LLM returned an empty quiz response.");
+      throw new Error("Chrome local AI returned an empty quiz response.");
     }
     return result;
   } finally {

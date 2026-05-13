@@ -13,7 +13,7 @@ temporary access, stats, and review features:
 
 - Blocked site domains and block-page alternatives.
 - Settings such as gate selection, temporary allow duration, grayscale behavior,
-  and LLM provider/model configuration.
+  and AI provider/model configuration.
 - Browsing and navigation data needed for the blocker loop, such as the blocked
   domain, attempted URL, active tab state, and temporary access state.
 - Local usage stats, including blocked attempts, temporary allows, active
@@ -21,7 +21,7 @@ temporary access, stats, and review features:
 - User-provided request-access text and follow-up answers.
 - Optional page snapshots and prompts generated for the Peek with ChatGPT
   feature.
-- LLM provider API keys if you configure a provider that needs one, for example
+- AI provider API keys if you configure a provider that needs one, for example
   OpenAI.
 
 ## How Data Is Stored
@@ -29,7 +29,7 @@ temporary access, stats, and review features:
 NoDrift uses Chrome extension storage. Settings such as blocked sites,
 alternatives, and gate choices may be stored with Chrome sync storage, which
 Chrome can sync across browser profiles when you are signed in and sync is
-enabled. Local stats, temporary access state, and LLM provider API keys are
+enabled. Local stats, temporary access state, and AI provider API keys are
 stored with Chrome local storage for the current browser profile.
 
 NoDrift does not operate a backend service for extension telemetry or account
@@ -54,10 +54,10 @@ Specifically, NoDrift uses data to:
 
 NoDrift does not send remote telemetry by default.
 
-If you use the LLM-reviewed request gate with Chrome's local LLM provider,
+If you use the AI-reviewed request gate with Chrome's local AI provider,
 NoDrift routes the review through Chrome's local Prompt API path when available.
 
-If you configure an external LLM provider, such as OpenAI, NoDrift may send a
+If you configure an external AI provider, such as OpenAI, NoDrift may send a
 compact review request to that provider when you submit an access request. The
 payload may include your stated purpose, follow-up answer, requested URL or
 domain, requested duration, local time/day, selected provider/model settings,

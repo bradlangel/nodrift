@@ -50,7 +50,7 @@ Use this before a v1 release candidate. v1 is Chrome-only.
       temporarily allowed site.
 - [ ] Confirm Top blocked domains, Per-site details, and Top temporary access
       domains reflect the test domain.
-- [ ] Confirm Gate usage shows one-click, local intent, or LLM-reviewed activity
+- [ ] Confirm Gate usage shows one-click, local intent, or AI-reviewed activity
       based on the gate used.
 - [ ] Confirm Recent decisions records blocked attempts, approvals, denials, and
       follow-up requests.
@@ -68,24 +68,36 @@ Use this before a v1 release candidate. v1 is Chrome-only.
       asks for clarification.
 - [ ] Confirm local intent decisions appear in Recent decisions and Gate usage.
 
-## LLM-Reviewed Gate
+## Gate Builder
 
-- [ ] Select LLM-reviewed request with Chrome local LLM selected and confirm
+- [ ] Open Gate builder in Settings, describe a gate, generate a gate program
+      with OpenAI configured, set it as the default, and save.
+- [ ] Open a blocked site and confirm the block page uses the generated gate
+      name and questions.
+- [ ] Submit answers that satisfy the generated program and confirm access is
+      granted.
+- [ ] Submit vague or blocked-keyword answers and confirm the gate denies access
+      with the generated failure message.
+- [ ] Confirm built gate decisions appear in Recent decisions and Gate usage.
+
+## AI-Reviewed Gate
+
+- [ ] Select AI-reviewed request with Chrome local AI selected and confirm
       Settings marks it as ready without an API key.
-- [ ] Save LLM-reviewed request as the default with Chrome local LLM selected
+- [ ] Save AI-reviewed request as the default with Chrome local AI selected
       and confirm the block page shows the request form.
 - [ ] Switch to OpenAI provider without an API key and confirm Settings marks
-      LLM-reviewed request as needing setup.
-- [ ] Save LLM-reviewed request as the default with incomplete OpenAI setup and
+      AI-reviewed request as needing setup.
+- [ ] Save AI-reviewed request as the default with incomplete OpenAI setup and
       confirm the block page disables the request with a setup message.
 - [ ] Configure OpenAI provider with a model and API key, save, reload Settings,
       and confirm it remains ready.
 - [ ] With OpenAI configured, submit one specific bounded request and one vague
       request, then confirm approvals or denials are applied and recorded with
       provider/model metadata.
-- [ ] Select Chrome local LLM provider and save.
+- [ ] Select Chrome local AI provider and save.
 - [ ] On a Chrome build/profile where the Prompt API is available, confirm local
-      LLM review can approve and deny requests. If unavailable, confirm the gate
+      AI review can approve and deny requests. If unavailable, confirm the gate
       fails closed with a clear message.
 
 ## Navigation And Cleanup

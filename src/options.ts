@@ -1,11 +1,13 @@
 import type { GateModule } from "./core/access-contracts.js";
 import type {
+  GateOptionsButton,
   GateOptionsProvider,
   GateOptionsRangeField,
   GateOptionsTextField,
 } from "./core/options-contracts.js";
 import {
   DEFAULT_ACCESS_GATE_ACTION_ID,
+  DEFAULT_BUILT_GATE_SPEC_JSON,
   DEFAULT_BLOCKED_SITES,
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
   DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES,
@@ -22,6 +24,9 @@ import {
   LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
 import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
+import {
+  normalizeBuiltGateSpecJson,
+} from "./gates/built-gate/index.js";
 import { GATE_MODULES } from "./gates/registry.js";
 import { STORAGE_KEYS } from "./storage-constants.js";
 
@@ -74,6 +79,66 @@ const formatRangeLabel = (value: string, labels: RangeLabels): string =>
 const normalizeOpenAiModel = (model: unknown): string => {
   const trimmed = typeof model === "string" ? model.trim() : "";
   return trimmed || DEFAULT_OPENAI_MODEL;
+};
+
+const extractOpenAiOutputText = (data: unknown): string | null => {
+  const response = data as any;
+  if (typeof response?.output_text === "string" && response.output_text.trim()) {
+    return response.output_text;
+  }
+
+  if (!Array.isArray(response?.output)) return null;
+  for (const outputItem of response.output) {
+    if (!Array.isArray(outputItem?.content)) continue;
+    const textEntry = outputItem.content.find((entry: any) => entry?.type === "output_text");
+    if (typeof textEntry?.text === "string" && textEntry.text.trim()) {
+      return textEntry.text;
+    }
+  }
+  return null;
+};
+
+const BUILT_GATE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" },
+    description: { type: "string" },
+    questions: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: { type: "string" },
+    },
+    requiredAnswerMinChars: { type: "number" },
+    denyKeywords: {
+      type: "array",
+      items: { type: "string" },
+    },
+    approveKeywords: {
+      type: "array",
+      items: { type: "string" },
+    },
+    urlScopeKeywords: {
+      type: "array",
+      items: { type: "string" },
+    },
+    maxMinutes: { type: "number" },
+    successMessage: { type: "string" },
+    failureMessage: { type: "string" },
+  },
+  required: [
+    "name",
+    "description",
+    "questions",
+    "requiredAnswerMinChars",
+    "denyKeywords",
+    "approveKeywords",
+    "urlScopeKeywords",
+    "maxMinutes",
+    "successMessage",
+    "failureMessage",
+  ],
 };
 
 const normalizeGithubContributionWindowMinutes = (value: unknown): number => {
@@ -186,12 +251,21 @@ const escapeHtml = (value: unknown): string =>
 const renderTextField = (field: GateOptionsTextField) => `
   <div class="field" id="${escapeHtml(field.id)}-field">
     <label for="${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
-    <input
-      type="${escapeHtml(field.type)}"
-      id="${escapeHtml(field.id)}"
-      ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}
-      ${field.autocomplete ? `autocomplete="${escapeHtml(field.autocomplete)}"` : ""}
-    />
+    ${
+      field.type === "textarea"
+        ? `<textarea
+            id="${escapeHtml(field.id)}"
+            ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}
+            ${field.rows ? `rows="${field.rows}"` : ""}
+            spellcheck="true"
+          ></textarea>`
+        : `<input
+            type="${escapeHtml(field.type)}"
+            id="${escapeHtml(field.id)}"
+            ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}
+            ${field.autocomplete ? `autocomplete="${escapeHtml(field.autocomplete)}"` : ""}
+          />`
+    }
     ${field.hint ? `<p class="hint">${escapeHtml(field.hint)}</p>` : ""}
   </div>
 `;
@@ -241,6 +315,12 @@ const renderRangeField = (field: GateOptionsRangeField) => `
   </div>
 `;
 
+const renderButton = (button: GateOptionsButton) => `
+  <button type="button" class="secondary-button" id="${escapeHtml(button.id)}">
+    ${escapeHtml(button.label)}
+  </button>
+`;
+
 const renderGateOptions = (module: GateModule) => {
   const options = module.options;
   if (!options) return "";
@@ -266,15 +346,19 @@ const renderGateOptions = (module: GateModule) => {
   const textFieldsMarkup = options.textFields?.length
     ? options.textFields.map(renderTextField).join("")
     : "";
+  const buttonsMarkup = options.buttons?.length
+    ? `<div class="sites-actions">${options.buttons.map(renderButton).join("")}</div>`
+    : "";
 
   const statusMarkup = options.statusId
     ? `<p id="${escapeHtml(options.statusId)}" class="hint warning" aria-live="polite"></p>`
     : "";
   const panelMarkup =
-    providerMarkup || rangeMarkup || statusMarkup
+    providerMarkup || rangeMarkup || textFieldsMarkup || buttonsMarkup || statusMarkup
       ? `<div class="llm-panel">
           ${providerMarkup}
           ${textFieldsMarkup}
+          ${buttonsMarkup}
           ${rangeMarkup}
           ${statusMarkup}
         </div>`
@@ -363,6 +447,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const githubContributionRecentWindowLabel = document.getElementById(
     "github-contribution-recent-window-minutes-label"
   );
+  const builtGatePromptInput = document.getElementById("built-gate-prompt");
+  const builtGateSpecInput = document.getElementById("built-gate-spec");
+  const generateBuiltGateButton = document.getElementById("generate-built-gate");
+  const builtGateStatus = document.getElementById("built-gate-status");
 
   if (
     llmProviderInputs.length === 0 ||
@@ -372,7 +460,10 @@ document.addEventListener("DOMContentLoaded", () => {
     !(openAiModelInput instanceof HTMLInputElement) ||
     !(openAiApiKeyInput instanceof HTMLInputElement) ||
     !(githubContributionUsernameInput instanceof HTMLInputElement) ||
-    !(githubContributionRecentWindowInput instanceof HTMLInputElement)
+    !(githubContributionRecentWindowInput instanceof HTMLInputElement) ||
+    !(builtGatePromptInput instanceof HTMLTextAreaElement) ||
+    !(builtGateSpecInput instanceof HTMLTextAreaElement) ||
+    !(generateBuiltGateButton instanceof HTMLButtonElement)
   ) {
     return;
   }
@@ -479,7 +570,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isChromeLocal) {
       llmConfigStatus.textContent =
-        "Chrome local LLM uses Gemini Nano on this device when the Prompt API is available.";
+        "Chrome local AI uses Gemini Nano on this device when the Prompt API is available.";
       llmConfigStatus.className = "hint ok";
       return;
     }
@@ -488,12 +579,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const hasModel = openAiModelInput.value.trim().length > 0;
     if (hasApiKey && hasModel) {
       llmConfigStatus.textContent =
-        "LLM-reviewed request gate is ready to use as the default gate.";
+        "AI-reviewed request gate is ready to use as the default gate.";
       llmConfigStatus.className = "hint ok";
       return;
     }
 
-    llmConfigStatus.textContent = "Add an API key and model before using LLM-reviewed request.";
+    llmConfigStatus.textContent = "Add an API key and model before using AI-reviewed request.";
     llmConfigStatus.className = "hint warning";
   };
 
@@ -559,6 +650,105 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const setBuiltGateStatus = (message: string, className = "hint"): void => {
+    if (!builtGateStatus) return;
+    builtGateStatus.textContent = message;
+    builtGateStatus.className = className;
+  };
+
+  const generateBuiltGateSpec = async (): Promise<void> => {
+    const prompt = builtGatePromptInput.value.trim();
+    const apiKey = openAiApiKeyInput.value.trim();
+    const model = normalizeOpenAiModel(openAiModelInput.value);
+
+    if (!prompt) {
+      setBuiltGateStatus("Describe the gate you want first.", "hint warning");
+      return;
+    }
+    if (!apiKey) {
+      setBuiltGateStatus("Add an OpenAI API key before generating a gate.", "hint warning");
+      return;
+    }
+
+    generateBuiltGateButton.disabled = true;
+    generateBuiltGateButton.textContent = "Generating...";
+    setBuiltGateStatus("Generating a dynamic gate program...", "hint");
+
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          store: false,
+          max_output_tokens: 900,
+          input: [
+            {
+              role: "system",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    "Create a NoDrift dynamic gate program. Return JSON only. The gate should be humane, specific, and hard to satisfy with vague feed-seeking.",
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: JSON.stringify({
+                    requestedGate: prompt,
+                    schemaNotes: {
+                      questions:
+                        "Prompts shown to the user. Make them line labels ending with a colon.",
+                      approveKeywords:
+                        "Words or phrases that indicate intentional use.",
+                      denyKeywords:
+                        "Words or phrases that indicate autopilot or avoidance.",
+                      urlScopeKeywords:
+                        "Words or phrases that should prefer exact-page access.",
+                    },
+                  }),
+                },
+              ],
+            },
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "nodrift_dynamic_gate",
+              strict: true,
+              schema: BUILT_GATE_JSON_SCHEMA,
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Provider request failed (${response.status}): ${text.slice(0, 180)}`);
+      }
+
+      const outputText = extractOpenAiOutputText(await response.json());
+      if (!outputText) {
+        throw new Error("Provider response did not include gate JSON.");
+      }
+      builtGateSpecInput.value = normalizeBuiltGateSpecJson(outputText);
+      setBuiltGateStatus("Generated. Save settings to use this gate.", "hint ok");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setBuiltGateStatus(`Could not generate gate: ${message}`, "hint danger");
+    } finally {
+      generateBuiltGateButton.disabled = false;
+      generateBuiltGateButton.textContent = "Generate gate";
+    }
+  };
+
   const loadSettings = (): void => {
     chrome.storage.sync.get(
       {
@@ -575,6 +765,8 @@ document.addEventListener("DOMContentLoaded", () => {
         [STORAGE_KEYS.githubContributionUsername]: DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
         [STORAGE_KEYS.githubContributionRecentWindowMinutes]:
           DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES,
+        [STORAGE_KEYS.builtGatePrompt]: "",
+        [STORAGE_KEYS.builtGateSpec]: DEFAULT_BUILT_GATE_SPEC_JSON,
       },
       (syncData: Record<string, any>) => {
         chrome.storage.local.get({ openAiApiKey: "" }, (localData: Record<string, any>) => {
@@ -603,6 +795,10 @@ document.addEventListener("DOMContentLoaded", () => {
               syncData[STORAGE_KEYS.githubContributionRecentWindowMinutes]
             )
           );
+          builtGatePromptInput.value = String(syncData[STORAGE_KEYS.builtGatePrompt] || "");
+          builtGateSpecInput.value = normalizeBuiltGateSpecJson(
+            syncData[STORAGE_KEYS.builtGateSpec]
+          );
           openAiApiKeyInput.value =
             typeof localData.openAiApiKey === "string" ? localData.openAiApiKey : "";
           updateSitesSummary();
@@ -629,6 +825,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "input",
     updateGithubContributionRangeLabel
   );
+  generateBuiltGateButton.addEventListener("click", () => {
+    generateBuiltGateSpec();
+  });
 
   document.querySelectorAll<HTMLButtonElement>("[data-set-default]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -658,8 +857,17 @@ document.addEventListener("DOMContentLoaded", () => {
       DEFAULT_GITHUB_CONTRIBUTION_USERNAME;
     const githubContributionRecentWindowMinutes =
       normalizeGithubContributionWindowMinutes(githubContributionRecentWindowInput.value);
+    let builtGateSpec = DEFAULT_BUILT_GATE_SPEC_JSON;
+    try {
+      builtGateSpec = normalizeBuiltGateSpecJson(builtGateSpecInput.value);
+      setBuiltGateStatus("", "hint");
+    } catch {
+      setBuiltGateStatus("Gate program JSON is invalid. Fix it before saving.", "hint danger");
+      return;
+    }
     githubContributionUsernameInput.value = githubContributionUsername;
     githubContributionRecentWindowInput.value = String(githubContributionRecentWindowMinutes);
+    builtGateSpecInput.value = builtGateSpec;
     updateGithubContributionRangeLabel();
 
     chrome.storage.sync.set(
@@ -677,6 +885,8 @@ document.addEventListener("DOMContentLoaded", () => {
         [STORAGE_KEYS.githubContributionUsername]: githubContributionUsername,
         [STORAGE_KEYS.githubContributionRecentWindowMinutes]:
           githubContributionRecentWindowMinutes,
+        [STORAGE_KEYS.builtGatePrompt]: builtGatePromptInput.value.trim(),
+        [STORAGE_KEYS.builtGateSpec]: builtGateSpec,
       },
       () => {
         if (chrome.runtime.lastError) {

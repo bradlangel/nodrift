@@ -1,6 +1,8 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import {
   DEFAULT_ACCESS_GATE_ACTION_ID,
+  BUILT_GATE_ACCESS_GATE_ACTION_ID,
+  DEFAULT_BUILT_GATE_SPEC_JSON,
   DEFAULT_BLOCKED_SITES,
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
   DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
@@ -19,6 +21,10 @@ import {
   BlockPageActionCapability,
 } from "./core/access-contracts.js";
 import { decideAiStudyQuizRequest } from "./gates/ai-study-quiz/request.js";
+import {
+  normalizeBuiltGateSpec,
+} from "./gates/built-gate/index.js";
+import { decideBuiltGateRequest } from "./gates/built-gate/request.js";
 import { decideGithubContributionRequest } from "./gates/github-contribution/request.js";
 import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import { decideIfThenIntentionRequest } from "./gates/if-then-intention/request.js";
@@ -380,6 +386,7 @@ const getBlockPageActions = async (): Promise<{
     [STORAGE_KEYS.llmProvider]: DEFAULT_LLM_PROVIDER,
     [STORAGE_KEYS.openAiModel]: DEFAULT_OPENAI_MODEL,
     [STORAGE_KEYS.githubContributionUsername]: DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
+    [STORAGE_KEYS.builtGateSpec]: DEFAULT_BUILT_GATE_SPEC_JSON,
   });
   const localData = await getLocalStorageItems({ [STORAGE_KEYS.openAiApiKey]: "" });
 
@@ -389,6 +396,12 @@ const getBlockPageActions = async (): Promise<{
   const githubContributionUsername =
     normalizeGithubUsername(syncData[STORAGE_KEYS.githubContributionUsername]) ??
     DEFAULT_GITHUB_CONTRIBUTION_USERNAME;
+  let builtGateSpec = normalizeBuiltGateSpec(DEFAULT_BUILT_GATE_SPEC_JSON);
+  try {
+    builtGateSpec = normalizeBuiltGateSpec(syncData[STORAGE_KEYS.builtGateSpec]);
+  } catch {
+    // Fall back to the packaged gate if editable JSON in storage is malformed.
+  }
   const llmConfigured =
     provider === "chrome-local" ||
     (provider === "openai" && model.trim().length > 0 && apiKey.trim().length > 0);
@@ -410,9 +423,9 @@ const getBlockPageActions = async (): Promise<{
       ? {
           ...primaryAction,
           reviewerLabel,
-          label: "LLM-reviewed request (setup required)",
+          label: "AI-reviewed request (setup required)",
           disabledReason:
-            "LLM-reviewed request is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
+            "AI-reviewed request is selected, but provider settings are incomplete. Check AI provider settings in Options.",
         }
       : primaryAction?.id === "ai-study-quiz-request-access" && !llmConfigured
       ? {
@@ -420,12 +433,20 @@ const getBlockPageActions = async (): Promise<{
           reviewerLabel,
           label: "AI study quiz (setup required)",
           disabledReason:
-            "AI study quiz is selected, but provider settings are incomplete. Check LLM provider settings in Options.",
+            "AI study quiz is selected, but provider settings are incomplete. Check AI provider settings in Options.",
         }
       : primaryAction
       ? {
           ...primaryAction,
           reviewerLabel,
+          ...(primaryAction.id === BUILT_GATE_ACCESS_GATE_ACTION_ID
+            ? {
+                label: builtGateSpec.name,
+                formTitle: builtGateSpec.name,
+                formInitialValue: builtGateSpec.questions.join("\n"),
+                formPlaceholder: "Fill in each line before requesting access.",
+              }
+            : {}),
           ...(primaryAction.id === "github-contribution-request-access" &&
           githubContributionUsername
             ? {
@@ -1553,6 +1574,15 @@ const requestIfThenIntentionAccess = async (
   return applyRequestGateDecision(decideIfThenIntentionRequest(input));
 };
 
+const requestBuiltGateAccess = async (
+  payload: RequestLocalIntentAccessMessage,
+  sender?: any
+): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
+  const input = await buildRequestGateInput(payload, sender);
+  const result = await decideBuiltGateRequest(input);
+  return applyRequestGateDecision(result);
+};
+
 const requestGithubContributionAccess = async (
   payload: RequestLocalIntentAccessMessage,
   sender?: any
@@ -1697,6 +1727,7 @@ type RequestLocalIntentAccessMessage = {
     | "request-agentic-access"
     | "request-llm-reviewed-access"
     | "request-if-then-intention-access"
+    | "request-built-gate-access"
     | "request-github-contribution-access"
     | "request-ai-study-quiz-access";
   url?: string | null;
@@ -1728,6 +1759,9 @@ const REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE =
 const REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "if-then-intention-request-access")
     ?.messageType ?? "request-if-then-intention-access";
+const REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE =
+  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === BUILT_GATE_ACCESS_GATE_ACTION_ID)
+    ?.messageType ?? "request-built-gate-access";
 const REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "github-contribution-request-access")
     ?.messageType ?? "request-github-contribution-access";
@@ -2466,6 +2500,8 @@ const handleRequestAccessMessage = async (
       ? "llm-reviewed"
       : message.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE
       ? "if-then-intention"
+      : message.type === REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE
+      ? "built-gate"
       : message.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE
       ? "github-contribution"
       : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
@@ -2496,6 +2532,8 @@ const handleRequestAccessMessage = async (
         ? requestLlmReviewedAccess(message, sender, onProgress)
         : message.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE
         ? requestIfThenIntentionAccess(message, sender)
+        : message.type === REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE
+        ? requestBuiltGateAccess(message, sender)
         : message.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE
         ? requestGithubContributionAccess(message, sender)
         : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
@@ -2690,6 +2728,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     message?.type === REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE ||
+    message?.type === REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE ||
     message?.type === "request-agentic-access"
@@ -2733,6 +2772,7 @@ if (chrome.runtime.onConnect) {
         message?.type !== REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE &&
+        message?.type !== REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE &&
         message?.type !== "request-agentic-access"

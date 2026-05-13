@@ -74,7 +74,7 @@ const DEFAULT_REQUEST_ACCESS_TITLE = "Intent check";
 const DEFAULT_REQUEST_ACCESS_PLACEHOLDER =
   "Describe why you need access to this site and for how long.";
 const LLM_REVIEW_WAITING_TEXT =
-  "Reviewing locally. Local LLM responses can take a little while.";
+  "Reviewing locally. On-device AI responses can take a little while.";
 const ACCESS_REVIEW_PROGRESS_PORT = "access-review-progress";
 const ACCESS_REVIEW_PROGRESS_MESSAGES: Record<AccessReviewProgressStage, string> = {
   preparing: "Preparing request...",
@@ -695,7 +695,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     if (formTitle) {
       formTitle.textContent =
         getFormTitle(requestAction) ||
-        (isLlmMode ? "LLM-reviewed request" : DEFAULT_REQUEST_ACCESS_TITLE);
+        (isLlmMode ? "AI-reviewed request" : DEFAULT_REQUEST_ACCESS_TITLE);
     }
     activeFormPlaceholder =
       getFormPlaceholder(requestAction) || DEFAULT_REQUEST_ACCESS_PLACEHOLDER;

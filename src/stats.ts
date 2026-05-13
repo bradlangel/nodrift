@@ -11,6 +11,7 @@ export type AccessDecisionSource =
   | "local-intent"
   | "llm-reviewed"
   | "if-then-intention"
+  | "built-gate"
   | "github-contribution"
   | "ai-study-quiz";
 export type AccessDecisionCategory =
@@ -150,6 +151,7 @@ const ACCESS_DECISION_SOURCES: AccessDecisionSource[] = [
   "local-intent",
   "llm-reviewed",
   "if-then-intention",
+  "built-gate",
   "github-contribution",
   "ai-study-quiz",
 ];

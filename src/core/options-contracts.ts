@@ -1,10 +1,11 @@
 export type GateOptionsTextField = {
-  type: "text" | "password";
+  type: "text" | "password" | "textarea";
   id: string;
   label: string;
   placeholder?: string;
   autocomplete?: string;
   hint?: string;
+  rows?: number;
 };
 
 export type GateOptionsRangeField = {
@@ -32,6 +33,11 @@ export type GateOptionsProviderGroup = {
   providers: GateOptionsProvider[];
 };
 
+export type GateOptionsButton = {
+  id: string;
+  label: string;
+};
+
 export type GateOptionsDefinition = {
   cardDescription: string;
   detailsSummary: string;
@@ -39,5 +45,6 @@ export type GateOptionsDefinition = {
   providerGroup?: GateOptionsProviderGroup;
   textFields?: GateOptionsTextField[];
   rangeFields?: GateOptionsRangeField[];
+  buttons?: GateOptionsButton[];
   statusId?: string;
 };
