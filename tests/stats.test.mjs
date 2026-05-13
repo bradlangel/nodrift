@@ -115,7 +115,7 @@ test("normalizes stored request-gate details", () => {
         message: "  Approved   with extra whitespace. ",
         purpose: " just for fun ".repeat(30),
         provider: "chrome-local",
-        model: "Chrome local LLM (Gemini Nano)",
+        model: "Chrome local AI (Gemini Nano)",
       },
     ],
   };
@@ -127,7 +127,7 @@ test("normalizes stored request-gate details", () => {
   assert.equal(decision.message, "Approved with extra whitespace.");
   assert.equal(decision.purpose.length, 220);
   assert.equal(decision.provider, "chrome-local");
-  assert.equal(decision.model, "Chrome local LLM (Gemini Nano)");
+  assert.equal(decision.model, "Chrome local AI (Gemini Nano)");
   assert.equal(decision.category, "unclear");
 });
 
@@ -269,7 +269,7 @@ test("records denied request-gate reasons", () => {
       purpose: "just because",
       url: null,
       provider: "chrome-local",
-      model: "Chrome local LLM (Gemini Nano)",
+      model: "Chrome local AI (Gemini Nano)",
     },
     new Date("2026-04-28T12:00:00Z").getTime()
   );
@@ -279,7 +279,7 @@ test("records denied request-gate reasons", () => {
   assert.equal(decision.source, "llm-reviewed");
   assert.equal(decision.message, "Denied because the purpose was too vague.");
   assert.equal(decision.purpose, "just because");
-  assert.equal(decision.model, "Chrome local LLM (Gemini Nano)");
+  assert.equal(decision.model, "Chrome local AI (Gemini Nano)");
 });
 
 let failures = 0;

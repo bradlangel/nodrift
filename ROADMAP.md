@@ -34,6 +34,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Improve the options page styling and blocked-site editing experience.
 - [ ] Add a low-touch setup helper that suggests starter blocked sites and
       default configuration without making NoDrift feel prescriptive.
+- [x] Add a first dynamic gate-builder MVP for AI-generated gate programs.
 - [x] Add simple navigation between the block page, settings, and local stats.
 - [x] Redesign the local stats page so it feels as intentional as the options
       page.
@@ -52,6 +53,7 @@ hypothesis, not a final priority.
 | Gate idea | What it asks | Why it might be useful personally | Setup/data needed | Build effort | Product risk | V1.1 strength |
 | --- | --- | --- | --- | --- | --- | --- |
 | If-then implementation intention gate | Write a concrete "if this happens, then I will do that" plan before access. | Strong reflective friction without feeling punitive; fits the NoDrift philosophy. | None or a short saved template list. | Medium | Can feel repetitive if prompts do not vary. | High |
+| Gate builder | Describe the gate you want, let AI generate a structured gate program, then run it dynamically. | Lets friction fit the user's actual work style instead of forcing a fixed gate vocabulary. | AI provider settings, generated JSON program storage, local interpreter. | Medium-high | Needs guardrails so generated rules stay understandable and do not become arbitrary code. | High |
 | Commitment receipt gate | Write "I am using this site to ___, and I will stop when ___" before access. | Creates a concrete receipt for intentional access without making the user solve a chore. | Text input, optional receipt display during access. | Low-medium | Can become rote if repeated too often. | High |
 | Return ticket gate | Choose what to return to after the access window ends. | Gives temporary access an exit destination instead of just a timer. | Text input and expiry reminder copy. | Low-medium | Needs careful copy so it feels supportive, not scolding. | High |
 | Anti-feed gate | Request an exact URL, search target, or task instead of opening a feed/homepage. | Especially useful for YouTube, Reddit, X, and other feed-heavy sites. | Current URL, optional URL/search input. | Medium | Can be awkward when the homepage is legitimately needed. | High |
@@ -126,7 +128,7 @@ make the current block, stats, and settings loop feel complete.
 - [x] Rework the stats page around clear questions: what happened today, which
       sites are creating pressure, what access was granted, and what gates
       decided recently.
-- [ ] Improve user-facing AI copy by replacing "LLM" with clearer language
+- [x] Improve user-facing AI copy by replacing "LLM" with clearer language
       such as "AI-reviewed request" where users need quick comprehension, while
       keeping "LLM" in technical docs, provider internals, and developer-facing
       diagnostics where the precision is useful.
@@ -197,6 +199,30 @@ Refactor milestones:
 - [ ] Add a gate-owned storage helper so gates can persist their own settings
       and local state without adding one-off storage plumbing to the service
       worker.
+
+## Gate Builder
+
+The first builder shape is dynamic but intentionally constrained: AI generates a
+structured gate program, not JavaScript. The extension stores that JSON program
+and evaluates it locally through a small interpreter. This lets the current user
+iterate on a unique gate without rebuilding the extension or running arbitrary
+remote code.
+
+Near-term builder next steps:
+
+- [x] Add a compiled-in dynamic gate shell that reads a generated program from
+      Settings.
+- [x] Generate editable gate programs from the user's description with OpenAI.
+- [x] Save the generated gate program in extension storage.
+- [x] Render the generated name and questions on the block page when the built
+      gate is selected as default.
+- [ ] Add builder presets for common patterns such as return ticket, tiny next
+      action, launch checklist, and cooldown.
+- [ ] Give generated programs an explicit domain/URL scope preference field.
+- [ ] Add lightweight validation preview in Settings so users can see what the
+      block page will ask before saving.
+- [ ] Add an iteration button that revises the current gate program from a short
+      change request instead of regenerating from scratch.
 
 ## Development Workflow
 

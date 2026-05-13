@@ -4,6 +4,7 @@ import {
   OptionalIntegration,
 } from "../core/access-contracts.js";
 import { aiStudyQuizGateModule } from "./ai-study-quiz/index.js";
+import { builtGateModule } from "./built-gate/index.js";
 import { githubContributionGateModule } from "./github-contribution/index.js";
 import { ifThenIntentionGateModule } from "./if-then-intention/index.js";
 import { llmReviewedGateModule } from "./llm-reviewed/index.js";
@@ -15,6 +16,7 @@ export const GATE_MODULES: Array<GateModule<any>> = [
   localIntentGateModule,
   llmReviewedGateModule,
   ifThenIntentionGateModule,
+  builtGateModule,
   githubContributionGateModule,
   aiStudyQuizGateModule,
 ];

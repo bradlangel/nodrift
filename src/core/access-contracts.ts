@@ -97,6 +97,23 @@ export type AiStudyQuizAccessRequestContext = AccessRequestContext & {
   requestedMinutes: number;
 };
 
+export type BuiltGateAccessRequestContext = AccessRequestContext & {
+  requestedPurpose: string;
+  requestedMinutes: number;
+  spec: {
+    name: string;
+    description: string;
+    questions: string[];
+    requiredAnswerMinChars: number;
+    denyKeywords: string[];
+    approveKeywords: string[];
+    urlScopeKeywords: string[];
+    maxMinutes: number;
+    successMessage: string;
+    failureMessage: string;
+  };
+};
+
 export type AccessGateDecision = {
   decision: AccessDecision;
   scope: AccessDecisionScope;

@@ -43,5 +43,5 @@ export const getLlmProviderSettings = (): Promise<LlmProviderSettings> =>
 
 export const getLlmModelLabel = (provider: { provider: string; model: string }): string =>
   hasChromeLocalProviderConfig(provider)
-    ? "Chrome local LLM (Gemini Nano)"
+    ? "Chrome local AI (Gemini Nano)"
     : provider.model;

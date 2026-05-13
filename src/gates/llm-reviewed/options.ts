@@ -1,18 +1,18 @@
 import type { GateOptionsDefinition } from "../../core/options-contracts.js";
 
 export const llmReviewedGateOptions: GateOptionsDefinition = {
-  cardDescription: "Provider-reviewed access with local stats context.",
+  cardDescription: "AI-reviewed access with local stats context.",
   detailsSummary: "Settings",
   notes: [
     "Privacy: request purpose, requested URL/domain, requested minutes, time/day, and small local stats context are sent to your provider.",
   ],
   providerGroup: {
-    legend: "Default LLM provider",
+    legend: "Default AI provider",
     inputName: "llm-provider",
     providers: [
       {
         id: "chrome-local",
-        label: "Chrome local LLM",
+        label: "Chrome local AI",
         description: "On-device review when Chrome Prompt API is available.",
         hint: "No API key or hosted provider account required.",
       },
