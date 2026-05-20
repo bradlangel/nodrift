@@ -26,11 +26,11 @@ temporary access, stats, and review features:
 
 ## How Data Is Stored
 
-NoDrift uses Chrome extension storage. Settings such as blocked sites,
-alternatives, and gate choices may be stored with Chrome sync storage, which
-Chrome can sync across browser profiles when you are signed in and sync is
-enabled. Local stats, temporary access state, and AI provider API keys are
-stored with Chrome local storage for the current browser profile.
+NoDrift uses browser extension storage. Settings such as blocked sites,
+alternatives, and gate choices may be stored with extension sync storage, which
+the browser can sync across profiles when you are signed in and sync is enabled.
+Local stats, temporary access state, and AI provider API keys are stored with
+extension local storage for the current browser profile.
 
 NoDrift does not operate a backend service for extension telemetry or account
 data.

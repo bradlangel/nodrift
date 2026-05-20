@@ -135,6 +135,23 @@ make the current block, stats, and settings loop feel complete.
 - [x] Add final v1 readiness documentation for Chrome-only setup, permissions,
       privacy/local data, and manual QA.
 
+## Firefox Support
+
+The first Firefox target should keep the existing Chrome flow intact while
+adding a separate Firefox release artifact and browser-specific manifest shape.
+
+- [x] Create a local Firefox support feature branch.
+- [x] Generate a Firefox MV3 manifest with `background.scripts` instead of the
+      Chrome-only service worker entry.
+- [x] Keep DNR redirects browser-neutral by deriving the extension URL scheme
+      instead of hardcoding `chrome-extension://`.
+- [x] Add Firefox-specific automated checks for manifest generation and
+      extension URL handling.
+- [x] Package and validate separate Chrome and Firefox runtime ZIPs.
+- [x] Document local Firefox loading and the remaining manual QA path.
+- [ ] Manually verify the Firefox build in `about:debugging` before treating it
+      as AMO-ready.
+
 ## Modular Architecture
 
 The goal is modular internals, not a full external plugin marketplace. Keep the
@@ -337,13 +354,13 @@ Prompt goals:
 
 ## Browser Support (Post-V1)
 
-v1 is Chrome-only. Keep Firefox work out of the v1 release loop unless this
-section is deliberately reprioritized.
+Initial Firefox build support now exists. Keep AMO-readiness gated on manual
+browser QA.
 
-- [ ] Identify Chrome-specific APIs in the background worker.
-- [ ] Add a browser API compatibility wrapper where needed.
-- [ ] Create a Firefox manifest variant if required.
-- [ ] Document loading instructions for Firefox.
+- [x] Identify Chrome-specific APIs in the background worker.
+- [x] Add a browser API compatibility wrapper where needed.
+- [x] Create a Firefox manifest variant if required.
+- [x] Document loading instructions for Firefox.
 - [ ] Verify temporary allow, re-block, stats, and block-page flows in Firefox.
 
 ## Graduation Criteria

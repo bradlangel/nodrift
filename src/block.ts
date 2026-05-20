@@ -20,6 +20,10 @@ import {
   AccessReviewProgressStage,
   BlockPageActionCapability,
 } from "./core/access-contracts.js";
+import {
+  getDnrExtensionRedirectTransformBase,
+  isExtensionPageUrl,
+} from "./browser-compat.js";
 import { decideAiStudyQuizRequest } from "./gates/ai-study-quiz/request.js";
 import {
   normalizeBuiltGateSpec,
@@ -118,8 +122,6 @@ const scheduleBadgeRefreshAlarm = () => {
   chrome.alarms.create(ALARM_NAMES.badgeRefresh, { periodInMinutes: 1 });
 };
 
-
-const EXTENSION_URL_PREFIX = `chrome-extension://${chrome.runtime.id}/`;
 type LastNavigatedUrlEntry = {
   url: string;
   updatedAt: number;
@@ -144,7 +146,7 @@ const setLastNavigatedUrlForTab = (
 };
 
 const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
-  if (rawUrl && rawUrl.startsWith(EXTENSION_URL_PREFIX)) {
+  if (isExtensionPageUrl(rawUrl)) {
     return;
   }
   const normalised = ensureHttpUrl(rawUrl);
@@ -485,33 +487,35 @@ const getBlockPageActions = async (): Promise<{
 const buildRule = (
   site: string,
   id: number
-): any => ({
-  id,
-  // Give more specific domains higher priority so subdomains override their base domain.
-  priority: site.split(".").length,
-  action: {
-    type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
-    // Use transform so we can attach query params identifying the rule+site.
-    redirect: {
-      transform: {
-        scheme: "chrome-extension",
-        host: chrome.runtime.id,
-        path: "/pages/block.html",
-        queryTransform: {
-          addOrReplaceParams: [
-            { key: "rid", value: String(id) },
-            { key: "site", value: site },
-          ],
+): any => {
+  const extensionRedirectBase = getDnrExtensionRedirectTransformBase();
+  return {
+    id,
+    // Give more specific domains higher priority so subdomains override their base domain.
+    priority: site.split(".").length,
+    action: {
+      type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
+      // Use transform so we can attach query params identifying the rule+site.
+      redirect: {
+        transform: {
+          ...extensionRedirectBase,
+          path: "/pages/block.html",
+          queryTransform: {
+            addOrReplaceParams: [
+              { key: "rid", value: String(id) },
+              { key: "site", value: site },
+            ],
+          },
         },
       },
     },
-  },
-  condition: {
-    // Match at the domain boundary (handles subdomains properly).
-    urlFilter: buildParentDomainUrlFilter(site),
-    resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
-  },
-});
+    condition: {
+      // Match at the domain boundary (handles subdomains properly).
+      urlFilter: buildParentDomainUrlFilter(site),
+      resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
+    },
+  };
+};
 
 const buildUrlAllowRule = (id: number, rawUrl: string): any => ({
   id,
@@ -1639,9 +1643,7 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
       if (!tabId) return;
       // If we were on the allowed site, navigate to it again to trigger the block;
       // if we're on the block page already, just reload.
-      const isExtensionUrl =
-        typeof currentUrl === "string" &&
-        currentUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+      const isExtensionUrl = isExtensionPageUrl(currentUrl);
 
       if (currentUrl && !isExtensionUrl) {
         chrome.tabs.update(tabId, { url: currentUrl });
@@ -1685,8 +1687,7 @@ const resetAllRulesAndReload = (tabId?: number, currentUrl?: string) => {
 
       if (!tabId || !currentUrl) return;
 
-      const isExtensionUrl =
-        currentUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+      const isExtensionUrl = isExtensionPageUrl(currentUrl);
 
       // Force a top-level navigation so DNR re-evaluates and blocks.
       if (isExtensionUrl) {

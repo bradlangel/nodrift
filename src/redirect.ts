@@ -3,6 +3,7 @@ import {
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
   DEFAULT_TEMP_ALLOW_MINUTES,
 } from "./defaults.js";
+import { isExtensionPageUrl } from "./browser-compat.js";
 
 type BlockPageAction = {
   id: string;
@@ -419,7 +420,7 @@ const wirePeekChatGptButton = () => {
 
   const originalLabel = peekBtn.textContent || DEFAULT_PEEK_CHATGPT_BTN_TEXT;
   let attemptedUrl = document.referrer || "";
-  if (attemptedUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`)) {
+  if (isExtensionPageUrl(attemptedUrl)) {
     attemptedUrl = "";
   }
   peekBtn.addEventListener("click", () => {

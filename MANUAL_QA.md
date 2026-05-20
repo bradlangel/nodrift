@@ -1,14 +1,22 @@
 # Manual QA Checklist
 
-Use this before a v1 release candidate. v1 is Chrome-only.
+Use this before a release candidate. Chrome is the published store target today;
+Firefox builds are local-loadable artifacts until they complete AMO review.
 
 ## Prep
 
 - [ ] Run `nvm use`.
 - [ ] Run `npm install` if dependencies are not already installed.
 - [ ] Run `npm test`.
-- [ ] Load the extension unpacked from this directory in `chrome://extensions`.
-- [ ] Confirm the extension card has no manifest or service-worker errors.
+- [ ] Run `npm run release:validate`.
+- [ ] Load the Chrome validation folder in `chrome://extensions`.
+- [ ] Confirm the Chrome extension card has no manifest or service-worker
+      errors.
+- [ ] Run `npm run release:validate:firefox`.
+- [ ] Load `manifest.json` from the Firefox validation folder in
+      `about:debugging#/runtime/this-firefox`.
+- [ ] Confirm the Firefox temporary add-on has no manifest or background-script
+      errors.
 
 ## Block And Temporary Access
 
