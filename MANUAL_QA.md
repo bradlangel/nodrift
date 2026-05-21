@@ -17,6 +17,8 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       `about:debugging#/runtime/this-firefox`.
 - [ ] Confirm the Firefox temporary add-on has no manifest or background-script
       errors.
+- [ ] Open the Firefox popup and grant site access if the Enable blocking
+      prompt appears.
 
 ## Block And Temporary Access
 

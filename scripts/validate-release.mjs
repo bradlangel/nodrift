@@ -132,6 +132,9 @@ function validateManifest(zipPath, target) {
     if (manifest.incognito === "split") {
       fail("Firefox ZIP manifest must not use unsupported incognito split mode");
     }
+    if (!manifest.optional_host_permissions?.includes("<all_urls>")) {
+      fail("Firefox ZIP manifest must allow runtime requests for all-site access");
+    }
     return;
   }
 

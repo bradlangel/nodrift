@@ -38,6 +38,29 @@
     .grant.visible {
       display: block;
     }
+    .permission {
+      display: none;
+      margin: 0 0 12px;
+      padding: 10px;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      background: #fff7ed;
+      color: #17202a;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .permission.visible {
+      display: grid;
+      gap: 8px;
+    }
+    .permission strong {
+      display: block;
+      font-size: 13px;
+    }
+    .permission p {
+      margin: 0;
+      color: #475569;
+    }
     .grant strong {
       display: block;
       margin-bottom: 4px;
@@ -84,6 +107,13 @@
 <body>
   <h1>NoDrift</h1>
   <p id="current-site"></p>
+  <section id="host-permission" class="permission" aria-live="polite">
+    <div>
+      <strong>Blocking needs site access</strong>
+      <p>Firefox needs permission before NoDrift can redirect blocked sites.</p>
+    </div>
+    <button id="enable-host-permission">Enable blocking</button>
+  </section>
   <section id="active-grant" class="grant" aria-live="polite"></section>
   <div class="actions">
     <button id="temporarily-allow">Temporarily allow</button>

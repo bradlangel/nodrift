@@ -147,6 +147,8 @@ adding a separate Firefox release artifact and browser-specific manifest shape.
       instead of hardcoding `chrome-extension://`.
 - [x] Add Firefox-specific automated checks for manifest generation and
       extension URL handling.
+- [x] Add a Firefox popup prompt for granting site access when host
+      permissions are missing.
 - [x] Package and validate separate Chrome and Firefox runtime ZIPs.
 - [x] Document local Firefox loading and the remaining manual QA path.
 - [ ] Manually verify the Firefox build in `about:debugging` before treating it

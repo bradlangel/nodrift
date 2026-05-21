@@ -1412,6 +1412,14 @@ loadGrayscaleHosts();
 refreshBadgeForActiveTab();
 scheduleBadgeRefreshAlarm();
 
+if (chrome.permissions?.onAdded) {
+  chrome.permissions.onAdded.addListener((permissions: { origins?: string[] }) => {
+    if (permissions.origins?.length) {
+      refreshRulesIfReady();
+    }
+  });
+}
+
 chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => {
   if (area === "sync") {
     if (changes[STORAGE_KEYS.blockedSites]) {
@@ -2635,6 +2643,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
         sendResponse({ ok: false, error: error?.message ?? String(error) });
       });
     return true;
+  }
+  if (message?.type === "host-permissions-updated") {
+    const refreshed = refreshRulesIfReady();
+    sendResponse({ ok: refreshed });
+    return undefined;
   }
   if (message?.type === "get-local-stats") {
     flushActiveTemporaryAllowUsage()

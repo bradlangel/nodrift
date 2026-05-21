@@ -163,10 +163,16 @@ If Chrome reports manifest or service-worker errors, rebuild with
 3. Click Load Temporary Add-on.
 4. Select `manifest.json` inside the printed
    `release/validate/nodrift-firefox-${VERSION}` folder.
+5. Open the NoDrift toolbar popup and click Enable blocking if Firefox asks for
+   site access.
 
 Firefox temporary add-ons are removed when Firefox restarts. Re-run validation
 after source changes so the generated Firefox manifest and compiled `dist/`
 stay in sync.
+
+Firefox MV3 can leave broad host permissions disabled until the user grants
+them. If the popup says blocking needs site access, grant that permission and
+reload any already-open blocked tab.
 
 ## How It Works
 

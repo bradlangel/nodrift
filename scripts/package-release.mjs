@@ -59,6 +59,16 @@ function buildFirefoxManifest(baseManifest) {
     manifest.incognito = "spanning";
   }
 
+  const hostPermissions = Array.isArray(manifest.host_permissions)
+    ? manifest.host_permissions
+    : [];
+  const optionalHostPermissions = Array.isArray(manifest.optional_host_permissions)
+    ? manifest.optional_host_permissions
+    : [];
+  manifest.optional_host_permissions = [
+    ...new Set([...optionalHostPermissions, ...hostPermissions]),
+  ];
+
   const existingBrowserSettings = manifest.browser_specific_settings ?? {};
   const existingGeckoSettings = existingBrowserSettings.gecko ?? {};
   manifest.browser_specific_settings = {

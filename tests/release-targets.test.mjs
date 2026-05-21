@@ -33,6 +33,8 @@ test("Firefox target manifest uses background scripts and Gecko settings", async
   });
   assert.equal(manifest.background.service_worker, undefined);
   assert.equal(manifest.incognito, "spanning");
+  assert.deepEqual(manifest.host_permissions, ["<all_urls>"]);
+  assert.deepEqual(manifest.optional_host_permissions, ["<all_urls>"]);
   assert.equal(
     manifest.browser_specific_settings.gecko.id,
     "nodrift@bradlangel.github.io"
