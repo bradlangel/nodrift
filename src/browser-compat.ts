@@ -6,6 +6,37 @@ const getExtensionRootUrl = (): URL | null => {
   }
 };
 
+export type ExtensionRuntimeFamily = "chrome" | "firefox" | "unknown";
+
+export type ExtensionStoreListing = {
+  label: string;
+  url: string;
+};
+
+const CHROME_WEB_STORE_URL =
+  "https://chromewebstore.google.com/detail/hnehakhgloffpelfgleecfknkpkomhhl";
+const FIREFOX_ADDONS_URL: string | null = null;
+
+export const getExtensionRuntimeFamily = (): ExtensionRuntimeFamily => {
+  const extensionRootUrl = getExtensionRootUrl();
+  if (extensionRootUrl?.protocol === "moz-extension:") return "firefox";
+  if (extensionRootUrl?.protocol === "chrome-extension:") return "chrome";
+  return "unknown";
+};
+
+export const isChromeLocalAiSupportedBrowser = (): boolean =>
+  getExtensionRuntimeFamily() !== "firefox";
+
+export const getExtensionStoreListing = (): ExtensionStoreListing | null => {
+  const runtime = getExtensionRuntimeFamily();
+  if (runtime === "firefox") {
+    return FIREFOX_ADDONS_URL === null
+      ? null
+      : { label: "Firefox Add-ons", url: FIREFOX_ADDONS_URL };
+  }
+  return { label: "Chrome Web Store", url: CHROME_WEB_STORE_URL };
+};
+
 export const getDnrExtensionRedirectTransformBase = (): {
   scheme: string;
   host: string;

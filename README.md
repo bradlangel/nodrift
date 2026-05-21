@@ -174,6 +174,10 @@ Firefox MV3 can leave broad host permissions disabled until the user grants
 them. If the popup says blocking needs site access, grant that permission and
 reload any already-open blocked tab.
 
+Chrome local AI provider settings are disabled in Firefox because the Chrome
+Prompt API is not available there. Use the OpenAI provider path for AI-reviewed
+gates in Firefox.
+
 ## How It Works
 
 Settings are managed from the extension options page. Blocked sites are stored as
@@ -234,7 +238,7 @@ The AI-reviewed gate sends data only when that gate is selected and used. For
 external providers, such as OpenAI, the review payload includes the requested
 purpose, requested URL/domain, requested minutes, current time/day,
 provider/model settings, and compact local stats context. For Chrome local AI,
-review runs through Chrome's local Prompt API path when available.
+review runs through Chrome's local Prompt API path when available in Chrome.
 
 Peek with ChatGPT is optional. When used, the extension may fetch a small page
 snapshot, build a prompt, open ChatGPT, and try to insert that prompt. If prompt

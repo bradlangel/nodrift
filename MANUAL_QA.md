@@ -82,10 +82,12 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
 
 ## AI-Reviewed Gate
 
-- [ ] Select AI-reviewed request with Chrome local AI selected and confirm
+- [ ] In Chrome, select AI-reviewed request with Chrome local AI selected and confirm
       Settings marks it as ready without an API key.
-- [ ] Save AI-reviewed request as the default with Chrome local AI selected
+- [ ] In Chrome, save AI-reviewed request as the default with Chrome local AI selected
       and confirm the block page shows the request form.
+- [ ] In Firefox, confirm Chrome local AI is disabled in Settings and OpenAI is
+      the available hosted-provider setup path.
 - [ ] Switch to OpenAI provider without an API key and confirm Settings marks
       AI-reviewed request as needing setup.
 - [ ] Save AI-reviewed request as the default with incomplete OpenAI setup and
@@ -95,7 +97,7 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
 - [ ] With OpenAI configured, submit one specific bounded request and one vague
       request, then confirm approvals or denials are applied and recorded with
       provider/model metadata.
-- [ ] Select Chrome local AI provider and save.
+- [ ] In Chrome, select Chrome local AI provider and save.
 - [ ] On a Chrome build/profile where the Prompt API is available, confirm local
       AI review can approve and deny requests. If unavailable, confirm the gate
       fails closed with a clear message.

@@ -2,6 +2,7 @@ import {
   AccessReviewProgressStage,
   DailyStatsContext,
 } from "../../../core/access-contracts.js";
+import { isChromeLocalAiSupportedBrowser } from "../../../browser-compat.js";
 import {
   buildAccessReviewPolicy,
   LlmReviewLevel,
@@ -242,7 +243,7 @@ export const buildChromeLocalPrompt = (context: ChromeLocalAccessReviewContext):
   });
 
 export const hasChromeLocalProviderConfig = (config: { provider: string }): boolean =>
-  config.provider === "chrome-local";
+  config.provider === "chrome-local" && isChromeLocalAiSupportedBrowser();
 
 export const requestChromeLocalAccessReview = async (
   context: ChromeLocalAccessReviewContext,

@@ -22,6 +22,10 @@ import {
   LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
+import {
+  getExtensionStoreListing,
+  isChromeLocalAiSupportedBrowser,
+} from "./browser-compat.js";
 import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import {
   normalizeBuiltGateSpecJson,
@@ -64,8 +68,16 @@ const normalizeAccessGateActionId = (actionId: unknown): string =>
     ? DEFAULT_ACCESS_GATE_ACTION_ID
     : String(actionId || "");
 
-const normalizeLlmProvider = (provider: unknown): string =>
-  provider === "openai" || provider === "chrome-local" ? provider : DEFAULT_LLM_PROVIDER;
+const getFallbackLlmProvider = (): string =>
+  isChromeLocalAiSupportedBrowser() ? DEFAULT_LLM_PROVIDER : "openai";
+
+const normalizeLlmProvider = (provider: unknown): string => {
+  if (provider === "openai") return "openai";
+  if (provider === "chrome-local" && isChromeLocalAiSupportedBrowser()) {
+    return "chrome-local";
+  }
+  return getFallbackLlmProvider();
+};
 
 const normalizeLlmReviewStrictness = (strictness: unknown): string => {
   if (strictness === "lenient") return "2";
@@ -417,6 +429,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
   const gateList = document.getElementById("gate-list");
   const saveStatus = document.getElementById("save-status");
+  const storeLink = document.getElementById("store-link");
 
   if (
     !(textarea instanceof HTMLTextAreaElement) ||
@@ -432,6 +445,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   renderGateLibrary(gateList);
+
+  const storeListing = getExtensionStoreListing();
+  if (storeLink instanceof HTMLAnchorElement) {
+    if (storeListing) {
+      storeLink.href = storeListing.url;
+      storeLink.textContent = storeListing.label;
+      storeLink.hidden = false;
+    } else {
+      storeLink.hidden = true;
+    }
+  }
 
   const llmProviderInputs = Array.from(
     document.querySelectorAll<HTMLInputElement>('input[name="llm-provider"]')
@@ -556,9 +580,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  const updateChromeLocalProviderAvailability = (): void => {
+    const available = isChromeLocalAiSupportedBrowser();
+    const chromeLocalInput = llmProviderInputs.find((input) => input.value === "chrome-local");
+    const chromeLocalCard = document.querySelector('[data-provider-card="chrome-local"]');
+
+    if (chromeLocalInput) {
+      chromeLocalInput.disabled = !available;
+      if (!available && chromeLocalInput.checked) {
+        setSelectedLlmProvider("openai");
+      }
+    }
+
+    if (chromeLocalCard instanceof HTMLElement) {
+      chromeLocalCard.classList.toggle("is-disabled", !available);
+      chromeLocalCard.title = available ? "" : "Chrome local AI is only available in Chrome.";
+    }
+  };
+
   const hasReadyLlmProviderConfig = (): boolean => {
     const provider = getSelectedLlmProvider();
-    if (provider === "chrome-local") return true;
+    if (provider === "chrome-local") return isChromeLocalAiSupportedBrowser();
     return (
       openAiApiKeyInput.value.trim().length > 0 &&
       openAiModelInput.value.trim().length > 0
@@ -567,11 +609,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateLlmConfigStatus = (): void => {
     if (!llmConfigStatus) return;
+    updateChromeLocalProviderAvailability();
     const provider = getSelectedLlmProvider();
     const isChromeLocal = provider === "chrome-local";
     updateProviderCards();
 
     if (isChromeLocal) {
+      if (!isChromeLocalAiSupportedBrowser()) {
+        llmConfigStatus.textContent = "Chrome local AI is only available in Chrome.";
+        llmConfigStatus.className = "hint warning";
+        return;
+      }
       llmConfigStatus.textContent =
         "Chrome local AI uses Gemini Nano on this device when the Prompt API is available.";
       llmConfigStatus.className = "hint ok";

@@ -24,6 +24,7 @@ import {
   DNR_ACTION_REDIRECT,
   DNR_RESOURCE_MAIN_FRAME,
   getDnrExtensionRedirectTransformBase,
+  isChromeLocalAiSupportedBrowser,
   isExtensionPageUrl,
 } from "./browser-compat.js";
 import { decideAiStudyQuizRequest } from "./gates/ai-study-quiz/request.js";
@@ -372,7 +373,9 @@ const getLocalStorageItems = (
 
 const formatLlmReviewerLabel = (provider: string, model: string): string => {
   if (provider === "chrome-local") {
-    return "Provider: Chrome local Nano";
+    return isChromeLocalAiSupportedBrowser()
+      ? "Provider: Chrome local Nano"
+      : "Provider: Chrome local AI unavailable in Firefox";
   }
   const modelLabel =
     typeof model === "string" && model.trim().length > 0 ? model.trim() : DEFAULT_OPENAI_MODEL;
@@ -410,7 +413,7 @@ const getBlockPageActions = async (): Promise<{
     // Fall back to the packaged gate if editable JSON in storage is malformed.
   }
   const llmConfigured =
-    provider === "chrome-local" ||
+    (provider === "chrome-local" && isChromeLocalAiSupportedBrowser()) ||
     (provider === "openai" && model.trim().length > 0 && apiKey.trim().length > 0);
 
   const normalizedActionId = normalizeAccessGateActionId(
