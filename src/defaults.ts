@@ -12,6 +12,7 @@ export const DEFAULT_BLOCKED_SITES: string[] = [
 export const DEFAULT_BLOCK_PAGE_ALTERNATIVES: string[] = [
   "Read a book",
   "Go for a run",
+  "Go to Career Tracker | http://localhost:5173",
 ];
 
 export const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
