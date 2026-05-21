@@ -60,23 +60,13 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       temporarily allowed site.
 - [ ] Confirm Top blocked domains, Per-site details, and Top temporary access
       domains reflect the test domain.
-- [ ] Confirm Gate usage shows one-click, local intent, or AI-reviewed activity
+- [ ] Confirm Gate usage shows one-click, generated gate, or AI-reviewed activity
       based on the gate used.
 - [ ] Confirm Recent decisions records blocked attempts, approvals, denials, and
       follow-up requests.
 - [ ] Use Reset today's stats and confirm the dashboard resets without clearing
       settings.
 - [ ] Confirm Local Stats links to Settings and the Block page.
-
-## Local Intent Gate
-
-- [ ] Select Local intent check as the default gate and save.
-- [ ] Open a blocked site and confirm the request form appears.
-- [ ] Submit a specific bounded purpose and confirm the gate grants access or
-      asks at most one follow-up.
-- [ ] Submit a vague feed-seeking purpose and confirm the gate denies access or
-      asks for clarification.
-- [ ] Confirm local intent decisions appear in Recent decisions and Gate usage.
 
 ## Gate Builder
 

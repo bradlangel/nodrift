@@ -13,7 +13,6 @@ import {
   DEFAULT_TEMP_ALLOW_MINUTES,
   LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
-  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
 import {
   AccessGateDecision,
@@ -36,7 +35,6 @@ import { decideGithubContributionRequest } from "./gates/github-contribution/req
 import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import { decideIfThenIntentionRequest } from "./gates/if-then-intention/request.js";
 import { temporaryAllowGate } from "./gates/temporary-allow/index.js";
-import { decideLocalIntentRequest } from "./gates/local-intent/request.js";
 import { decideLlmReviewedRequest } from "./gates/llm-reviewed/request.js";
 import { GATE_BLOCK_PAGE_ACTION_CAPABILITIES } from "./gates/registry.js";
 import { buildDecisionApplication } from "./core/decision-application.js";
@@ -74,6 +72,10 @@ import { findRuleIdByHostname } from "./site-matching.js";
 const ACCESS_GATE_ACTION_IDS = new Set(
   GATE_BLOCK_PAGE_ACTION_CAPABILITIES.map((action) => action.id)
 );
+const RETIRED_ACCESS_GATE_ACTION_IDS = new Set([
+  LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
+  "local-intent-request-access",
+]);
 
 type ChromeTab = {
   id?: number;
@@ -338,8 +340,8 @@ const normalizeBlockPageAlternatives = (value: unknown): string[] =>
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const normalizeAccessGateActionId = (actionId: unknown): string => {
-  if (actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID) {
-    return LOCAL_INTENT_ACCESS_GATE_ACTION_ID;
+  if (RETIRED_ACCESS_GATE_ACTION_IDS.has(String(actionId))) {
+    return DEFAULT_ACCESS_GATE_ACTION_ID;
   }
   return typeof actionId === "string" ? actionId : DEFAULT_ACCESS_GATE_ACTION_ID;
 };
@@ -1616,14 +1618,6 @@ const requestAiStudyQuizAccess = async (
   return applyRequestGateDecision(result);
 };
 
-const requestLocalIntentAccess = async (
-  payload: RequestLocalIntentAccessMessage,
-  sender?: any
-): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
-  const input = await buildRequestGateInput(payload, sender);
-  return applyRequestGateDecision(decideLocalIntentRequest(input));
-};
-
 const requestLlmReviewedAccess = async (
   payload: RequestLocalIntentAccessMessage,
   sender?: any,
@@ -1735,8 +1729,6 @@ type RecordBlockedAttemptMessage = {
 
 type RequestLocalIntentAccessMessage = {
   type:
-    | "request-local-intent-access"
-    | "request-agentic-access"
     | "request-llm-reviewed-access"
     | "request-if-then-intention-access"
     | "request-built-gate-access"
@@ -1760,10 +1752,6 @@ const CHATGPT_PEEK_MESSAGE_TYPE =
   OPTIONAL_INTEGRATIONS.find((integration) => integration.id === "chatgpt-peek")
     ?.messageType ?? "peek-with-chatgpt";
 
-
-const REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE =
-  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "local-intent-request-access")
-    ?.messageType ?? "request-local-intent-access";
 
 const REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "llm-reviewed-request-access")
@@ -2518,7 +2506,10 @@ const handleRequestAccessMessage = async (
       ? "github-contribution"
       : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
       ? "ai-study-quiz"
-      : "local-intent";
+      : null;
+  if (!source) {
+    throw new Error("Unsupported request access gate");
+  }
   const requestedSite =
     sanitizeSite(message.currentSite) || sanitizeSite(parseSiteFromSender(sender));
   const requestedUrl = ensureHttpUrl(message.currentUrl) || ensureHttpUrl(message.url);
@@ -2550,7 +2541,7 @@ const handleRequestAccessMessage = async (
         ? requestGithubContributionAccess(message, sender)
         : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
         ? requestAiStudyQuizAccess(message, sender)
-        : requestLocalIntentAccess(message, sender)
+        : Promise.reject(new Error("Unsupported request access gate"))
     );
 
   const { decision, ...allowResult } = requestResult;
@@ -2742,13 +2733,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
   }
 
   if (
-    message?.type === REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE ||
-    message?.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE ||
-    message?.type === "request-agentic-access"
+    message?.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
   ) {
     handleRequestAccessMessage(message as RequestLocalIntentAccessMessage, sender)
       .then((response) => sendResponse(response))
@@ -2787,12 +2776,10 @@ if (chrome.runtime.onConnect) {
     port.onMessage?.addListener((message: any) => {
       if (
         message?.type !== REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE &&
-        message?.type !== REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE &&
-        message?.type !== REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE &&
-        message?.type !== "request-agentic-access"
+        message?.type !== REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
       ) {
         postMessage({ type: "result", response: { ok: false, error: "Unsupported request type" } });
         return;

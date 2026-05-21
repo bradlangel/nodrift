@@ -21,7 +21,6 @@ import {
   DEFAULT_TEMP_ALLOW_MINUTES,
   LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
-  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
 import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import {
@@ -48,6 +47,10 @@ const LEISURE_ALLOWANCE_LABELS = {
 };
 const GITHUB_RECENT_WINDOW_MINUTES_MIN = 15;
 const GITHUB_RECENT_WINDOW_MINUTES_MAX = 480;
+const RETIRED_ACCESS_GATE_ACTION_IDS = new Set([
+  LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
+  "local-intent-request-access",
+]);
 
 type RangeLabels = Record<string, string>;
 
@@ -57,8 +60,8 @@ type NormalizedBlockedSites = {
 };
 
 const normalizeAccessGateActionId = (actionId: unknown): string =>
-  actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID
-    ? LOCAL_INTENT_ACCESS_GATE_ACTION_ID
+  RETIRED_ACCESS_GATE_ACTION_IDS.has(String(actionId))
+    ? DEFAULT_ACCESS_GATE_ACTION_ID
     : String(actionId || "");
 
 const normalizeLlmProvider = (provider: unknown): string =>

@@ -69,9 +69,9 @@ if (site) {
 const DEFAULT_TEMPORARY_ALLOW_BTN_TEXT = "Temporarily Allow";
 const DEFAULT_PEEK_CHATGPT_BTN_TEXT = "Peek with ChatGPT";
 const DEFAULT_TEMPORARY_ALLOW_PENDING_LABEL = "Temporarily allowing...";
-const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Check intent";
+const DEFAULT_REQUEST_ACCESS_BTN_TEXT = "Request access";
 const DEFAULT_LLM_REQUEST_ACCESS_BTN_TEXT = "Request access";
-const DEFAULT_REQUEST_ACCESS_TITLE = "Intent check";
+const DEFAULT_REQUEST_ACCESS_TITLE = "Request access";
 const DEFAULT_REQUEST_ACCESS_PLACEHOLDER =
   "Describe why you need access to this site and for how long.";
 const LLM_REVIEW_WAITING_TEXT =
@@ -84,7 +84,7 @@ const ACCESS_REVIEW_PROGRESS_MESSAGES: Record<AccessReviewProgressStage, string>
   finalizing: "Applying decision...",
   complete: "Opening site...",
 };
-const REQUEST_LOCAL_INTENT_MESSAGE_TYPE = "request-local-intent-access";
+const DEFAULT_REQUEST_ACCESS_MESSAGE_TYPE = "request-if-then-intention-access";
 const REQUEST_LLM_REVIEWED_MESSAGE_TYPE = "request-llm-reviewed-access";
 const REQUEST_AI_STUDY_QUIZ_MESSAGE_TYPE = "request-ai-study-quiz-access";
 
@@ -541,7 +541,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     return;
   }
 
-  let activeRequestMessageType = REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+  let activeRequestMessageType = DEFAULT_REQUEST_ACCESS_MESSAGE_TYPE;
   let activeSubmitLabel = DEFAULT_REQUEST_ACCESS_BTN_TEXT;
   let activeWaitingLabel = "Reviewing...";
   let activeFormPlaceholder = DEFAULT_REQUEST_ACCESS_PLACEHOLDER;
@@ -663,7 +663,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
   const getRequestMessageType = (requestAction) =>
     requestAction?.messageType ||
     requestAction?.dataset?.messageType ||
-    REQUEST_LOCAL_INTENT_MESSAGE_TYPE;
+    DEFAULT_REQUEST_ACCESS_MESSAGE_TYPE;
 
   const getDisabledReason = (requestAction) =>
     requestAction?.disabledReason || requestAction?.dataset?.disabledReason || "";

@@ -18,7 +18,6 @@ test("registry exposes all compiled-in access gates", () => {
     GATE_MODULES.map((module) => module.id),
     [
       "temporary-allow",
-      "local-intent-access",
       "llm-reviewed-access",
       "if-then-intention-access",
       "built-gate-access",
@@ -33,7 +32,6 @@ test("registry derives block-page gate capabilities", () => {
     GATE_BLOCK_PAGE_ACTION_CAPABILITIES.map((capability) => capability.id),
     [
       "temporary-allow-domain",
-      "local-intent-request-access",
       "llm-reviewed-request-access",
       "if-then-intention-request-access",
       "built-gate-request-access",
@@ -47,10 +45,6 @@ test("registry resolves gates by action id and message type", () => {
   assert.equal(
     findGateModuleByActionId("llm-reviewed-request-access")?.id,
     "llm-reviewed-access"
-  );
-  assert.equal(
-    findGateModuleByMessageType("request-local-intent-access")?.id,
-    "local-intent-access"
   );
   assert.equal(
     findGateModuleByMessageType("request-ai-study-quiz-access")?.id,

@@ -17,7 +17,7 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 
 - [x] Add small local stats to the block page.
 - [x] Add a fuller local stats dashboard page.
-- [x] Add a local intent-check "request access" flow that can pass, fail, or ask one follow-up.
+- [x] Retire the local intent-check prototype after richer request gates replaced it.
 - [x] Add an explicitly configured LLM-reviewed request gate with OpenAI and
       Chrome local provider paths, fail-closed validation, and one follow-up
       maximum.
@@ -106,7 +106,8 @@ then let each feature prove the next boundary.
    current one-click behavior.
 4. [x] Add URL-scoped temporary access under the hood to prove the decision
    pipeline can handle more than domain-wide allows.
-5. [x] Add the local intent access gate as another decision source.
+5. [x] Prototype a local intent access gate, then retire it once stronger gates
+   covered the use case.
 6. [x] Polish the options page once the real settings and stats surfaces are known.
 7. [x] Connect the block page, settings page, and local stats dashboard with quiet
    navigation.
@@ -170,7 +171,7 @@ Core responsibilities:
 
 Possible module types:
 
-- Access gates: basic temporary allow, local intent prompt fallback, LLM-reviewed gatekeeper, coding
+- Access gates: basic temporary allow, LLM-reviewed gatekeeper, coding
   challenge proof.
 - Context providers: local stats, current time/day, recent decisions, requested
   URL, blocked domain.
@@ -304,40 +305,9 @@ Current placement:
 
 ## Local Intent Check Gate
 
-The local intent check is a heuristic test gate, not a real LLM-backed agent. It
-should allow specific, plausible, deliberate use, including real downtime.
-
-Initial flow:
-
-1. User clicks "Request access" on the block page.
-2. Extension asks what they are trying to do and how long they need.
-3. The local gate receives the request plus local context.
-4. The gate returns a structured decision.
-5. Extension applies the decision or shows a follow-up/denial message.
-
-Decision types:
-
-- `PASS`: allow access for a limited time.
-- `PASS_WITH_LIMIT`: allow a shorter duration or exact URL only.
-- `FAIL`: keep the site blocked and suggest peek/redirect instead.
-- `ASK_FOLLOWUP`: ask one clarifying question before deciding.
-
-Useful local context for the gate:
-
-- Site/domain and attempted URL
-- Current time and day of week
-- Blocked attempts today
-- Temporary allows today
-- Recent decisions for this site
-- User's requested purpose and requested duration
-
-Prompt goals:
-
-- Allow work, learning, debugging, research, errands, maintenance, and planned
-  leisure.
-- Challenge vague, compulsive, feed-seeking, or evasive requests.
-- Prefer exact-URL access when the user only needs one page.
-- Keep responses brief, calm, and non-moralizing.
+Retired. The heuristic local intent gate was useful as a prototype for the
+request-access contract, but the generated gate and AI-reviewed gate now cover
+the same space with clearer configuration and behavior.
 
 ## Options Page Improvements
 
