@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  DNR_ACTION_ALLOW,
+  DNR_ACTION_REDIRECT,
+  DNR_RESOURCE_MAIN_FRAME,
   getDnrExtensionRedirectTransformBase,
   isExtensionPageUrl,
 } from "../dist/browser-compat.js";
@@ -63,6 +66,12 @@ test("DNR redirect transform still derives Chrome extension scheme and host", ()
     scheme: "chrome-extension",
     host: "chrome-extension-id",
   });
+});
+
+test("DNR rule constants use browser-neutral literal values", () => {
+  assert.equal(DNR_ACTION_ALLOW, "allow");
+  assert.equal(DNR_ACTION_REDIRECT, "redirect");
+  assert.equal(DNR_RESOURCE_MAIN_FRAME, "main_frame");
 });
 
 let failures = 0;

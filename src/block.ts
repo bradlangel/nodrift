@@ -21,6 +21,9 @@ import {
   BlockPageActionCapability,
 } from "./core/access-contracts.js";
 import {
+  DNR_ACTION_ALLOW,
+  DNR_ACTION_REDIRECT,
+  DNR_RESOURCE_MAIN_FRAME,
   getDnrExtensionRedirectTransformBase,
   isExtensionPageUrl,
 } from "./browser-compat.js";
@@ -494,7 +497,7 @@ const buildRule = (
     // Give more specific domains higher priority so subdomains override their base domain.
     priority: site.split(".").length,
     action: {
-      type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
+      type: DNR_ACTION_REDIRECT,
       // Use transform so we can attach query params identifying the rule+site.
       redirect: {
         transform: {
@@ -512,7 +515,7 @@ const buildRule = (
     condition: {
       // Match at the domain boundary (handles subdomains properly).
       urlFilter: buildParentDomainUrlFilter(site),
-      resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
+      resourceTypes: [DNR_RESOURCE_MAIN_FRAME],
     },
   };
 };
@@ -521,11 +524,11 @@ const buildUrlAllowRule = (id: number, rawUrl: string): any => ({
   id,
   priority: 10000,
   action: {
-    type: chrome.declarativeNetRequest.RuleActionType.ALLOW,
+    type: DNR_ACTION_ALLOW,
   },
   condition: {
     regexFilter: buildExactUrlRegexFilter(rawUrl),
-    resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
+    resourceTypes: [DNR_RESOURCE_MAIN_FRAME],
   },
 });
 

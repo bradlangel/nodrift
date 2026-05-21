@@ -17,6 +17,10 @@ export const getDnrExtensionRedirectTransformBase = (): {
   };
 };
 
+export const DNR_ACTION_ALLOW = "allow";
+export const DNR_ACTION_REDIRECT = "redirect";
+export const DNR_RESOURCE_MAIN_FRAME = "main_frame";
+
 export const isExtensionPageUrl = (rawUrl?: string | null): boolean => {
   if (!rawUrl) return false;
 
