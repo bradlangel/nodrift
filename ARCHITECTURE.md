@@ -7,11 +7,11 @@ worker bundle. There is no runtime plugin marketplace.
 ## Source And Release Artifacts
 
 TypeScript source lives under `src/` and compiles to `dist/`. Chrome loads the
-compiled service worker and page modules from `dist/`, while packaged HTML
-entrypoints live under `pages/`. Release ZIPs are runtime-only Chrome artifacts:
-they include `manifest.json`, packaged pages, compiled `dist/`, and
-manifest-referenced assets, but not source, tests, docs, dependency folders, or
-repository metadata.
+compiled background service worker from `dist/`, while Firefox release artifacts
+load the same file as a background script. Packaged HTML entrypoints live under
+`pages/`. Release ZIPs are runtime-only browser artifacts: they include
+`manifest.json`, packaged pages, compiled `dist/`, and manifest-referenced
+assets, but not source, tests, docs, dependency folders, or repository metadata.
 
 ## Core Registry Flow
 
@@ -19,12 +19,10 @@ repository metadata.
 flowchart LR
   subgraph Gates["Compiled-in gate modules"]
     Temporary["temporary-allow\nGate + manifest + options"]
-    Local["local-intent\nGate + manifest + options"]
     Llm["llm-reviewed\nGate + providers + manifest + options"]
   end
 
   Temporary --> Registry["src/gates/registry.ts\nGATE_MODULES"]
-  Local --> Registry
   Llm --> Registry
 
   Registry --> Capabilities["Gate action capabilities"]
@@ -39,24 +37,23 @@ flowchart LR
   BlockPage --> Requests
   Requests --> Decision["AccessGateDecision"]
   Decision --> Apply["buildDecisionApplication"]
-  Apply --> Chrome["Chrome APIs\nDNR + storage + alarms + tabs"]
-  Chrome --> Stats["Local stats events"]
+  Apply --> Browser["Browser APIs\nDNR + storage + alarms + tabs"]
+  Browser --> Stats["Local stats events"]
   Stats --> Dashboard["stats-dashboard.ts"]
-  Stats --> GateContext["LLM/local gate context"]
+  Stats --> GateContext["Request gate context"]
 ```
 
 The registry is the hinge between gate modules and the extension surfaces. Gate
 modules own pure decision logic, block-page labels, and settings metadata. The
-service worker owns Chrome orchestration, side effects, and persistence.
+background worker owns browser orchestration, side effects, and persistence.
 
 ## Core boundaries
 
-- `src/block.ts` remains the service-worker orchestrator for Chrome APIs.
+- `src/block.ts` remains the background orchestrator for browser APIs.
 - Shared access contracts live in `src/core/access-contracts.ts`.
 - Compiled-in gate discovery lives in `src/gates/registry.ts`.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
   `src/gates/temporary-allow/`.
-- Local intent request checks live in `src/gates/local-intent/`.
 - LLM-reviewed request decisions, policy, and provider adapters live in
   `src/gates/llm-reviewed/`.
 - Decision-to-application planning lives in `src/core/decision-application.ts`.

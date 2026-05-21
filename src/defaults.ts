@@ -12,13 +12,13 @@ export const DEFAULT_BLOCKED_SITES: string[] = [
 export const DEFAULT_BLOCK_PAGE_ALTERNATIVES: string[] = [
   "Read a book",
   "Go for a run",
+  "Go to Career Tracker | http://localhost:5173",
 ];
 
 export const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 export const DEFAULT_TEMP_ALLOW_MINUTES = 1;
 
 export const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
-export const LOCAL_INTENT_ACCESS_GATE_ACTION_ID = "local-intent-request-access";
 export const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
 export const BUILT_GATE_ACCESS_GATE_ACTION_ID = "built-gate-request-access";
 export const LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID = "agentic-request-access";

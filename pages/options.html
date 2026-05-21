@@ -74,14 +74,9 @@
       margin-bottom: 4px;
     }
 
-    .chrome-note,
     .hint {
       color: var(--muted);
       line-height: 1.45;
-    }
-
-    .chrome-note {
-      margin-bottom: 0;
     }
 
     .page-nav {
@@ -296,6 +291,12 @@
       box-shadow: 0 0 0 2px var(--accent-soft);
     }
 
+    .provider-card.is-disabled {
+      background: #f8fafc;
+      color: var(--muted);
+      opacity: 0.62;
+    }
+
     .provider-choice {
       align-items: flex-start;
       display: flex;
@@ -421,11 +422,11 @@
     <header class="page-header">
       <div>
         <h1>Settings</h1>
-        <p class="chrome-note">Chrome-only for v1.</p>
       </div>
       <nav class="page-nav" aria-label="Extension pages">
         <a href="stats.html">Local stats</a>
         <a
+          id="store-link"
           href="https://chromewebstore.google.com/detail/hnehakhgloffpelfgleecfknkpkomhhl"
           target="_blank"
           rel="noopener"

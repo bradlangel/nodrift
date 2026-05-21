@@ -1,14 +1,24 @@
 # Manual QA Checklist
 
-Use this before a v1 release candidate. v1 is Chrome-only.
+Use this before a release candidate. Chrome is the published store target today;
+Firefox builds are local-loadable artifacts until they complete AMO review.
 
 ## Prep
 
 - [ ] Run `nvm use`.
 - [ ] Run `npm install` if dependencies are not already installed.
 - [ ] Run `npm test`.
-- [ ] Load the extension unpacked from this directory in `chrome://extensions`.
-- [ ] Confirm the extension card has no manifest or service-worker errors.
+- [ ] Run `npm run release:validate`.
+- [ ] Load the Chrome validation folder in `chrome://extensions`.
+- [ ] Confirm the Chrome extension card has no manifest or service-worker
+      errors.
+- [ ] Run `npm run release:validate:firefox`.
+- [ ] Load `manifest.json` from the Firefox validation folder in
+      `about:debugging#/runtime/this-firefox`.
+- [ ] Confirm the Firefox temporary add-on has no manifest or background-script
+      errors.
+- [ ] Open the Firefox popup and grant site access if the Enable blocking
+      prompt appears.
 
 ## Block And Temporary Access
 
@@ -50,23 +60,13 @@ Use this before a v1 release candidate. v1 is Chrome-only.
       temporarily allowed site.
 - [ ] Confirm Top blocked domains, Per-site details, and Top temporary access
       domains reflect the test domain.
-- [ ] Confirm Gate usage shows one-click, local intent, or AI-reviewed activity
+- [ ] Confirm Gate usage shows one-click, generated gate, or AI-reviewed activity
       based on the gate used.
 - [ ] Confirm Recent decisions records blocked attempts, approvals, denials, and
       follow-up requests.
 - [ ] Use Reset today's stats and confirm the dashboard resets without clearing
       settings.
 - [ ] Confirm Local Stats links to Settings and the Block page.
-
-## Local Intent Gate
-
-- [ ] Select Local intent check as the default gate and save.
-- [ ] Open a blocked site and confirm the request form appears.
-- [ ] Submit a specific bounded purpose and confirm the gate grants access or
-      asks at most one follow-up.
-- [ ] Submit a vague feed-seeking purpose and confirm the gate denies access or
-      asks for clarification.
-- [ ] Confirm local intent decisions appear in Recent decisions and Gate usage.
 
 ## Gate Builder
 
@@ -82,10 +82,12 @@ Use this before a v1 release candidate. v1 is Chrome-only.
 
 ## AI-Reviewed Gate
 
-- [ ] Select AI-reviewed request with Chrome local AI selected and confirm
+- [ ] In Chrome, select AI-reviewed request with Chrome local AI selected and confirm
       Settings marks it as ready without an API key.
-- [ ] Save AI-reviewed request as the default with Chrome local AI selected
+- [ ] In Chrome, save AI-reviewed request as the default with Chrome local AI selected
       and confirm the block page shows the request form.
+- [ ] In Firefox, confirm Chrome local AI is disabled in Settings and OpenAI is
+      the available hosted-provider setup path.
 - [ ] Switch to OpenAI provider without an API key and confirm Settings marks
       AI-reviewed request as needing setup.
 - [ ] Save AI-reviewed request as the default with incomplete OpenAI setup and
@@ -95,7 +97,7 @@ Use this before a v1 release candidate. v1 is Chrome-only.
 - [ ] With OpenAI configured, submit one specific bounded request and one vague
       request, then confirm approvals or denials are applied and recorded with
       provider/model metadata.
-- [ ] Select Chrome local AI provider and save.
+- [ ] In Chrome, select Chrome local AI provider and save.
 - [ ] On a Chrome build/profile where the Prompt API is available, confirm local
       AI review can approve and deny requests. If unavailable, confirm the gate
       fails closed with a clear message.

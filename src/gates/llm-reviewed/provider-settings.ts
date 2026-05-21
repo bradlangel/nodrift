@@ -6,7 +6,6 @@ import {
 } from "../../defaults.js";
 import { STORAGE_KEYS } from "../../storage-constants.js";
 import { normalizeReviewLevel } from "./policy.js";
-import { hasChromeLocalProviderConfig } from "./providers/chrome-local.js";
 
 type StorageItems = Record<string, any>;
 
@@ -42,6 +41,6 @@ export const getLlmProviderSettings = (): Promise<LlmProviderSettings> =>
   });
 
 export const getLlmModelLabel = (provider: { provider: string; model: string }): string =>
-  hasChromeLocalProviderConfig(provider)
+  provider.provider === "chrome-local"
     ? "Chrome local AI (Gemini Nano)"
     : provider.model;

@@ -1,8 +1,9 @@
-# NoDrift Chrome Extension
+# NoDrift Browser Extension
 
 [Install NoDrift from the Chrome Web Store](https://chromewebstore.google.com/detail/hnehakhgloffpelfgleecfknkpkomhhl)
 
-Chrome-only for v1. Firefox support is intentionally post-v1.
+Chrome is the published target today. Firefox can be built as a local extension
+artifact and should be manually verified before AMO submission.
 
 This is a soft website blocker for interrupting autopilot. It redirects
 configured distracting domains to a block page, offers a small set of deliberate
@@ -16,7 +17,8 @@ See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 The extension is built around compiled-in access gates. A gate is a small
 TypeScript module that owns its decision logic, block-page action metadata, and
 settings metadata. The central registry makes those gates available to Settings
-and to the block page, while the service worker handles Chrome API orchestration.
+and to the block page, while the background service worker/script handles
+browser API orchestration.
 
 ```mermaid
 flowchart LR
@@ -24,7 +26,7 @@ flowchart LR
   Registry --> Settings["Settings\nGate Library"]
   Registry --> BlockPage["Block page\ndefault gate"]
   BlockPage --> Decision["Access decision"]
-  Decision --> Chrome["Chrome APIs\nrules + storage + stats"]
+  Decision --> Browser["Browser extension APIs\nrules + storage + stats"]
 ```
 
 Adding a new gate mostly means adding a folder under `src/gates/`, exporting its
@@ -55,15 +57,16 @@ npm test
 local logfile permission warning on some machines; that warning has not affected
 the tests.
 
-Compile without running tests when you only need a Chrome reload:
+Compile without running tests when you only need an extension reload:
 
 ```sh
 npm run build
 ```
 
-The extension manifest loads the background service worker from `dist/block.js`,
-and the HTML pages load compiled scripts from `dist/`. Change the TypeScript
-sources and rebuild instead of hand-editing generated output.
+The checked-in manifest is the Chrome shape and loads the background service
+worker from `dist/block.js`; the Firefox release artifact rewrites that entry to
+`background.scripts`. HTML pages load compiled scripts from `dist/`. Change the
+TypeScript sources and rebuild instead of hand-editing generated output.
 
 For an edit loop, run TypeScript in watch mode:
 
@@ -79,15 +82,23 @@ Build and package a runtime-only Chrome Web Store ZIP:
 npm run release:zip
 ```
 
-The package script runs the release confidence checks first, then writes a ZIP
-to `release/nodrift-chrome-${VERSION}.zip`, where `VERSION` comes from
-`manifest.version_name` and falls back to `manifest.version`.
+Build and package a runtime-only Firefox ZIP:
+
+```sh
+npm run release:zip:firefox
+```
+
+The package scripts run the release confidence checks first, then write ZIPs to
+`release/nodrift-${TARGET}-${VERSION}.zip`, where `TARGET` is `chrome` or
+`firefox` and `VERSION` comes from `manifest.version_name` and falls back to
+`manifest.version`.
 
 Inspect the artifact before uploading or publishing:
 
 ```sh
 VERSION="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); console.log(m.version_name || m.version);")"
-ZIP="release/nodrift-chrome-${VERSION}.zip"
+TARGET="firefox"
+ZIP="release/nodrift-${TARGET}-${VERSION}.zip"
 unzip -l "$ZIP"
 ```
 
@@ -103,10 +114,15 @@ step, run:
 npm run release:validate
 ```
 
-The validation script runs `npm run release:zip`, checks ZIP integrity and
-contents, then extracts the artifact to `release/validate/nodrift-chrome-${VERSION}`.
-Load that extracted directory in `chrome://extensions` with Developer mode
-enabled.
+For Firefox, run:
+
+```sh
+npm run release:validate:firefox
+```
+
+The validation script runs `npm test`, packages the selected target, checks ZIP
+integrity and contents, validates the generated manifest shape, then extracts
+the artifact to `release/validate/nodrift-${TARGET}-${VERSION}`.
 
 After the release commit is merged to `main`, create the GitHub release from the
 manifest version:
@@ -140,6 +156,28 @@ If Chrome reports manifest or service-worker errors, rebuild with
 `npm run build`, reload the extension card, and inspect the service worker from
 `chrome://extensions`.
 
+## Load In Firefox
+
+1. Run `npm run release:validate:firefox`.
+2. Open `about:debugging#/runtime/this-firefox`.
+3. Click Load Temporary Add-on.
+4. Select `manifest.json` inside the printed
+   `release/validate/nodrift-firefox-${VERSION}` folder.
+5. Open the NoDrift toolbar popup and click Enable blocking if Firefox asks for
+   site access.
+
+Firefox temporary add-ons are removed when Firefox restarts. Re-run validation
+after source changes so the generated Firefox manifest and compiled `dist/`
+stay in sync.
+
+Firefox MV3 can leave broad host permissions disabled until the user grants
+them. If the popup says blocking needs site access, grant that permission and
+reload any already-open blocked tab.
+
+Chrome local AI provider settings are disabled in Firefox because the Chrome
+Prompt API is not available there. Use the OpenAI provider path for AI-reviewed
+gates in Firefox.
+
 ## How It Works
 
 Settings are managed from the extension options page. Blocked sites are stored as
@@ -167,7 +205,7 @@ data reset controls.
 
 ## Permissions
 
-The v1 manifest requests Chrome MV3 permissions for the blocker loop:
+The extension requests MV3 permissions for the blocker loop:
 
 - `declarativeNetRequest` and `declarativeNetRequestWithHostAccess`: redirect
   configured blocked domains to the extension block page and apply temporary
@@ -185,28 +223,28 @@ The v1 manifest requests Chrome MV3 permissions for the blocker loop:
   peek prompt insertion.
 - `clipboardWrite`: copy the ChatGPT peek prompt as a fallback if insertion is
   unavailable.
-- `<all_urls>` host access: allow Chrome's blocking, grayscale, navigation, and
+- `<all_urls>` host access: allow blocking, grayscale, navigation, and
   optional peek snapshot flows to work across configured sites.
 
 ## Privacy And Local Data
 
 The extension does not send remote telemetry by default. Settings, daily stats,
 recent decisions, temporary allow state, and AI provider API keys are stored in
-Chrome extension storage. Some settings may sync across browser profiles if
-Chrome sync is enabled. See [PRIVACY.md](PRIVACY.md) for the full privacy
-policy.
+browser extension storage. Some settings may sync across browser profiles if the
+browser's extension sync storage is enabled. See [PRIVACY.md](PRIVACY.md) for
+the full privacy policy.
 
 The AI-reviewed gate sends data only when that gate is selected and used. For
 external providers, such as OpenAI, the review payload includes the requested
 purpose, requested URL/domain, requested minutes, current time/day,
 provider/model settings, and compact local stats context. For Chrome local AI,
-review runs through Chrome's local Prompt API path when available.
+review runs through Chrome's local Prompt API path when available in Chrome.
 
 Peek with ChatGPT is optional. When used, the extension may fetch a small page
 snapshot, build a prompt, open ChatGPT, and try to insert that prompt. If prompt
 insertion fails, it falls back to the clipboard.
 
-Use [MANUAL_QA.md](MANUAL_QA.md) before tagging or shipping v1.
+Use [MANUAL_QA.md](MANUAL_QA.md) before tagging or shipping a release.
 
 ## Chrome Web Store Assets
 

@@ -8,12 +8,10 @@ import { builtGateModule } from "./built-gate/index.js";
 import { githubContributionGateModule } from "./github-contribution/index.js";
 import { ifThenIntentionGateModule } from "./if-then-intention/index.js";
 import { llmReviewedGateModule } from "./llm-reviewed/index.js";
-import { localIntentGateModule } from "./local-intent/index.js";
 import { temporaryAllowGateModule } from "./temporary-allow/index.js";
 
 export const GATE_MODULES: Array<GateModule<any>> = [
   temporaryAllowGateModule,
-  localIntentGateModule,
   llmReviewedGateModule,
   ifThenIntentionGateModule,
   builtGateModule,

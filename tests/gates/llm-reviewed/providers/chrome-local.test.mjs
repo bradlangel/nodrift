@@ -4,6 +4,7 @@ import {
   buildChromeLocalAnalysisPrompt,
   buildChromeLocalDecisionPrompt,
   buildChromeLocalPrompt,
+  hasChromeLocalProviderConfig,
   normalizeChromeLocalRequestAnalysis,
   requestChromeLocalAccessReview,
 } from "../../../../dist/gates/llm-reviewed/providers/chrome-local.js";
@@ -119,6 +120,23 @@ test("normalizes local request analysis", () => {
 
 test("rejects invalid local request analysis", () => {
   assert.equal(normalizeChromeLocalRequestAnalysis('{"category":"work"}'), null);
+});
+
+test("disables Chrome local provider config on Firefox runtime", () => {
+  const previousChrome = globalThis.chrome;
+  globalThis.chrome = {
+    runtime: {
+      id: "fallback-id",
+      getURL: (path = "") =>
+        `moz-extension://firefox-extension-id/${String(path).replace(/^\//, "")}`,
+    },
+  };
+
+  try {
+    assert.equal(hasChromeLocalProviderConfig({ provider: "chrome-local" }), false);
+  } finally {
+    globalThis.chrome = previousChrome;
+  }
 });
 
 test("runs local access review as analysis then decision prompts", async () => {

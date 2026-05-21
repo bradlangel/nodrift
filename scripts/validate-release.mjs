@@ -9,6 +9,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const manifestPath = path.join(repoRoot, "manifest.json");
 const releaseDir = path.join(repoRoot, "release");
+const releaseTargets = new Set(["chrome", "firefox"]);
 
 const requiredEntries = [
   "manifest.json",
@@ -31,6 +32,30 @@ const forbiddenEntryPattern =
 function fail(message) {
   console.error(`release:validate failed: ${message}`);
   process.exit(1);
+}
+
+function readReleaseTarget(args) {
+  let target = "chrome";
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--target") {
+      i += 1;
+      target = args[i];
+    } else if (arg.startsWith("--target=")) {
+      target = arg.slice("--target=".length);
+    } else if (releaseTargets.has(arg)) {
+      target = arg;
+    } else {
+      fail(`unknown argument: ${arg}`);
+    }
+
+    if (!releaseTargets.has(target)) {
+      fail(`unsupported release target "${target}"; expected chrome or firefox`);
+    }
+  }
+
+  return target;
 }
 
 function run(command, args, options = {}) {
@@ -73,6 +98,10 @@ function listZipEntries(zipPath) {
     .filter(Boolean);
 }
 
+function readZipEntry(zipPath, entry) {
+  return run("unzip", ["-p", zipPath, entry]);
+}
+
 function validateEntries(entries) {
   const entrySet = new Set(entries);
   const missingEntries = requiredEntries.filter((entry) => !entrySet.has(entry));
@@ -87,17 +116,50 @@ function validateEntries(entries) {
   }
 }
 
+function validateManifest(zipPath, target) {
+  const manifest = JSON.parse(readZipEntry(zipPath, "manifest.json"));
+
+  if (target === "firefox") {
+    if (!Array.isArray(manifest.background?.scripts)) {
+      fail("Firefox ZIP manifest must use background.scripts");
+    }
+    if (manifest.background.service_worker) {
+      fail("Firefox ZIP manifest must not include background.service_worker");
+    }
+    if (!manifest.browser_specific_settings?.gecko?.id) {
+      fail("Firefox ZIP manifest must define browser_specific_settings.gecko.id");
+    }
+    if (manifest.incognito === "split") {
+      fail("Firefox ZIP manifest must not use unsupported incognito split mode");
+    }
+    if (!manifest.optional_host_permissions?.includes("<all_urls>")) {
+      fail("Firefox ZIP manifest must allow runtime requests for all-site access");
+    }
+    return;
+  }
+
+  if (manifest.background?.service_worker !== "dist/block.js") {
+    fail("Chrome ZIP manifest must use background.service_worker");
+  }
+  if (manifest.background?.scripts) {
+    fail("Chrome ZIP manifest must not include background.scripts");
+  }
+}
+
 async function main() {
+  const target = readReleaseTarget(process.argv.slice(2));
   const releaseVersion = await readReleaseVersion();
-  const zipPath = path.join(releaseDir, `nodrift-chrome-${releaseVersion}.zip`);
-  const validateDir = path.join(releaseDir, "validate", `nodrift-chrome-${releaseVersion}`);
+  const zipPath = path.join(releaseDir, `nodrift-${target}-${releaseVersion}.zip`);
+  const validateDir = path.join(releaseDir, "validate", `nodrift-${target}-${releaseVersion}`);
   const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
-  run(npmCommand, ["run", "release:zip"], { stdio: "inherit" });
+  run(npmCommand, ["test"], { stdio: "inherit" });
+  run(process.execPath, ["scripts/package-release.mjs", "--target", target], { stdio: "inherit" });
   run("unzip", ["-t", zipPath], { stdio: "inherit" });
 
   const entries = listZipEntries(zipPath);
   validateEntries(entries);
+  validateManifest(zipPath, target);
 
   await rm(validateDir, { recursive: true, force: true });
   await mkdir(validateDir, { recursive: true });
@@ -106,10 +168,15 @@ async function main() {
   console.log("");
   console.log("Release validation ready:");
   console.log(`ZIP: ${path.relative(repoRoot, zipPath)}`);
-  console.log(`Chrome load folder: ${validateDir}`);
+  console.log(`${target === "firefox" ? "Firefox" : "Chrome"} load folder: ${validateDir}`);
   console.log("");
-  console.log("Open chrome://extensions, enable Developer mode, click Load unpacked,");
-  console.log("and select the Chrome load folder above.");
+  if (target === "firefox") {
+    console.log("Open about:debugging#/runtime/this-firefox, click Load Temporary Add-on,");
+    console.log("and select manifest.json inside the Firefox load folder above.");
+  } else {
+    console.log("Open chrome://extensions, enable Developer mode, click Load unpacked,");
+    console.log("and select the Chrome load folder above.");
+  }
 }
 
 main().catch((error) => {

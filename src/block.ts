@@ -13,13 +13,20 @@ import {
   DEFAULT_TEMP_ALLOW_MINUTES,
   LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
-  LOCAL_INTENT_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
 import {
   AccessGateDecision,
   AccessReviewProgressStage,
   BlockPageActionCapability,
 } from "./core/access-contracts.js";
+import {
+  DNR_ACTION_ALLOW,
+  DNR_ACTION_REDIRECT,
+  DNR_RESOURCE_MAIN_FRAME,
+  getDnrExtensionRedirectTransformBase,
+  isChromeLocalAiSupportedBrowser,
+  isExtensionPageUrl,
+} from "./browser-compat.js";
 import { decideAiStudyQuizRequest } from "./gates/ai-study-quiz/request.js";
 import {
   normalizeBuiltGateSpec,
@@ -29,7 +36,6 @@ import { decideGithubContributionRequest } from "./gates/github-contribution/req
 import { normalizeGithubUsername } from "./gates/github-contribution/index.js";
 import { decideIfThenIntentionRequest } from "./gates/if-then-intention/request.js";
 import { temporaryAllowGate } from "./gates/temporary-allow/index.js";
-import { decideLocalIntentRequest } from "./gates/local-intent/request.js";
 import { decideLlmReviewedRequest } from "./gates/llm-reviewed/request.js";
 import { GATE_BLOCK_PAGE_ACTION_CAPABILITIES } from "./gates/registry.js";
 import { buildDecisionApplication } from "./core/decision-application.js";
@@ -67,6 +73,10 @@ import { findRuleIdByHostname } from "./site-matching.js";
 const ACCESS_GATE_ACTION_IDS = new Set(
   GATE_BLOCK_PAGE_ACTION_CAPABILITIES.map((action) => action.id)
 );
+const RETIRED_ACCESS_GATE_ACTION_IDS = new Set([
+  LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
+  "local-intent-request-access",
+]);
 
 type ChromeTab = {
   id?: number;
@@ -118,8 +128,6 @@ const scheduleBadgeRefreshAlarm = () => {
   chrome.alarms.create(ALARM_NAMES.badgeRefresh, { periodInMinutes: 1 });
 };
 
-
-const EXTENSION_URL_PREFIX = `chrome-extension://${chrome.runtime.id}/`;
 type LastNavigatedUrlEntry = {
   url: string;
   updatedAt: number;
@@ -144,7 +152,7 @@ const setLastNavigatedUrlForTab = (
 };
 
 const recordLastNavigatedUrl = (tabId: number, rawUrl?: string | null) => {
-  if (rawUrl && rawUrl.startsWith(EXTENSION_URL_PREFIX)) {
+  if (isExtensionPageUrl(rawUrl)) {
     return;
   }
   const normalised = ensureHttpUrl(rawUrl);
@@ -333,8 +341,8 @@ const normalizeBlockPageAlternatives = (value: unknown): string[] =>
     : DEFAULT_BLOCK_PAGE_ALTERNATIVES;
 
 const normalizeAccessGateActionId = (actionId: unknown): string => {
-  if (actionId === LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID) {
-    return LOCAL_INTENT_ACCESS_GATE_ACTION_ID;
+  if (RETIRED_ACCESS_GATE_ACTION_IDS.has(String(actionId))) {
+    return DEFAULT_ACCESS_GATE_ACTION_ID;
   }
   return typeof actionId === "string" ? actionId : DEFAULT_ACCESS_GATE_ACTION_ID;
 };
@@ -365,7 +373,9 @@ const getLocalStorageItems = (
 
 const formatLlmReviewerLabel = (provider: string, model: string): string => {
   if (provider === "chrome-local") {
-    return "Provider: Chrome local Nano";
+    return isChromeLocalAiSupportedBrowser()
+      ? "Provider: Chrome local Nano"
+      : "Provider: Chrome local AI unavailable in Firefox";
   }
   const modelLabel =
     typeof model === "string" && model.trim().length > 0 ? model.trim() : DEFAULT_OPENAI_MODEL;
@@ -403,7 +413,7 @@ const getBlockPageActions = async (): Promise<{
     // Fall back to the packaged gate if editable JSON in storage is malformed.
   }
   const llmConfigured =
-    provider === "chrome-local" ||
+    (provider === "chrome-local" && isChromeLocalAiSupportedBrowser()) ||
     (provider === "openai" && model.trim().length > 0 && apiKey.trim().length > 0);
 
   const normalizedActionId = normalizeAccessGateActionId(
@@ -485,43 +495,45 @@ const getBlockPageActions = async (): Promise<{
 const buildRule = (
   site: string,
   id: number
-): any => ({
-  id,
-  // Give more specific domains higher priority so subdomains override their base domain.
-  priority: site.split(".").length,
-  action: {
-    type: chrome.declarativeNetRequest.RuleActionType.REDIRECT,
-    // Use transform so we can attach query params identifying the rule+site.
-    redirect: {
-      transform: {
-        scheme: "chrome-extension",
-        host: chrome.runtime.id,
-        path: "/pages/block.html",
-        queryTransform: {
-          addOrReplaceParams: [
-            { key: "rid", value: String(id) },
-            { key: "site", value: site },
-          ],
+): any => {
+  const extensionRedirectBase = getDnrExtensionRedirectTransformBase();
+  return {
+    id,
+    // Give more specific domains higher priority so subdomains override their base domain.
+    priority: site.split(".").length,
+    action: {
+      type: DNR_ACTION_REDIRECT,
+      // Use transform so we can attach query params identifying the rule+site.
+      redirect: {
+        transform: {
+          ...extensionRedirectBase,
+          path: "/pages/block.html",
+          queryTransform: {
+            addOrReplaceParams: [
+              { key: "rid", value: String(id) },
+              { key: "site", value: site },
+            ],
+          },
         },
       },
     },
-  },
-  condition: {
-    // Match at the domain boundary (handles subdomains properly).
-    urlFilter: buildParentDomainUrlFilter(site),
-    resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
-  },
-});
+    condition: {
+      // Match at the domain boundary (handles subdomains properly).
+      urlFilter: buildParentDomainUrlFilter(site),
+      resourceTypes: [DNR_RESOURCE_MAIN_FRAME],
+    },
+  };
+};
 
 const buildUrlAllowRule = (id: number, rawUrl: string): any => ({
   id,
   priority: 10000,
   action: {
-    type: chrome.declarativeNetRequest.RuleActionType.ALLOW,
+    type: DNR_ACTION_ALLOW,
   },
   condition: {
     regexFilter: buildExactUrlRegexFilter(rawUrl),
-    resourceTypes: [chrome.declarativeNetRequest.ResourceType.MAIN_FRAME],
+    resourceTypes: [DNR_RESOURCE_MAIN_FRAME],
   },
 });
 
@@ -1408,6 +1420,14 @@ loadGrayscaleHosts();
 refreshBadgeForActiveTab();
 scheduleBadgeRefreshAlarm();
 
+if (chrome.permissions?.onAdded) {
+  chrome.permissions.onAdded.addListener((permissions: { origins?: string[] }) => {
+    if (permissions.origins?.length) {
+      refreshRulesIfReady();
+    }
+  });
+}
+
 chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => {
   if (area === "sync") {
     if (changes[STORAGE_KEYS.blockedSites]) {
@@ -1601,14 +1621,6 @@ const requestAiStudyQuizAccess = async (
   return applyRequestGateDecision(result);
 };
 
-const requestLocalIntentAccess = async (
-  payload: RequestLocalIntentAccessMessage,
-  sender?: any
-): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
-  const input = await buildRequestGateInput(payload, sender);
-  return applyRequestGateDecision(decideLocalIntentRequest(input));
-};
-
 const requestLlmReviewedAccess = async (
   payload: RequestLocalIntentAccessMessage,
   sender?: any,
@@ -1639,9 +1651,7 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
       if (!tabId) return;
       // If we were on the allowed site, navigate to it again to trigger the block;
       // if we're on the block page already, just reload.
-      const isExtensionUrl =
-        typeof currentUrl === "string" &&
-        currentUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+      const isExtensionUrl = isExtensionPageUrl(currentUrl);
 
       if (currentUrl && !isExtensionUrl) {
         chrome.tabs.update(tabId, { url: currentUrl });
@@ -1685,8 +1695,7 @@ const resetAllRulesAndReload = (tabId?: number, currentUrl?: string) => {
 
       if (!tabId || !currentUrl) return;
 
-      const isExtensionUrl =
-        currentUrl.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+      const isExtensionUrl = isExtensionPageUrl(currentUrl);
 
       // Force a top-level navigation so DNR re-evaluates and blocks.
       if (isExtensionUrl) {
@@ -1723,8 +1732,6 @@ type RecordBlockedAttemptMessage = {
 
 type RequestLocalIntentAccessMessage = {
   type:
-    | "request-local-intent-access"
-    | "request-agentic-access"
     | "request-llm-reviewed-access"
     | "request-if-then-intention-access"
     | "request-built-gate-access"
@@ -1748,10 +1755,6 @@ const CHATGPT_PEEK_MESSAGE_TYPE =
   OPTIONAL_INTEGRATIONS.find((integration) => integration.id === "chatgpt-peek")
     ?.messageType ?? "peek-with-chatgpt";
 
-
-const REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE =
-  BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "local-intent-request-access")
-    ?.messageType ?? "request-local-intent-access";
 
 const REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE =
   BLOCK_PAGE_ACTION_CAPABILITIES.find((capability) => capability.id === "llm-reviewed-request-access")
@@ -2506,7 +2509,10 @@ const handleRequestAccessMessage = async (
       ? "github-contribution"
       : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
       ? "ai-study-quiz"
-      : "local-intent";
+      : null;
+  if (!source) {
+    throw new Error("Unsupported request access gate");
+  }
   const requestedSite =
     sanitizeSite(message.currentSite) || sanitizeSite(parseSiteFromSender(sender));
   const requestedUrl = ensureHttpUrl(message.currentUrl) || ensureHttpUrl(message.url);
@@ -2538,7 +2544,7 @@ const handleRequestAccessMessage = async (
         ? requestGithubContributionAccess(message, sender)
         : message.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
         ? requestAiStudyQuizAccess(message, sender)
-        : requestLocalIntentAccess(message, sender)
+        : Promise.reject(new Error("Unsupported request access gate"))
     );
 
   const { decision, ...allowResult } = requestResult;
@@ -2635,6 +2641,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
       });
     return true;
   }
+  if (message?.type === "host-permissions-updated") {
+    const refreshed = refreshRulesIfReady();
+    sendResponse({ ok: refreshed });
+    return undefined;
+  }
   if (message?.type === "get-local-stats") {
     flushActiveTemporaryAllowUsage()
       .then(() => getDailyStats())
@@ -2725,13 +2736,11 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
   }
 
   if (
-    message?.type === REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE ||
     message?.type === REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE ||
-    message?.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE ||
-    message?.type === "request-agentic-access"
+    message?.type === REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
   ) {
     handleRequestAccessMessage(message as RequestLocalIntentAccessMessage, sender)
       .then((response) => sendResponse(response))
@@ -2770,12 +2779,10 @@ if (chrome.runtime.onConnect) {
     port.onMessage?.addListener((message: any) => {
       if (
         message?.type !== REQUEST_LLM_REVIEWED_ACCESS_MESSAGE_TYPE &&
-        message?.type !== REQUEST_LOCAL_INTENT_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_IF_THEN_INTENTION_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_BUILT_GATE_ACCESS_MESSAGE_TYPE &&
         message?.type !== REQUEST_GITHUB_CONTRIBUTION_ACCESS_MESSAGE_TYPE &&
-        message?.type !== REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE &&
-        message?.type !== "request-agentic-access"
+        message?.type !== REQUEST_AI_STUDY_QUIZ_ACCESS_MESSAGE_TYPE
       ) {
         postMessage({ type: "result", response: { ok: false, error: "Unsupported request type" } });
         return;

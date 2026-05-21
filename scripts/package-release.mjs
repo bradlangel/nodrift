@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,11 +11,89 @@ const repoRoot = path.resolve(scriptDir, "..");
 const releaseDir = path.join(repoRoot, "release");
 const manifestFile = "manifest.json";
 const distDir = "dist";
+const releaseTargets = new Set(["chrome", "firefox"]);
 
 function fail(message) {
   console.error(`release:zip failed: ${message}`);
   process.exit(1);
 }
+
+function readReleaseTarget(args) {
+  let target = "chrome";
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--target") {
+      i += 1;
+      target = args[i];
+    } else if (arg.startsWith("--target=")) {
+      target = arg.slice("--target=".length);
+    } else if (releaseTargets.has(arg)) {
+      target = arg;
+    } else {
+      fail(`unknown argument: ${arg}`);
+    }
+
+    if (!releaseTargets.has(target)) {
+      fail(`unsupported release target "${target}"; expected chrome or firefox`);
+    }
+  }
+
+  return target;
+}
+
+function buildFirefoxManifest(baseManifest) {
+  const manifest = JSON.parse(JSON.stringify(baseManifest));
+  const serviceWorker = manifest.background?.service_worker;
+
+  if (typeof serviceWorker !== "string" || serviceWorker.trim() === "") {
+    fail("Firefox manifest generation requires background.service_worker in manifest.json");
+  }
+
+  manifest.background = {
+    scripts: [serviceWorker],
+    type: manifest.background?.type || "module",
+  };
+
+  if (manifest.incognito === "split") {
+    manifest.incognito = "spanning";
+  }
+
+  const hostPermissions = Array.isArray(manifest.host_permissions)
+    ? manifest.host_permissions
+    : [];
+  const optionalHostPermissions = Array.isArray(manifest.optional_host_permissions)
+    ? manifest.optional_host_permissions
+    : [];
+  manifest.optional_host_permissions = [
+    ...new Set([...optionalHostPermissions, ...hostPermissions]),
+  ];
+
+  const existingBrowserSettings = manifest.browser_specific_settings ?? {};
+  const existingGeckoSettings = existingBrowserSettings.gecko ?? {};
+  manifest.browser_specific_settings = {
+    ...existingBrowserSettings,
+    gecko: {
+      ...existingGeckoSettings,
+      id:
+        process.env.FIREFOX_EXTENSION_ID ||
+        existingGeckoSettings.id ||
+        "nodrift@bradlangel.github.io",
+      strict_min_version: existingGeckoSettings.strict_min_version || "113.0",
+    },
+  };
+
+  return manifest;
+}
+
+function buildManifestForTarget(baseManifest, target) {
+  if (target === "firefox") {
+    return buildFirefoxManifest(baseManifest);
+  }
+  return JSON.parse(JSON.stringify(baseManifest));
+}
+
+export { buildFirefoxManifest, buildManifestForTarget };
 
 function toPlatformPath(relativePath) {
   return path.join(...relativePath.split("/"));
@@ -72,6 +150,9 @@ function collectManifestReferencedFiles(manifest) {
   const paths = new Set();
 
   addPath(paths, manifest.background?.service_worker, "background.service_worker");
+  for (const [index, scriptFile] of (manifest.background?.scripts ?? []).entries()) {
+    addPath(paths, scriptFile, `background.scripts[${index}]`);
+  }
   addPath(paths, manifest.action?.default_popup, "action.default_popup");
   addPathMap(paths, manifest.action?.default_icon, "action.default_icon");
   addPath(paths, manifest.options_page, "options_page");
@@ -163,7 +244,9 @@ function runZip(stagingDir, zipPath, topLevelEntries) {
 }
 
 async function main() {
-  const manifest = JSON.parse(await readFile(path.join(repoRoot, manifestFile), "utf8"));
+  const target = readReleaseTarget(process.argv.slice(2));
+  const baseManifest = JSON.parse(await readFile(path.join(repoRoot, manifestFile), "utf8"));
+  const manifest = buildManifestForTarget(baseManifest, target);
   const releaseVersion = manifest.version_name || manifest.version;
 
   if (typeof releaseVersion !== "string" || releaseVersion.trim() === "") {
@@ -198,14 +281,19 @@ async function main() {
 
   await mkdir(releaseDir, { recursive: true });
 
-  const zipFileName = `nodrift-chrome-${releaseVersion}.zip`;
+  const zipFileName = `nodrift-${target}-${releaseVersion}.zip`;
   const zipPath = path.join(releaseDir, zipFileName);
   await rm(zipPath, { force: true });
 
   const stagingDir = await mkdtemp(path.join(tmpdir(), "nodrift-release-"));
 
   try {
-    for (const relativePath of [manifestFile, ...rootRuntimeFiles, ...extraManifestFiles]) {
+    await writeFile(
+      path.join(stagingDir, manifestFile),
+      `${JSON.stringify(manifest, null, 2)}\n`
+    );
+
+    for (const relativePath of [...rootRuntimeFiles, ...extraManifestFiles]) {
       await copyRelativeFile(relativePath, stagingDir);
     }
     await cp(distPath, path.join(stagingDir, distDir), { recursive: true });
@@ -219,6 +307,8 @@ async function main() {
   console.log(`Created ${path.relative(repoRoot, zipPath)}`);
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
+  });
+}

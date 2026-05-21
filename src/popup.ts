@@ -16,14 +16,25 @@ type ActiveGrantDetails = {
 
 let activeTab: ActiveTab | null = null;
 
+const REQUIRED_HOST_ORIGINS = ["<all_urls>"];
+
 const siteEl = document.getElementById("current-site") as HTMLElement;
 const statusEl = document.getElementById("status") as HTMLElement;
 const activeGrantEl = document.getElementById("active-grant");
 const allowBtn = document.getElementById("temporarily-allow") as HTMLButtonElement;
 const reblockBtn = document.getElementById("reblock-now") as HTMLButtonElement;
+const hostPermissionEl = document.getElementById("host-permission");
+const enableHostPermissionBtn = document.getElementById(
+  "enable-host-permission"
+) as HTMLButtonElement | null;
 
 const setStatus = (message: string): void => {
   statusEl.textContent = message;
+};
+
+const setHostPermissionVisible = (visible: boolean): void => {
+  if (!hostPermissionEl) return;
+  hostPermissionEl.className = visible ? "permission visible" : "permission";
 };
 
 const getHostLabel = (url?: string | null): string => {
@@ -87,6 +98,54 @@ const renderActiveGrant = (details: ActiveGrantDetails): void => {
   activeGrantEl.className = "grant visible";
 };
 
+const checkHostPermissions = (): void => {
+  if (!chrome.permissions?.contains) {
+    setHostPermissionVisible(false);
+    return;
+  }
+
+  chrome.permissions.contains(
+    { origins: REQUIRED_HOST_ORIGINS },
+    (granted: boolean) => {
+      if (chrome.runtime.lastError) {
+        return;
+      }
+      setHostPermissionVisible(!granted);
+    }
+  );
+};
+
+const requestHostPermissions = (): void => {
+  if (!chrome.permissions?.request || !enableHostPermissionBtn) {
+    setStatus("Open Firefox add-on permissions and allow site access.");
+    return;
+  }
+
+  enableHostPermissionBtn.disabled = true;
+  setStatus("Requesting site access...");
+
+  chrome.permissions.request(
+    { origins: REQUIRED_HOST_ORIGINS },
+    (granted: boolean) => {
+      enableHostPermissionBtn.disabled = false;
+
+      if (chrome.runtime.lastError) {
+        setStatus(chrome.runtime.lastError.message || "Permission request failed.");
+        return;
+      }
+
+      if (!granted) {
+        setStatus("Blocking remains disabled until site access is allowed.");
+        return;
+      }
+
+      setHostPermissionVisible(false);
+      setStatus("Blocking enabled. Reload any already-open blocked tab.");
+      chrome.runtime.sendMessage({ type: "host-permissions-updated" });
+    }
+  );
+};
+
 const sendTabMessage = (type: string): void => {
   if (!activeTab?.url) {
     setStatus("No active site found.");
@@ -137,5 +196,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs: ActiveTab[]) => 
   );
 });
 
+checkHostPermissions();
+enableHostPermissionBtn?.addEventListener("click", requestHostPermissions);
 allowBtn.addEventListener("click", () => sendTabMessage("temporarily-allow-tab"));
 reblockBtn.addEventListener("click", () => sendTabMessage("reblock-all-now"));
