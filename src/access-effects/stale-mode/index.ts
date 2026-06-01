@@ -2,18 +2,45 @@ import { STALE_MODE_ACCESS_EFFECT_ID } from "../../defaults.js";
 import type { AccessEffectModule } from "../types.js";
 
 const MEDIA_SELECTOR = "img, picture, video, canvas, iframe";
-const TEXT_SELECTOR = [
+const READABLE_TEXT_SELECTOR = [
   "article :is(p, span, li, blockquote, h1, h2, h3)",
   "[role='article'] :is(p, span, li, blockquote, h1, h2, h3)",
-  "main :is(p, li, blockquote, h1, h2, h3)",
+  "main :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)",
+  "[role='main'] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)",
   ".md :is(p, li, blockquote)",
   "[slot='title']",
   "[slot='text-body']",
   "[slot='comment']",
+].join(", ");
+const FEED_TEXT_SELECTOR = [
+  "[role='feed'] :is(p, span, a, li, blockquote, h1, h2, h3)",
   "[data-testid*='post'] :is(p, span, a, h1, h2, h3)",
   "[data-testid*='comment'] :is(p, span, div)",
+  "[class*='post' i] :is(p, span, a, h1, h2, h3)",
+  "[class*='comment' i] :is(p, span, div)",
+  "[class*='feed' i] :is(p, span, a, h1, h2, h3)",
 ].join(", ");
+const TEXT_SELECTOR = [READABLE_TEXT_SELECTOR, FEED_TEXT_SELECTOR].join(", ");
 const CUSTOM_FEED_CONTAINER_SELECTOR = "shreddit-post, shreddit-comment";
+const INTERACTIVE_RESET_SELECTOR = [
+  "button",
+  "[role='button']",
+  "input",
+  "textarea",
+  "select",
+  "option",
+  "[contenteditable='true']",
+  "nav",
+  "[role='navigation']",
+].join(", ");
+
+const buildInteractiveResetCss = (): string => `
+  ${INTERACTIVE_RESET_SELECTOR},
+  ${INTERACTIVE_RESET_SELECTOR} * {
+    filter: none !important;
+    opacity: 1 !important;
+  }
+`;
 
 const buildMediaCss = (progress: number): string => {
   if (progress >= 0.9) {
@@ -77,6 +104,8 @@ const buildTextCss = (progress: number): string => {
         opacity: 0.62 !important;
         transition: filter 180ms ease, opacity 180ms ease !important;
       }
+
+      ${buildInteractiveResetCss()}
     `;
   }
 
@@ -93,6 +122,8 @@ const buildTextCss = (progress: number): string => {
         opacity: 0.78 !important;
         transition: filter 180ms ease, opacity 180ms ease !important;
       }
+
+      ${buildInteractiveResetCss()}
     `;
   }
 
@@ -149,7 +180,7 @@ export const staleModeAccessEffect: AccessEffectModule = {
     {
       atPercent: 75,
       label: "Hard stale",
-      description: "Media becomes strongly blurred; post text gets lower contrast.",
+      description: "Media becomes strongly blurred; feed and article text get lower contrast.",
     },
     {
       atPercent: 90,
