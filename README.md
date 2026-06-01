@@ -187,7 +187,9 @@ removed, and overlapping domain entries are called out before saving.
 Temporary allow grants wall-clock access for the configured duration. Stats
 separately track active usage time, which means a 1 minute grant can expire
 after 1 real minute even if only part of that minute was spent on the site. The
-grayscale setting applies a temporary CSS filter while access is active.
+Access Effects setting controls what temporarily allowed sites feel like while
+access is active. Built-in effects include grayscale and Stale Mode, which
+progressively softens media based on the percentage of the granted window used.
 
 The Gate Library chooses the primary access gate shown on the block page. The
 maintained overview of compiled-in gates lives in the
@@ -218,12 +220,12 @@ The extension requests MV3 permissions for the blocker loop:
 - `contextMenus`: add extension action-menu shortcuts for temporary allow and
   re-block.
 - `alarms`: restore blocking rules when temporary access expires and refresh the
-  active grant badge.
-- `scripting`: apply or remove grayscale CSS and support the optional ChatGPT
-  peek prompt insertion.
+  active grant badge and access effects.
+- `scripting`: apply or remove Access Effect CSS and support the optional
+  ChatGPT peek prompt insertion.
 - `clipboardWrite`: copy the ChatGPT peek prompt as a fallback if insertion is
   unavailable.
-- `<all_urls>` host access: allow blocking, grayscale, navigation, and
+- `<all_urls>` host access: allow blocking, access effects, navigation, and
   optional peek snapshot flows to work across configured sites.
 
 ## Privacy And Local Data

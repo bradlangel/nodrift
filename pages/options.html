@@ -191,10 +191,73 @@
       gap: 10px;
     }
 
+    .effect-list,
     .gate-list,
     .llm-panel {
       display: grid;
       gap: 12px;
+    }
+
+    .effect-card {
+      align-items: flex-start;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .effect-card input {
+      flex: 0 0 auto;
+      margin-top: 4px;
+    }
+
+    .effect-title {
+      display: block;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .effect-body {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .effect-timeline {
+      border-top: 1px solid var(--border-soft);
+      display: grid;
+      gap: 8px;
+      list-style: none;
+      margin: 7px 0 0;
+      padding: 9px 0 0;
+    }
+
+    .effect-timeline li {
+      display: grid;
+      gap: 7px;
+      grid-template-columns: 82px minmax(0, 1fr);
+    }
+
+    .effect-step-when {
+      color: var(--accent);
+      display: grid;
+      font-size: 0.8rem;
+      font-weight: 850;
+      line-height: 1.25;
+    }
+
+    .effect-step-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .effect-step-label {
+      font-size: 0.9rem;
+      font-weight: 850;
+      line-height: 1.25;
     }
 
     .gate-card {
@@ -457,10 +520,11 @@
             <input type="number" id="temp-allow-minutes" value="1" min="1" />
             <p class="hint">Access expires after this much real time. Stats separately track active time spent on temporarily allowed sites.</p>
           </div>
-          <label class="checkbox-row">
-            <input type="checkbox" id="grayscale-temp-allow" checked />
-            <span>Grayscale during temporary allow</span>
-          </label>
+          <div class="field">
+            <span class="label">Access effects</span>
+            <p class="hint">Choose what temporarily allowed sites feel like after any gate approves access.</p>
+            <div id="access-effect-list" class="effect-list"></div>
+          </div>
         </div>
       </section>
 

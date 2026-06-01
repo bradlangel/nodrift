@@ -52,6 +52,9 @@ background worker owns browser orchestration, side effects, and persistence.
 - `src/block.ts` remains the background orchestrator for browser APIs.
 - Shared access contracts live in `src/core/access-contracts.ts`.
 - Compiled-in gate discovery lives in `src/gates/registry.ts`.
+- Compiled-in temporary access effects live in `src/access-effects/registry.ts`.
+  Effects run after a gate successfully grants access and shape the allowed
+  session with CSS or other browser-side friction.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
   `src/gates/temporary-allow/`.
 - LLM-reviewed request decisions, policy, and provider adapters live in
