@@ -145,7 +145,7 @@ const buildOverlayCss = (progress: number): string | null => {
 
 export const staleModeAccessEffect: AccessEffectModule = {
   id: STALE_MODE_ACCESS_EFFECT_ID,
-  label: "Stale Mode",
+  label: "Slow Fade",
   description:
     "Progressively softens media, adds page haze, and tilts text as the granted window is used.",
   enabledByDefault: false,
@@ -158,17 +158,17 @@ export const staleModeAccessEffect: AccessEffectModule = {
     },
     {
       atPercent: 25,
-      label: "Mild stale",
+      label: "Light fade",
       description: "Images, videos, canvas, and embedded frames become less colorful and slightly dimmer.",
     },
     {
       atPercent: 50,
-      label: "Blocky stale",
+      label: "Soft fade",
       description: "Media becomes grayer and lightly blurred; readable text starts to fade.",
     },
     {
       atPercent: 75,
-      label: "Hard stale",
+      label: "Heavy fade",
       description: "A page haze appears and readable text starts to tilt.",
     },
     {

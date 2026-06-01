@@ -35,7 +35,7 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       page is grayscale while access is active.
 - [ ] Toggle Grayscale off, temporarily allow again, and confirm grayscale is
       not applied.
-- [ ] Toggle Stale Mode on, temporarily allow a blocked site, and confirm media
+- [ ] Toggle Slow Fade on, temporarily allow a blocked site, and confirm media
       becomes muted, late haze appears, and readable text gets harder to scan
       as the granted window progresses.
 

@@ -188,7 +188,7 @@ Temporary allow grants wall-clock access for the configured duration. Stats
 separately track active usage time, which means a 1 minute grant can expire
 after 1 real minute even if only part of that minute was spent on the site. The
 Access Effects setting controls what temporarily allowed sites feel like while
-access is active. Built-in effects include grayscale and Stale Mode, which
+access is active. Built-in effects include grayscale and Slow Fade, which
 progressively softens media, adds a late page haze, and makes readable text a
 little harder to scan as the granted window is used.
 

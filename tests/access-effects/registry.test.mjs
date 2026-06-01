@@ -70,7 +70,7 @@ test("effect css composes selected modules", () => {
   assert.match(css, /skewX\(0\.55deg\)/);
 });
 
-test("effect overlay css appears in late stale mode", () => {
+test("effect overlay css appears late in slow fade", () => {
   const earlyOverlayCss = buildAccessEffectOverlayCss([STALE_MODE_ACCESS_EFFECT_ID], {
     session,
     now: 31_000,
