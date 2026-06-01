@@ -31,10 +31,13 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       access usage time.
 - [ ] Wait for the configured wall-clock duration to expire, then reload the
       site and confirm it blocks again.
-- [ ] Toggle grayscale on, temporarily allow a blocked site, and confirm the
+- [ ] Toggle Grayscale on, temporarily allow a blocked site, and confirm the
       page is grayscale while access is active.
-- [ ] Toggle grayscale off, temporarily allow again, and confirm grayscale is
+- [ ] Toggle Grayscale off, temporarily allow again, and confirm grayscale is
       not applied.
+- [ ] Toggle Slow Fade on, temporarily allow a blocked site, and confirm media
+      becomes muted, late haze appears, and readable text gets harder to scan
+      as the granted window progresses.
 
 ## Settings
 
@@ -42,7 +45,7 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       or saving.
 - [ ] Confirm duplicate blocked-site entries are removed.
 - [ ] Confirm overlapping domains produce the settings warning text.
-- [ ] Save changes to temporary allow minutes, grayscale, block-page
+- [ ] Save changes to temporary allow minutes, access effects, block-page
       alternatives, and secondary action toggles, then reload Settings and
       confirm values persist.
 - [ ] Add a block-page alternative with a link using

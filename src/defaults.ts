@@ -18,6 +18,10 @@ export const DEFAULT_BLOCK_PAGE_ALTERNATIVES: string[] = [
 export const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 export const DEFAULT_TEMP_ALLOW_MINUTES = 1;
 
+export const GRAYSCALE_ACCESS_EFFECT_ID = "grayscale";
+export const STALE_MODE_ACCESS_EFFECT_ID = "stale-mode";
+export const DEFAULT_ACCESS_EFFECT_IDS = [GRAYSCALE_ACCESS_EFFECT_ID];
+
 export const DEFAULT_ACCESS_GATE_ACTION_ID = "temporary-allow-domain";
 export const LLM_REVIEWED_ACCESS_GATE_ACTION_ID = "llm-reviewed-request-access";
 export const BUILT_GATE_ACCESS_GATE_ACTION_ID = "built-gate-request-access";

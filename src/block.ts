@@ -1,5 +1,6 @@
 import { ALARM_NAMES, STORAGE_KEYS } from "./storage-constants.js";
 import {
+  DEFAULT_ACCESS_EFFECT_IDS,
   DEFAULT_ACCESS_GATE_ACTION_ID,
   BUILT_GATE_ACCESS_GATE_ACTION_ID,
   DEFAULT_BUILT_GATE_SPEC_JSON,
@@ -14,6 +15,13 @@ import {
   LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
+import {
+  buildAccessEffectCss,
+  buildAccessEffectOverlayCss,
+  getAccessEffectMilestones,
+  normalizeAccessEffectIds,
+} from "./access-effects/registry.js";
+import type { AccessEffectSession } from "./access-effects/types.js";
 import {
   AccessGateDecision,
   AccessReviewProgressStage,
@@ -99,12 +107,14 @@ let blockedSitesLoaded = false;
 let temporaryAllowStateLoaded = false;
 let dailyStatsUpdateQueue: Promise<unknown> = Promise.resolve();
 
-let grayscaleOnTemporaryAllow = DEFAULT_GRAYSCALE_ON_TEMP_ALLOW;
+let selectedAccessEffectIds = [...DEFAULT_ACCESS_EFFECT_IDS];
 
-const GRAYSCALE_CSS = "html { filter: grayscale(1) !important; }";
+const ACCESS_EFFECT_STYLE_ID = "nodrift-access-effects-style";
+const ACCESS_EFFECT_OVERLAY_ID = "nodrift-access-effects-overlay";
 type TemporaryAllowWindow = {
   expiresAt: number;
   startedAt: number;
+  source?: string | null;
 };
 const grayscaleHosts = new Map<string, TemporaryAllowWindow>();
 type TemporaryUrlAllowWindow = TemporaryAllowWindow & {
@@ -257,14 +267,14 @@ if (chrome.webNavigation?.onCommitted) {
   chrome.webNavigation.onCommitted.addListener((details: any) => {
     if (details?.frameId !== 0) return;
     recordLastNavigatedUrl(details.tabId, details.url);
-    maybeApplyGrayscaleForUrl(details.tabId, details.url);
+    syncAccessEffectsForUrl(details.tabId, details.url);
   });
 }
 
 if (chrome.webNavigation?.onCompleted) {
   chrome.webNavigation.onCompleted.addListener((details: any) => {
     if (details?.frameId !== 0) return;
-    maybeApplyGrayscaleForUrl(details.tabId, details.url);
+    syncAccessEffectsForUrl(details.tabId, details.url);
   });
 }
 
@@ -626,6 +636,7 @@ const persistGrayscaleHosts = () => {
     host,
     window.expiresAt,
     window.startedAt,
+    window.source ?? null,
   ]);
   grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: entries });
 };
@@ -645,8 +656,8 @@ const normalizeTemporaryAllowUrl = (rawUrl?: string | null): string | null => {
 const normalizeTemporaryUrlAllowEntry = (
   entry: unknown
 ): TemporaryUrlAllowWindow | null => {
-  if (!Array.isArray(entry) || entry.length !== 5) return null;
-  const [rawId, rawUrl, rawHost, rawExpiresAt, rawStartedAt] = entry;
+  if (!Array.isArray(entry) || (entry.length !== 5 && entry.length !== 6)) return null;
+  const [rawId, rawUrl, rawHost, rawExpiresAt, rawStartedAt, rawSource] = entry;
   if (typeof rawId !== "number" || !Number.isInteger(rawId)) return null;
   const url = normalizeTemporaryAllowUrl(typeof rawUrl === "string" ? rawUrl : null);
   const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
@@ -654,7 +665,14 @@ const normalizeTemporaryUrlAllowEntry = (
   if (typeof rawExpiresAt !== "number" || !Number.isFinite(rawExpiresAt)) return null;
   if (typeof rawStartedAt !== "number" || !Number.isFinite(rawStartedAt)) return null;
   if (rawId < TEMP_URL_ALLOW_RULE_ID_BASE) return null;
-  return { id: rawId, url, host, expiresAt: rawExpiresAt, startedAt: rawStartedAt };
+  return {
+    id: rawId,
+    url,
+    host,
+    expiresAt: rawExpiresAt,
+    startedAt: rawStartedAt,
+    source: typeof rawSource === "string" ? rawSource : null,
+  };
 };
 
 const persistTemporarilyAllowedUrls = () => {
@@ -664,6 +682,7 @@ const persistTemporarilyAllowedUrls = () => {
     allow.host,
     allow.expiresAt,
     allow.startedAt,
+    allow.source ?? null,
   ]);
   grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedUrls]: entries });
 };
@@ -1094,62 +1113,209 @@ const getActiveTemporaryAllowDetails = async (rawUrl?: string | null) => {
   };
 };
 
-const syncGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
+const getAccessEffectSessionForUrl = (
+  rawUrl?: string | null
+): AccessEffectSession | null => {
   const host = parseHostnameFromUrl(rawUrl);
-  if (!host) return;
+  if (!host) return null;
 
-  const shouldApply =
-    isHostTemporarilyAllowed(host) || isUrlTemporarilyAllowed(rawUrl);
+  const hostMatch = getTemporaryAllowMatchForHost(host);
+  if (hostMatch) {
+    return {
+      source: hostMatch.window.source ?? null,
+      scope: "domain",
+      host: hostMatch.host,
+      url: null,
+      startedAt: hostMatch.window.startedAt,
+      expiresAt: hostMatch.window.expiresAt,
+    };
+  }
 
-  if (!chrome.scripting) return;
-  const target = { tabId, allFrames: true };
+  const urlMatch = getTemporaryAllowMatchForUrl(rawUrl);
+  if (!urlMatch) return null;
+  return {
+    source: urlMatch.source ?? null,
+    scope: "url",
+    host: urlMatch.host,
+    url: urlMatch.url,
+    startedAt: urlMatch.startedAt,
+    expiresAt: urlMatch.expiresAt,
+  };
+};
 
-  if (shouldApply && chrome.scripting.insertCSS) {
-    chrome.scripting.insertCSS(
-      { target, css: GRAYSCALE_CSS },
-      withLastErrorLog("insertCSS(grayscale)")
-    );
+const getAccessEffectProgress = (
+  session: AccessEffectSession,
+  now = Date.now()
+): number => {
+  const duration = session.expiresAt - session.startedAt;
+  if (!Number.isFinite(duration) || duration <= 0) return 1;
+  return Math.min(Math.max((now - session.startedAt) / duration, 0), 1);
+};
+
+const setAccessEffectStyleForTab = (
+  tabId: number,
+  css: string,
+  overlayCss: string
+) => {
+  if (!chrome.scripting?.executeScript) return;
+  chrome.scripting.executeScript(
+    {
+      target: { tabId, allFrames: true },
+      args: [ACCESS_EFFECT_STYLE_ID, ACCESS_EFFECT_OVERLAY_ID, css, overlayCss],
+      func: (
+        styleId: string,
+        overlayId: string,
+        cssText: string,
+        overlayCssText: string
+      ) => {
+        const existing = document.getElementById(styleId);
+        if (!cssText.trim()) {
+          existing?.remove();
+        } else {
+          const style =
+            existing instanceof HTMLStyleElement
+              ? existing
+              : document.createElement("style");
+          style.id = styleId;
+          style.textContent = cssText;
+          if (!style.parentElement) {
+            (document.head || document.documentElement).appendChild(style);
+          }
+        }
+
+        const existingOverlay = document.getElementById(overlayId);
+        if (!overlayCssText.trim()) {
+          existingOverlay?.remove();
+          return;
+        }
+
+        const overlay = existingOverlay ?? document.createElement("div");
+        overlay.id = overlayId;
+        overlay.setAttribute("aria-hidden", "true");
+        overlay.style.cssText = overlayCssText;
+        if (!overlay.parentElement) {
+          (document.body || document.documentElement).appendChild(overlay);
+        }
+      },
+    },
+    withLastErrorLog("executeScript(access effects)")
+  );
+};
+
+const syncAccessEffectsForUrl = (tabId: number, rawUrl?: string | null) => {
+  const session = getAccessEffectSessionForUrl(rawUrl);
+  if (!session || selectedAccessEffectIds.length === 0) {
+    setAccessEffectStyleForTab(tabId, "", "");
     return;
   }
 
-  if (!shouldApply && chrome.scripting.removeCSS) {
-    chrome.scripting.removeCSS(
-      { target, css: GRAYSCALE_CSS },
-      withLastErrorLog("removeCSS(grayscale)")
-    );
-  }
+  const now = Date.now();
+  const context = {
+    session,
+    now,
+    progress: getAccessEffectProgress(session, now),
+  };
+  const css = buildAccessEffectCss(selectedAccessEffectIds, context);
+  const overlayCss = buildAccessEffectOverlayCss(selectedAccessEffectIds, context);
+  setAccessEffectStyleForTab(tabId, css, overlayCss);
 };
 
-const syncGrayscaleForHostTabs = (host: string) => {
+const syncAccessEffectsForHostTabs = (host: string) => {
   if (!chrome.tabs?.query) return;
   chrome.tabs.query({ url: [`*://${host}/*`, `*://*.${host}/*`] }, (tabs: ChromeTab[]) => {
     if (chrome.runtime.lastError) {
-      console.warn("[tabs.query(sync grayscale)]", chrome.runtime.lastError.message);
+      console.warn("[tabs.query(sync access effects)]", chrome.runtime.lastError.message);
       return;
     }
     tabs.forEach((tab: ChromeTab) => {
       if (typeof tab.id === "number") {
-        syncGrayscaleForUrl(tab.id, tab.url);
+        syncAccessEffectsForUrl(tab.id, tab.url);
       }
     });
   });
 };
 
-const syncGrayscaleForTemporaryUrlTabs = () => {
-  const hosts = new Set<string>();
-  temporarilyAllowedUrls.forEach((allow) => hosts.add(allow.host));
-  hosts.forEach((host) => syncGrayscaleForHostTabs(host));
-};
-
-const removeGrayscaleFromAllTabs = () => {
-  if (!chrome.tabs?.query || !chrome.scripting?.removeCSS) return;
+const removeAccessEffectsFromAllTabs = () => {
+  if (!chrome.tabs?.query) return;
   chrome.tabs.query({}, (tabs: ChromeTab[]) => {
     tabs.forEach((tab: ChromeTab) => {
       if (typeof tab.id !== "number") return;
-      chrome.scripting?.removeCSS?.(
-        { target: { tabId: tab.id, allFrames: true }, css: GRAYSCALE_CSS },
-        withLastErrorLog("removeCSS(grayscale all tabs)")
-      );
+      setAccessEffectStyleForTab(tab.id, "", "");
+    });
+  });
+};
+
+const getActiveAccessEffectSessions = (): AccessEffectSession[] => {
+  const now = Date.now();
+  const sessions: AccessEffectSession[] = [];
+  grayscaleHosts.forEach((window, host) => {
+    if (window.expiresAt <= now) return;
+    sessions.push({
+      source: window.source ?? null,
+      scope: "domain",
+      host,
+      url: null,
+      startedAt: window.startedAt,
+      expiresAt: window.expiresAt,
+    });
+  });
+  temporarilyAllowedUrls.forEach((allow) => {
+    if (allow.expiresAt <= now) return;
+    sessions.push({
+      source: allow.source ?? null,
+      scope: "url",
+      host: allow.host,
+      url: allow.url,
+      startedAt: allow.startedAt,
+      expiresAt: allow.expiresAt,
+    });
+  });
+  return sessions;
+};
+
+const syncActiveAccessEffectTabs = () => {
+  if (selectedAccessEffectIds.length === 0) {
+    removeAccessEffectsFromAllTabs();
+    return;
+  }
+
+  const hosts = new Set<string>();
+  getActiveAccessEffectSessions().forEach((session) => hosts.add(session.host));
+  if (hosts.size === 0) {
+    removeAccessEffectsFromAllTabs();
+    return;
+  }
+  hosts.forEach((host) => syncAccessEffectsForHostTabs(host));
+};
+
+const getNextAccessEffectRefreshAt = (): number | null => {
+  if (selectedAccessEffectIds.length === 0) return null;
+  const milestones = getAccessEffectMilestones(selectedAccessEffectIds).filter(
+    (milestone) => milestone > 0 && milestone < 100
+  );
+  if (milestones.length === 0) return null;
+
+  const now = Date.now();
+  let nextAt: number | null = null;
+  for (const session of getActiveAccessEffectSessions()) {
+    const duration = session.expiresAt - session.startedAt;
+    if (!Number.isFinite(duration) || duration <= 0) continue;
+    for (const milestone of milestones) {
+      const thresholdAt = session.startedAt + duration * (milestone / 100);
+      if (thresholdAt <= now + 500) continue;
+      if (nextAt === null || thresholdAt < nextAt) nextAt = thresholdAt;
+    }
+  }
+  return nextAt;
+};
+
+const scheduleAccessEffectsRefreshAlarm = () => {
+  if (!chrome.alarms?.clear || !chrome.alarms?.create) return;
+  chrome.alarms.clear(ALARM_NAMES.accessEffectsRefresh, () => {
+    const nextAt = getNextAccessEffectRefreshAt();
+    if (nextAt === null) return;
+    chrome.alarms.create(ALARM_NAMES.accessEffectsRefresh, {
+      when: Math.max(nextAt, Date.now() + 1000),
     });
   });
 };
@@ -1164,7 +1330,7 @@ const pruneExpiredGrayscaleHosts = () => {
         host,
         Number.isFinite(window.expiresAt) ? window.expiresAt : now
       );
-      syncGrayscaleForHostTabs(host);
+      syncAccessEffectsForHostTabs(host);
       changed = true;
     }
   }
@@ -1172,6 +1338,7 @@ const pruneExpiredGrayscaleHosts = () => {
     persistGrayscaleHosts();
     refreshBadgeForActiveTab();
     refreshRulesIfReady();
+    scheduleAccessEffectsRefreshAlarm();
   }
 };
 
@@ -1196,14 +1363,19 @@ const pruneExpiredTemporarilyAllowedUrls = () => {
   }
   if (changed) {
     persistTemporarilyAllowedUrls();
-    hostsToSync.forEach((host) => syncGrayscaleForHostTabs(host));
+    hostsToSync.forEach((host) => syncAccessEffectsForHostTabs(host));
     refreshBadgeForActiveTab();
     refreshActiveTemporaryAllowUsage();
+    scheduleAccessEffectsRefreshAlarm();
   }
   return changed;
 };
 
-const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
+const scheduleGrayscaleForHosts = (
+  hosts: string[],
+  minutes: number,
+  source: string | null = null
+) => {
   if (hosts.length === 0) return;
   pruneExpiredGrayscaleHosts();
   const normalizedMinutes = Number.isFinite(minutes) ? Math.max(minutes, 1) : 1;
@@ -1216,23 +1388,23 @@ const scheduleGrayscaleForHosts = (hosts: string[], minutes: number) => {
     if (!host) continue;
     const existing = grayscaleHosts.get(host);
     if (!existing || existing.expiresAt < expiresAt) {
-      grayscaleHosts.set(host, { expiresAt, startedAt });
+      grayscaleHosts.set(host, { expiresAt, startedAt, source });
       changed = true;
     }
-    if (grayscaleOnTemporaryAllow) {
-      syncGrayscaleForHostTabs(host);
-    }
+    syncAccessEffectsForHostTabs(host);
   }
   if (changed) {
     persistGrayscaleHosts();
     refreshBadgeForActiveTab();
+    scheduleAccessEffectsRefreshAlarm();
   }
 };
 
 const scheduleTemporaryUrlAllow = (
   rawUrl: string,
   host: string,
-  minutes: number
+  minutes: number,
+  source: string | null = null
 ): boolean => {
   const url = normalizeTemporaryAllowUrl(rawUrl);
   if (!url) return false;
@@ -1252,15 +1424,15 @@ const scheduleTemporaryUrlAllow = (
     host,
     startedAt: previous ? previous.startedAt : startedAt,
     expiresAt,
+    source,
   });
   persistTemporarilyAllowedUrls();
   refreshRulesIfReady();
   refreshBadgeForActiveTab();
   scheduleBadgeRefreshAlarm();
   chrome.alarms.create(`restore-url-${id}`, { delayInMinutes: normalizedMinutes });
-  if (grayscaleOnTemporaryAllow) {
-    syncGrayscaleForHostTabs(host);
-  }
+  syncAccessEffectsForHostTabs(host);
+  scheduleAccessEffectsRefreshAlarm();
   return true;
 };
 
@@ -1273,9 +1445,10 @@ const clearGrayscaleHosts = () => {
   } else {
     grayscaleStorageSet({ [STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]: [] });
   }
-  removeGrayscaleFromAllTabs();
+  removeAccessEffectsFromAllTabs();
   refreshBadgeForActiveTab();
   refreshRulesIfReady();
+  scheduleAccessEffectsRefreshAlarm();
 };
 
 const clearTemporaryUrlAllows = () => {
@@ -1290,17 +1463,26 @@ const clearTemporaryUrlAllows = () => {
   persistTemporarilyAllowedUrls();
   refreshRulesIfReady();
   refreshBadgeForActiveTab();
+  syncActiveAccessEffectTabs();
+  scheduleAccessEffectsRefreshAlarm();
 };
 
-const loadGrayscalePreference = () => {
+const loadAccessEffectSettings = () => {
   chrome.storage.sync.get(
-    { [STORAGE_KEYS.grayscaleOnTemporaryAllow]: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW },
+    {
+      [STORAGE_KEYS.accessEffectIds]: null,
+      [STORAGE_KEYS.grayscaleOnTemporaryAllow]: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+    },
     (data: StorageItems) => {
-      grayscaleOnTemporaryAllow = Boolean(data[STORAGE_KEYS.grayscaleOnTemporaryAllow]);
-      if (!grayscaleOnTemporaryAllow) {
-        removeGrayscaleFromAllTabs();
-        refreshBadgeForActiveTab();
-      }
+      selectedAccessEffectIds = normalizeAccessEffectIds(
+        data[STORAGE_KEYS.accessEffectIds],
+        data[STORAGE_KEYS.grayscaleOnTemporaryAllow] === false
+          ? []
+          : DEFAULT_ACCESS_EFFECT_IDS
+      );
+      syncActiveAccessEffectTabs();
+      scheduleAccessEffectsRefreshAlarm();
+      refreshBadgeForActiveTab();
     }
   );
 };
@@ -1312,71 +1494,77 @@ const loadGrayscaleHosts = () => {
       [STORAGE_KEYS.temporarilyAllowedUrls]: [],
     },
     (items) => {
-    const rawEntries = Array.isArray(items?.[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts])
-      ? (items[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts] as unknown[])
-      : [];
-    const rawUrlEntries = Array.isArray(items?.[STORAGE_KEYS.temporarilyAllowedUrls])
-      ? (items[STORAGE_KEYS.temporarilyAllowedUrls] as unknown[])
-      : [];
-    grayscaleHosts.clear();
-    temporarilyAllowedUrls.clear();
-    const now = Date.now();
-    let changed = false;
-    for (const entry of rawEntries) {
-      if (!Array.isArray(entry) || (entry.length !== 2 && entry.length !== 3)) {
-        changed = true;
-        continue;
+      const rawEntries = Array.isArray(
+        items?.[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts]
+      )
+        ? (items[STORAGE_KEYS.temporarilyAllowedGrayscaleHosts] as unknown[])
+        : [];
+      const rawUrlEntries = Array.isArray(items?.[STORAGE_KEYS.temporarilyAllowedUrls])
+        ? (items[STORAGE_KEYS.temporarilyAllowedUrls] as unknown[])
+        : [];
+      grayscaleHosts.clear();
+      temporarilyAllowedUrls.clear();
+      const now = Date.now();
+      let changed = false;
+      for (const entry of rawEntries) {
+        if (
+          !Array.isArray(entry) ||
+          (entry.length !== 2 && entry.length !== 3 && entry.length !== 4)
+        ) {
+          changed = true;
+          continue;
+        }
+        const [rawHost, rawExpiresAt, rawStartedAt, rawSource] = entry as [
+          unknown,
+          unknown,
+          unknown?,
+          unknown?
+        ];
+        const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
+        if (!host || typeof rawExpiresAt !== "number") {
+          changed = true;
+          continue;
+        }
+        const expiresAt = rawExpiresAt;
+        const startedAt =
+          typeof rawStartedAt === "number" && Number.isFinite(rawStartedAt)
+            ? rawStartedAt
+            : expiresAt;
+        if (expiresAt > now) {
+          grayscaleHosts.set(host, {
+            expiresAt,
+            startedAt,
+            source: typeof rawSource === "string" ? rawSource : null,
+          });
+          if (entry.length !== 4) changed = true;
+        } else {
+          changed = true;
+        }
       }
-      const [rawHost, rawExpiresAt, rawStartedAt] = entry as [
-        unknown,
-        unknown,
-        unknown?
-      ];
-      const host = normalizeHost(typeof rawHost === "string" ? rawHost : null);
-      if (!host || typeof rawExpiresAt !== "number") {
-        changed = true;
-        continue;
+      for (const entry of rawUrlEntries) {
+        const normalized = normalizeTemporaryUrlAllowEntry(entry);
+        if (!normalized) {
+          changed = true;
+          continue;
+        }
+        if (normalized.expiresAt <= now) {
+          changed = true;
+          continue;
+        }
+        temporarilyAllowedUrls.set(normalized.id, normalized);
       }
-      const expiresAt = rawExpiresAt;
-      const startedAt =
-        typeof rawStartedAt === "number" && Number.isFinite(rawStartedAt)
-          ? rawStartedAt
-          : expiresAt;
-      if (expiresAt > now) {
-        grayscaleHosts.set(host, { expiresAt, startedAt });
-        if (entry.length !== 3) changed = true;
-      } else {
-        changed = true;
+      if (changed) {
+        persistGrayscaleHosts();
+        persistTemporarilyAllowedUrls();
       }
-    }
-    for (const entry of rawUrlEntries) {
-      const normalized = normalizeTemporaryUrlAllowEntry(entry);
-      if (!normalized) {
-        changed = true;
-        continue;
-      }
-      if (normalized.expiresAt <= now) {
-        changed = true;
-        continue;
-      }
-      temporarilyAllowedUrls.set(normalized.id, normalized);
-    }
-    if (changed) {
-      persistGrayscaleHosts();
-      persistTemporarilyAllowedUrls();
-    }
-    temporaryAllowStateLoaded = true;
-    refreshBadgeForActiveTab();
-    refreshActiveTemporaryAllowUsage();
-    refreshRulesIfReady();
+      temporaryAllowStateLoaded = true;
+      refreshBadgeForActiveTab();
+      refreshActiveTemporaryAllowUsage();
+      refreshRulesIfReady();
+      syncActiveAccessEffectTabs();
+      scheduleAccessEffectsRefreshAlarm();
     }
   );
-};
-
-const maybeApplyGrayscaleForUrl = (tabId: number, rawUrl?: string | null) => {
-  if (!grayscaleOnTemporaryAllow) return;
-  pruneExpiredGrayscaleHosts();
-  syncGrayscaleForUrl(tabId, rawUrl);
 };
 
 const refreshRules = (next?: () => void) => {
@@ -1415,7 +1603,7 @@ const loadBlockedSites = () => {
 
 loadBlockedSites();
 getTempAllowMinutes();
-loadGrayscalePreference();
+loadAccessEffectSettings();
 loadGrayscaleHosts();
 refreshBadgeForActiveTab();
 scheduleBadgeRefreshAlarm();
@@ -1439,17 +1627,21 @@ chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => 
     if (changes[STORAGE_KEYS.tempAllowMinutes]) {
       tempAllowMinutes = changes[STORAGE_KEYS.tempAllowMinutes].newValue;
     }
-    if (changes[STORAGE_KEYS.grayscaleOnTemporaryAllow]) {
-      grayscaleOnTemporaryAllow = Boolean(
-        changes[STORAGE_KEYS.grayscaleOnTemporaryAllow].newValue
+    if (changes[STORAGE_KEYS.accessEffectIds]) {
+      selectedAccessEffectIds = normalizeAccessEffectIds(
+        changes[STORAGE_KEYS.accessEffectIds].newValue
       );
-      if (!grayscaleOnTemporaryAllow) {
-        removeGrayscaleFromAllTabs();
-        refreshBadgeForActiveTab();
-      } else {
-        grayscaleHosts.forEach((_window, host) => syncGrayscaleForHostTabs(host));
-        syncGrayscaleForTemporaryUrlTabs();
-      }
+      syncActiveAccessEffectTabs();
+      scheduleAccessEffectsRefreshAlarm();
+      refreshBadgeForActiveTab();
+    } else if (changes[STORAGE_KEYS.grayscaleOnTemporaryAllow]) {
+      selectedAccessEffectIds =
+        changes[STORAGE_KEYS.grayscaleOnTemporaryAllow].newValue === false
+          ? []
+          : [...DEFAULT_ACCESS_EFFECT_IDS];
+      syncActiveAccessEffectTabs();
+      scheduleAccessEffectsRefreshAlarm();
+      refreshBadgeForActiveTab();
     }
   }
 });
@@ -1457,14 +1649,15 @@ chrome.storage.onChanged.addListener((changes: StorageChanges, area: string) => 
 // Temporarily allow one or more rules (removes rules & sets timers to restore).
 const allowRulesTemporarily = async (
   ids: number[],
-  minutes: number
+  minutes: number,
+  source: string | null = null
 ): Promise<boolean> => {
   if (ids.length === 0) return false;
   const hostsForIds = ids
     .map((id) => blockedSites[id - 1])
     .filter((host): host is string => typeof host === "string" && !!host);
   await updateDynamicRulesAsync({ removeRuleIds: ids });
-  scheduleGrayscaleForHosts(hostsForIds, minutes);
+  scheduleGrayscaleForHosts(hostsForIds, minutes, source);
   scheduleBadgeRefreshAlarm();
   ids.forEach((id) =>
     chrome.alarms.create(`restore-${id}`, { delayInMinutes: minutes })
@@ -1483,14 +1676,16 @@ type TemporaryAllowResult = {
 };
 
 const applyTemporaryAllowDecision = async (
-  decision: AccessGateDecision
+  decision: AccessGateDecision,
+  source: string | null = null
 ): Promise<TemporaryAllowResult> => {
   const application = buildDecisionApplication(decision);
   if (application.operation === "allow-url") {
     const ok = scheduleTemporaryUrlAllow(
       application.url,
       application.host,
-      application.minutes
+      application.minutes,
+      source
     );
     return {
       ok,
@@ -1502,7 +1697,11 @@ const applyTemporaryAllowDecision = async (
   }
 
   if (application.operation === "allow-domain") {
-    const ok = await allowRulesTemporarily(application.ruleIds, application.minutes);
+    const ok = await allowRulesTemporarily(
+      application.ruleIds,
+      application.minutes,
+      source
+    );
     return {
       ok,
       host: ok ? application.host : null,
@@ -1541,7 +1740,7 @@ const temporarilyAllowFromUrl = async (
     blockedSites,
     defaultMinutes,
   });
-  return applyTemporaryAllowDecision(decision);
+  return applyTemporaryAllowDecision(decision, "temporary-allow");
 };
 
 const getRequestUrlContext = async (
@@ -1580,9 +1779,10 @@ const buildRequestGateInput = async (
 };
 
 const applyRequestGateDecision = async (
-  result: RequestGateDecisionResult
+  result: RequestGateDecisionResult,
+  source: string
 ): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
-  const allowResult = await applyTemporaryAllowDecision(result.decision);
+  const allowResult = await applyTemporaryAllowDecision(result.decision, source);
   return { ...allowResult, ...result };
 };
 
@@ -1591,7 +1791,7 @@ const requestIfThenIntentionAccess = async (
   sender?: any
 ): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
   const input = await buildRequestGateInput(payload, sender);
-  return applyRequestGateDecision(decideIfThenIntentionRequest(input));
+  return applyRequestGateDecision(decideIfThenIntentionRequest(input), "if-then-intention");
 };
 
 const requestBuiltGateAccess = async (
@@ -1600,7 +1800,7 @@ const requestBuiltGateAccess = async (
 ): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
   const input = await buildRequestGateInput(payload, sender);
   const result = await decideBuiltGateRequest(input);
-  return applyRequestGateDecision(result);
+  return applyRequestGateDecision(result, "built-gate");
 };
 
 const requestGithubContributionAccess = async (
@@ -1609,7 +1809,7 @@ const requestGithubContributionAccess = async (
 ): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
   const input = await buildRequestGateInput(payload, sender);
   const result = await decideGithubContributionRequest(input);
-  return applyRequestGateDecision(result);
+  return applyRequestGateDecision(result, "github-contribution");
 };
 
 const requestAiStudyQuizAccess = async (
@@ -1618,7 +1818,7 @@ const requestAiStudyQuizAccess = async (
 ): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
   const input = await buildRequestGateInput(payload, sender);
   const result = await decideAiStudyQuizRequest(input);
-  return applyRequestGateDecision(result);
+  return applyRequestGateDecision(result, "ai-study-quiz");
 };
 
 const requestLlmReviewedAccess = async (
@@ -1628,7 +1828,7 @@ const requestLlmReviewedAccess = async (
 ): Promise<TemporaryAllowResult & RequestGateDecisionResult> => {
   const input = await buildRequestGateInput(payload, sender);
   const result = await decideLlmReviewedRequest(input, onProgress);
-  return applyRequestGateDecision(result);
+  return applyRequestGateDecision(result, "llm-reviewed");
 };
 
 // Re-add a specific rule immediately and refresh the current tab so it takes effect.
@@ -1641,7 +1841,8 @@ const restoreNowById = (id: number, tabId?: number, currentUrl?: string) => {
   if (normalizedHost && grayscaleHosts.has(normalizedHost)) {
     grayscaleHosts.delete(normalizedHost);
     persistGrayscaleHosts();
-    syncGrayscaleForHostTabs(normalizedHost);
+    syncAccessEffectsForHostTabs(normalizedHost);
+    scheduleAccessEffectsRefreshAlarm();
     refreshBadgeForActiveTab();
   }
 
@@ -2825,12 +3026,21 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // Restore rules when the timer fires.
 chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
+  if (alarm.name === ALARM_NAMES.accessEffectsRefresh) {
+    pruneExpiredGrayscaleHosts();
+    pruneExpiredTemporarilyAllowedUrls();
+    syncActiveAccessEffectTabs();
+    scheduleAccessEffectsRefreshAlarm();
+    return;
+  }
+
   if (alarm.name === ALARM_NAMES.badgeRefresh) {
     pruneExpiredGrayscaleHosts();
     const prunedTemporaryUrls = pruneExpiredTemporarilyAllowedUrls();
     if (prunedTemporaryUrls) refreshRulesIfReady();
     refreshBadgeForActiveTab();
     refreshActiveTemporaryAllowUsage();
+    scheduleAccessEffectsRefreshAlarm();
     return;
   }
 
@@ -2841,9 +3051,10 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
       temporarilyAllowedUrls.delete(id);
       persistTemporarilyAllowedUrls();
       refreshRulesIfReady(() => redirectBlockedTabsForTemporaryUrl(allow));
-      syncGrayscaleForHostTabs(allow.host);
+      syncAccessEffectsForHostTabs(allow.host);
       refreshBadgeForActiveTab();
       refreshActiveTemporaryAllowUsage();
+      scheduleAccessEffectsRefreshAlarm();
     }
     return;
   }
@@ -2863,8 +3074,9 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
       if (normalizedHost && grayscaleHosts.has(normalizedHost)) {
         grayscaleHosts.delete(normalizedHost);
         persistGrayscaleHosts();
-        syncGrayscaleForHostTabs(normalizedHost);
+        syncAccessEffectsForHostTabs(normalizedHost);
         refreshBadgeForActiveTab();
+        scheduleAccessEffectsRefreshAlarm();
       }
       chrome.declarativeNetRequest.updateDynamicRules(
         { addRules: [buildRule(site, id)] },

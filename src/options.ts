@@ -6,6 +6,7 @@ import type {
   GateOptionsTextField,
 } from "./core/options-contracts.js";
 import {
+  DEFAULT_ACCESS_EFFECT_IDS,
   DEFAULT_ACCESS_GATE_ACTION_ID,
   DEFAULT_BUILT_GATE_SPEC_JSON,
   DEFAULT_BLOCKED_SITES,
@@ -13,6 +14,7 @@ import {
   DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES,
   DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
   DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+  GRAYSCALE_ACCESS_EFFECT_ID,
   DEFAULT_LLM_LEISURE_ALLOWANCE,
   DEFAULT_LLM_PROVIDER,
   DEFAULT_LLM_REVIEW_STRICTNESS,
@@ -22,6 +24,10 @@ import {
   LEGACY_AGENTIC_ACCESS_GATE_ACTION_ID,
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
+import {
+  ACCESS_EFFECT_MODULES,
+  normalizeAccessEffectIds,
+} from "./access-effects/registry.js";
 import {
   getExtensionStoreListing,
   isChromeLocalAiSupportedBrowser,
@@ -263,6 +269,47 @@ const escapeHtml = (value: unknown): string =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+const renderAccessEffectOption = (
+  effect: (typeof ACCESS_EFFECT_MODULES)[number]
+) => `
+  <label class="effect-card" for="access-effect-${escapeHtml(effect.id)}">
+    <input
+      type="checkbox"
+      id="access-effect-${escapeHtml(effect.id)}"
+      data-access-effect-id="${escapeHtml(effect.id)}"
+    />
+    <span class="effect-body">
+      <span class="effect-title">${escapeHtml(effect.label)}</span>
+      <span class="hint">${escapeHtml(effect.description)}</span>
+      ${
+        effect.timeline?.length
+          ? `<ol class="effect-timeline" aria-label="${escapeHtml(effect.label)} timing">
+              ${effect.timeline
+                .map(
+                  (step) => `
+                    <li>
+                      <span class="effect-step-when">
+                        <span data-effect-step-time="${escapeHtml(step.atPercent)}"></span>
+                      </span>
+                      <span class="effect-step-copy">
+                        <span class="effect-step-label">${escapeHtml(step.label)}</span>
+                        <span class="hint">${escapeHtml(step.description)}</span>
+                      </span>
+                    </li>
+                  `
+                )
+                .join("")}
+            </ol>`
+          : ""
+      }
+    </span>
+  </label>
+`;
+
+const renderAccessEffectList = (effectList: HTMLElement) => {
+  effectList.innerHTML = ACCESS_EFFECT_MODULES.map(renderAccessEffectOption).join("");
+};
+
 const renderTextField = (field: GateOptionsTextField) => `
   <div class="field" id="${escapeHtml(field.id)}-field">
     <label for="${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
@@ -425,7 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const saveBtn = document.getElementById("save");
   const minutesInput = document.getElementById("temp-allow-minutes");
   const alternativesInput = document.getElementById("block-page-alternatives");
-  const grayscaleCheckbox = document.getElementById("grayscale-temp-allow");
+  const accessEffectList = document.getElementById("access-effect-list");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
   const gateList = document.getElementById("gate-list");
   const saveStatus = document.getElementById("save-status");
@@ -437,13 +484,14 @@ document.addEventListener("DOMContentLoaded", () => {
     !(saveBtn instanceof HTMLButtonElement) ||
     !(minutesInput instanceof HTMLInputElement) ||
     !(alternativesInput instanceof HTMLTextAreaElement) ||
-    !(grayscaleCheckbox instanceof HTMLInputElement) ||
+    !(accessEffectList instanceof HTMLElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
     !(gateList instanceof HTMLElement)
   ) {
     return;
   }
 
+  renderAccessEffectList(accessEffectList);
   renderGateLibrary(gateList);
 
   const storeListing = getExtensionStoreListing();
@@ -503,6 +551,53 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let accessGateActions = ACCESS_GATE_ACTIONS;
   let defaultGateActionId = DEFAULT_ACCESS_GATE_ACTION_ID;
+
+  const getAccessEffectInputs = (): HTMLInputElement[] =>
+    Array.from(
+      accessEffectList.querySelectorAll<HTMLInputElement>("[data-access-effect-id]")
+    );
+
+  const getSelectedAccessEffectIds = (): string[] =>
+    normalizeAccessEffectIds(
+      getAccessEffectInputs()
+        .filter((input) => input.checked)
+        .map((input) => input.getAttribute("data-access-effect-id"))
+    );
+
+  const setSelectedAccessEffectIds = (ids: unknown): void => {
+    const selectedIds = new Set(normalizeAccessEffectIds(ids));
+    getAccessEffectInputs().forEach((input) => {
+      const id = input.getAttribute("data-access-effect-id");
+      input.checked = !!id && selectedIds.has(id);
+    });
+  };
+
+  const formatDurationSeconds = (totalSeconds: number): string => {
+    const seconds = Math.max(Math.round(totalSeconds), 0);
+    if (seconds === 0) return "start";
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return remainingSeconds > 0
+      ? `${minutes}m ${remainingSeconds}s`
+      : `${minutes}m`;
+  };
+
+  const getTemporaryAllowDurationSeconds = (): number => {
+    const minutes = parseInt(minutesInput.value, 10) || DEFAULT_TEMP_ALLOW_MINUTES;
+    return Math.max(minutes, 1) * 60;
+  };
+
+  const updateAccessEffectTimelineTimes = (): void => {
+    const durationSeconds = getTemporaryAllowDurationSeconds();
+    accessEffectList
+      .querySelectorAll<HTMLElement>("[data-effect-step-time]")
+      .forEach((timeElement) => {
+        const percent = Number(timeElement.getAttribute("data-effect-step-time"));
+        const seconds = durationSeconds * (Number.isFinite(percent) ? percent / 100 : 0);
+        timeElement.textContent = formatDurationSeconds(seconds);
+      });
+  };
 
   const getAccessGateActionIds = () =>
     new Set(accessGateActions.map((action) => action.id));
@@ -808,6 +903,7 @@ document.addEventListener("DOMContentLoaded", () => {
         accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
         showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
         blockPageAlternatives: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
+        [STORAGE_KEYS.accessEffectIds]: null,
         grayscaleOnTemporaryAllow: DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
         llmProvider: DEFAULT_LLM_PROVIDER,
         llmReviewStrictness: DEFAULT_LLM_REVIEW_STRICTNESS,
@@ -832,7 +928,12 @@ document.addEventListener("DOMContentLoaded", () => {
           alternativesInput.value = normalizeStoredAlternatives(
             syncData.blockPageAlternatives
           ).join("\n");
-          grayscaleCheckbox.checked = Boolean(syncData.grayscaleOnTemporaryAllow);
+          setSelectedAccessEffectIds(
+            normalizeAccessEffectIds(
+              syncData[STORAGE_KEYS.accessEffectIds],
+              syncData.grayscaleOnTemporaryAllow === false ? [] : DEFAULT_ACCESS_EFFECT_IDS
+            )
+          );
 
           setSelectedLlmProvider(syncData.llmProvider);
           llmReviewStrictnessInput.value = normalizeLlmReviewStrictness(syncData.llmReviewStrictness);
@@ -856,6 +957,7 @@ document.addEventListener("DOMContentLoaded", () => {
           updateReviewRangeLabels();
           updateGithubContributionRangeLabel();
           updateGateLibraryState();
+          updateAccessEffectTimelineTimes();
         });
       }
     );
@@ -864,6 +966,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSettings();
 
   textarea.addEventListener("input", updateSitesSummary);
+  minutesInput.addEventListener("input", updateAccessEffectTimelineTimes);
   cleanSitesBtn.addEventListener("click", cleanSitesInput);
   openAiApiKeyInput.addEventListener("input", updateGateLibraryState);
   openAiModelInput.addEventListener("input", updateGateLibraryState);
@@ -896,7 +999,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const accessGateActionId = normalizeDefaultGateActionId(defaultGateActionId);
     const minutes = parseInt(minutesInput.value, 10) || DEFAULT_TEMP_ALLOW_MINUTES;
     const blockPageAlternatives = normalizeAlternativeLines(alternativesInput.value);
-    const grayscaleOnTemporaryAllow = Boolean(grayscaleCheckbox.checked);
+    const accessEffectIds = getSelectedAccessEffectIds();
+    const grayscaleOnTemporaryAllow = accessEffectIds.includes(GRAYSCALE_ACCESS_EFFECT_ID);
     const showChatGptPeek = Boolean(showPeekCheckbox.checked);
     const llmProvider = getSelectedLlmProvider();
     const llmReviewStrictness = normalizeLlmReviewStrictness(llmReviewStrictnessInput.value);
@@ -928,6 +1032,7 @@ document.addEventListener("DOMContentLoaded", () => {
         accessGateActionId,
         showChatGptPeek,
         blockPageAlternatives,
+        [STORAGE_KEYS.accessEffectIds]: accessEffectIds,
         grayscaleOnTemporaryAllow,
         llmProvider,
         llmReviewStrictness,

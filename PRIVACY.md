@@ -12,7 +12,7 @@ NoDrift may store or process the following data to provide its blocking,
 temporary access, stats, and review features:
 
 - Blocked site domains and block-page alternatives.
-- Settings such as gate selection, temporary allow duration, grayscale behavior,
+- Settings such as gate selection, temporary allow duration, access effects,
   and AI provider/model configuration.
 - Browsing and navigation data needed for the blocker loop, such as the blocked
   domain, attempted URL, active tab state, and temporary access state.

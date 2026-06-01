@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   llmLeisureAllowance: "llmLeisureAllowance",
   openAiModel: "openAiModel",
   openAiApiKey: "openAiApiKey",
+  accessEffectIds: "accessEffectIds",
   grayscaleOnTemporaryAllow: "grayscaleOnTemporaryAllow",
   temporarilyAllowedGrayscaleHosts: "temporarilyAllowedGrayscaleHosts",
   temporarilyAllowedUrls: "temporarilyAllowedUrls",
@@ -27,4 +28,5 @@ export const STORAGE_KEYS = {
 
 export const ALARM_NAMES = {
   badgeRefresh: "refresh-temp-allow-badge",
+  accessEffectsRefresh: "refresh-access-effects",
 } as const;
