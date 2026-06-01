@@ -5,8 +5,15 @@ const MEDIA_SELECTOR = "img, picture, video, canvas, iframe";
 const TEXT_SELECTOR = [
   "article :is(p, span, li, blockquote, h1, h2, h3)",
   "[role='article'] :is(p, span, li, blockquote, h1, h2, h3)",
-  "main :is(p, li, blockquote)",
+  "main :is(p, li, blockquote, h1, h2, h3)",
+  ".md :is(p, li, blockquote)",
+  "[slot='title']",
+  "[slot='text-body']",
+  "[slot='comment']",
+  "[data-testid*='post'] :is(p, span, a, h1, h2, h3)",
+  "[data-testid*='comment'] :is(p, span, div)",
 ].join(", ");
+const CUSTOM_FEED_CONTAINER_SELECTOR = "shreddit-post, shreddit-comment";
 
 const buildMediaCss = (progress: number): string => {
   if (progress >= 0.9) {
@@ -60,6 +67,12 @@ const buildTextCss = (progress: number): string => {
   if (progress >= 0.9) {
     return `
       ${TEXT_SELECTOR} {
+        filter: grayscale(1) blur(0.45px) !important;
+        opacity: 0.5 !important;
+        transition: filter 180ms ease, opacity 180ms ease !important;
+      }
+
+      ${CUSTOM_FEED_CONTAINER_SELECTOR} {
         filter: grayscale(1) blur(0.35px) !important;
         opacity: 0.62 !important;
         transition: filter 180ms ease, opacity 180ms ease !important;
@@ -71,7 +84,13 @@ const buildTextCss = (progress: number): string => {
     return `
       ${TEXT_SELECTOR} {
         filter: grayscale(0.8) !important;
-        opacity: 0.74 !important;
+        opacity: 0.64 !important;
+        transition: filter 180ms ease, opacity 180ms ease !important;
+      }
+
+      ${CUSTOM_FEED_CONTAINER_SELECTOR} {
+        filter: grayscale(0.8) !important;
+        opacity: 0.78 !important;
         transition: filter 180ms ease, opacity 180ms ease !important;
       }
     `;
@@ -81,7 +100,13 @@ const buildTextCss = (progress: number): string => {
     return `
       ${TEXT_SELECTOR} {
         filter: grayscale(0.4) !important;
-        opacity: 0.86 !important;
+        opacity: 0.78 !important;
+        transition: filter 180ms ease, opacity 180ms ease !important;
+      }
+
+      ${CUSTOM_FEED_CONTAINER_SELECTOR} {
+        filter: grayscale(0.4) !important;
+        opacity: 0.9 !important;
         transition: filter 180ms ease, opacity 180ms ease !important;
       }
     `;
@@ -89,6 +114,10 @@ const buildTextCss = (progress: number): string => {
 
   return `
     ${TEXT_SELECTOR} {
+      transition: filter 180ms ease, opacity 180ms ease !important;
+    }
+
+    ${CUSTOM_FEED_CONTAINER_SELECTOR} {
       transition: filter 180ms ease, opacity 180ms ease !important;
     }
   `;
