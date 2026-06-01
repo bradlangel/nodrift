@@ -47,6 +47,18 @@ export const buildAccessEffectCss = (
   return css.trim();
 };
 
+export const buildAccessEffectOverlayCss = (
+  ids: string[],
+  context: AccessEffectCssContext
+): string => {
+  const css = getAccessEffectModules(ids)
+    .map((module) => module.buildOverlayCss?.(context))
+    .filter((chunk): chunk is string => !!chunk && !!chunk.trim())
+    .join("\n");
+
+  return css.trim();
+};
+
 export const getAccessEffectMilestones = (ids: string[]): number[] => {
   const milestones = new Set<number>();
   getAccessEffectModules(ids).forEach((module) => {

@@ -17,6 +17,7 @@ import {
 } from "./defaults.js";
 import {
   buildAccessEffectCss,
+  buildAccessEffectOverlayCss,
   getAccessEffectMilestones,
   normalizeAccessEffectIds,
 } from "./access-effects/registry.js";
@@ -109,6 +110,7 @@ let dailyStatsUpdateQueue: Promise<unknown> = Promise.resolve();
 let selectedAccessEffectIds = [...DEFAULT_ACCESS_EFFECT_IDS];
 
 const ACCESS_EFFECT_STYLE_ID = "nodrift-access-effects-style";
+const ACCESS_EFFECT_OVERLAY_ID = "nodrift-access-effects-overlay";
 type TemporaryAllowWindow = {
   expiresAt: number;
   startedAt: number;
@@ -1152,28 +1154,47 @@ const getAccessEffectProgress = (
 
 const setAccessEffectStyleForTab = (
   tabId: number,
-  css: string
+  css: string,
+  overlayCss: string
 ) => {
   if (!chrome.scripting?.executeScript) return;
   chrome.scripting.executeScript(
     {
       target: { tabId, allFrames: true },
-      args: [ACCESS_EFFECT_STYLE_ID, css],
-      func: (styleId: string, cssText: string) => {
+      args: [ACCESS_EFFECT_STYLE_ID, ACCESS_EFFECT_OVERLAY_ID, css, overlayCss],
+      func: (
+        styleId: string,
+        overlayId: string,
+        cssText: string,
+        overlayCssText: string
+      ) => {
         const existing = document.getElementById(styleId);
         if (!cssText.trim()) {
           existing?.remove();
+        } else {
+          const style =
+            existing instanceof HTMLStyleElement
+              ? existing
+              : document.createElement("style");
+          style.id = styleId;
+          style.textContent = cssText;
+          if (!style.parentElement) {
+            (document.head || document.documentElement).appendChild(style);
+          }
+        }
+
+        const existingOverlay = document.getElementById(overlayId);
+        if (!overlayCssText.trim()) {
+          existingOverlay?.remove();
           return;
         }
 
-        const style =
-          existing instanceof HTMLStyleElement
-            ? existing
-            : document.createElement("style");
-        style.id = styleId;
-        style.textContent = cssText;
-        if (!style.parentElement) {
-          (document.head || document.documentElement).appendChild(style);
+        const overlay = existingOverlay ?? document.createElement("div");
+        overlay.id = overlayId;
+        overlay.setAttribute("aria-hidden", "true");
+        overlay.style.cssText = overlayCssText;
+        if (!overlay.parentElement) {
+          (document.body || document.documentElement).appendChild(overlay);
         }
       },
     },
@@ -1184,17 +1205,19 @@ const setAccessEffectStyleForTab = (
 const syncAccessEffectsForUrl = (tabId: number, rawUrl?: string | null) => {
   const session = getAccessEffectSessionForUrl(rawUrl);
   if (!session || selectedAccessEffectIds.length === 0) {
-    setAccessEffectStyleForTab(tabId, "");
+    setAccessEffectStyleForTab(tabId, "", "");
     return;
   }
 
   const now = Date.now();
-  const css = buildAccessEffectCss(selectedAccessEffectIds, {
+  const context = {
     session,
     now,
     progress: getAccessEffectProgress(session, now),
-  });
-  setAccessEffectStyleForTab(tabId, css);
+  };
+  const css = buildAccessEffectCss(selectedAccessEffectIds, context);
+  const overlayCss = buildAccessEffectOverlayCss(selectedAccessEffectIds, context);
+  setAccessEffectStyleForTab(tabId, css, overlayCss);
 };
 
 const syncAccessEffectsForHostTabs = (host: string) => {
@@ -1217,7 +1240,7 @@ const removeAccessEffectsFromAllTabs = () => {
   chrome.tabs.query({}, (tabs: ChromeTab[]) => {
     tabs.forEach((tab: ChromeTab) => {
       if (typeof tab.id !== "number") return;
-      setAccessEffectStyleForTab(tab.id, "");
+      setAccessEffectStyleForTab(tab.id, "", "");
     });
   });
 };

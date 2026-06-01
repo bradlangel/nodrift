@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ACCESS_EFFECT_MODULES,
   buildAccessEffectCss,
+  buildAccessEffectOverlayCss,
   getAccessEffectMilestones,
   normalizeAccessEffectIds,
 } from "../../dist/access-effects/registry.js";
@@ -65,10 +66,25 @@ test("effect css composes selected modules", () => {
 
   assert.match(css, /grayscale\(1\)/);
   assert.match(css, /blur\(6px\)/);
-  assert.match(css, /\[role='feed'\]/);
-  assert.match(css, /shreddit-post/);
-  assert.match(css, /opacity: 0\.78/);
-  assert.match(css, /\[role='button'\]/);
+  assert.match(css, /rotate\(0\.28deg\)/);
+  assert.match(css, /skewX\(0\.55deg\)/);
+});
+
+test("effect overlay css appears in late stale mode", () => {
+  const earlyOverlayCss = buildAccessEffectOverlayCss([STALE_MODE_ACCESS_EFFECT_ID], {
+    session,
+    now: 31_000,
+    progress: 0.5,
+  });
+  assert.equal(earlyOverlayCss, "");
+
+  const lateOverlayCss = buildAccessEffectOverlayCss([STALE_MODE_ACCESS_EFFECT_ID], {
+    session,
+    now: 46_000,
+    progress: 0.75,
+  });
+  assert.match(lateOverlayCss, /backdrop-filter/);
+  assert.match(lateOverlayCss, /grayscale\(0\.65\)/);
 });
 
 test("milestones are merged and sorted", () => {

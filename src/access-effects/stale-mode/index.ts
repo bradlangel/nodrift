@@ -2,45 +2,24 @@ import { STALE_MODE_ACCESS_EFFECT_ID } from "../../defaults.js";
 import type { AccessEffectModule } from "../types.js";
 
 const MEDIA_SELECTOR = "img, picture, video, canvas, iframe";
-const READABLE_TEXT_SELECTOR = [
-  "article :is(p, span, li, blockquote, h1, h2, h3)",
-  "[role='article'] :is(p, span, li, blockquote, h1, h2, h3)",
+const TEXT_SELECTOR = [
+  "article :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)",
+  "[role='article'] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)",
   "main :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)",
   "[role='main'] :is(p, li, blockquote, h1, h2, h3, h4, h5, h6)",
+  "[role='feed'] :is(p, li, blockquote, h1, h2, h3)",
   ".md :is(p, li, blockquote)",
   "[slot='title']",
   "[slot='text-body']",
   "[slot='comment']",
 ].join(", ");
-const FEED_TEXT_SELECTOR = [
-  "[role='feed'] :is(p, span, a, li, blockquote, h1, h2, h3)",
-  "[data-testid*='post'] :is(p, span, a, h1, h2, h3)",
-  "[data-testid*='comment'] :is(p, span, div)",
-  "[class*='post' i] :is(p, span, a, h1, h2, h3)",
-  "[class*='comment' i] :is(p, span, div)",
-  "[class*='feed' i] :is(p, span, a, h1, h2, h3)",
-].join(", ");
-const TEXT_SELECTOR = [READABLE_TEXT_SELECTOR, FEED_TEXT_SELECTOR].join(", ");
-const CUSTOM_FEED_CONTAINER_SELECTOR = "shreddit-post, shreddit-comment";
-const INTERACTIVE_RESET_SELECTOR = [
-  "button",
-  "[role='button']",
-  "input",
-  "textarea",
-  "select",
-  "option",
-  "[contenteditable='true']",
-  "nav",
-  "[role='navigation']",
-].join(", ");
-
-const buildInteractiveResetCss = (): string => `
-  ${INTERACTIVE_RESET_SELECTOR},
-  ${INTERACTIVE_RESET_SELECTOR} * {
-    filter: none !important;
-    opacity: 1 !important;
-  }
-`;
+const OVERLAY_BASE_CSS = [
+  "position: fixed",
+  "inset: 0",
+  "pointer-events: none",
+  "z-index: 2147483647",
+  "transition: backdrop-filter 180ms ease, background 180ms ease",
+].join("; ");
 
 const buildMediaCss = (progress: number): string => {
   if (progress >= 0.9) {
@@ -94,71 +73,81 @@ const buildTextCss = (progress: number): string => {
   if (progress >= 0.9) {
     return `
       ${TEXT_SELECTOR} {
-        filter: grayscale(1) blur(0.45px) !important;
-        opacity: 0.5 !important;
-        transition: filter 180ms ease, opacity 180ms ease !important;
+        filter: grayscale(1) blur(0.3px) !important;
+        opacity: 0.7 !important;
+        transform: rotate(-0.45deg) skewX(-0.9deg) !important;
+        transform-origin: left center !important;
+        transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease !important;
+        will-change: filter, opacity, transform !important;
       }
-
-      ${CUSTOM_FEED_CONTAINER_SELECTOR} {
-        filter: grayscale(1) blur(0.35px) !important;
-        opacity: 0.62 !important;
-        transition: filter 180ms ease, opacity 180ms ease !important;
-      }
-
-      ${buildInteractiveResetCss()}
     `;
   }
 
   if (progress >= 0.75) {
     return `
       ${TEXT_SELECTOR} {
-        filter: grayscale(0.8) !important;
-        opacity: 0.64 !important;
-        transition: filter 180ms ease, opacity 180ms ease !important;
+        filter: grayscale(0.7) blur(0.12px) !important;
+        opacity: 0.82 !important;
+        transform: rotate(0.28deg) skewX(0.55deg) !important;
+        transform-origin: left center !important;
+        transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease !important;
+        will-change: filter, opacity, transform !important;
       }
-
-      ${CUSTOM_FEED_CONTAINER_SELECTOR} {
-        filter: grayscale(0.8) !important;
-        opacity: 0.78 !important;
-        transition: filter 180ms ease, opacity 180ms ease !important;
-      }
-
-      ${buildInteractiveResetCss()}
     `;
   }
 
   if (progress >= 0.5) {
     return `
       ${TEXT_SELECTOR} {
-        filter: grayscale(0.4) !important;
-        opacity: 0.78 !important;
-        transition: filter 180ms ease, opacity 180ms ease !important;
-      }
-
-      ${CUSTOM_FEED_CONTAINER_SELECTOR} {
-        filter: grayscale(0.4) !important;
+        filter: grayscale(0.35) !important;
         opacity: 0.9 !important;
-        transition: filter 180ms ease, opacity 180ms ease !important;
+        transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease !important;
       }
     `;
   }
 
   return `
     ${TEXT_SELECTOR} {
-      transition: filter 180ms ease, opacity 180ms ease !important;
-    }
-
-    ${CUSTOM_FEED_CONTAINER_SELECTOR} {
-      transition: filter 180ms ease, opacity 180ms ease !important;
+      transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease !important;
     }
   `;
+};
+
+const buildOverlayCss = (progress: number): string | null => {
+  if (progress >= 0.9) {
+    return `
+      ${OVERLAY_BASE_CSS};
+      background:
+        repeating-linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.08) 0,
+          rgba(255, 255, 255, 0.08) 1px,
+          transparent 1px,
+          transparent 12px
+        ),
+        rgba(128, 128, 128, 0.12);
+      backdrop-filter: grayscale(1) blur(1.2px) contrast(0.82);
+      -webkit-backdrop-filter: grayscale(1) blur(1.2px) contrast(0.82);
+    `;
+  }
+
+  if (progress >= 0.75) {
+    return `
+      ${OVERLAY_BASE_CSS};
+      background: rgba(128, 128, 128, 0.07);
+      backdrop-filter: grayscale(0.65) blur(0.45px) contrast(0.9);
+      -webkit-backdrop-filter: grayscale(0.65) blur(0.45px) contrast(0.9);
+    `;
+  }
+
+  return null;
 };
 
 export const staleModeAccessEffect: AccessEffectModule = {
   id: STALE_MODE_ACCESS_EFFECT_ID,
   label: "Stale Mode",
   description:
-    "Progressively softens media and fades text as the granted window is used, making feeds less rewarding over time.",
+    "Progressively softens media, adds page haze, and tilts text as the granted window is used.",
   enabledByDefault: false,
   milestones: [0, 25, 50, 75, 90],
   timeline: [
@@ -175,21 +164,22 @@ export const staleModeAccessEffect: AccessEffectModule = {
     {
       atPercent: 50,
       label: "Blocky stale",
-      description: "Media becomes grayer, dimmer, and lightly blurred; feed text starts to fade.",
+      description: "Media becomes grayer and lightly blurred; readable text starts to fade.",
     },
     {
       atPercent: 75,
       label: "Hard stale",
-      description: "Media becomes strongly blurred; feed and article text get lower contrast.",
+      description: "A page haze appears and readable text starts to tilt.",
     },
     {
       atPercent: 90,
       label: "Almost done",
-      description: "Media is very blurred and text is faded shortly before the block returns.",
+      description: "The haze strengthens, media is very blurred, and text is tougher to read.",
     },
   ],
   buildCss: ({ progress }) => `
     ${buildMediaCss(progress)}
     ${buildTextCss(progress)}
   `,
+  buildOverlayCss: ({ progress }) => buildOverlayCss(progress),
 };

@@ -29,4 +29,5 @@ export type AccessEffectModule = {
   milestones: number[];
   timeline?: AccessEffectTimelineStep[];
   buildCss: (context: AccessEffectCssContext) => string | null;
+  buildOverlayCss?: (context: AccessEffectCssContext) => string | null;
 };
