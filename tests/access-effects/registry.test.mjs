@@ -40,6 +40,13 @@ test("registry exposes compiled-in access effects", () => {
   );
 });
 
+test("defaults enable grayscale and slow fade", () => {
+  assert.deepEqual(DEFAULT_ACCESS_EFFECT_IDS, [
+    GRAYSCALE_ACCESS_EFFECT_ID,
+    STALE_MODE_ACCESS_EFFECT_ID,
+  ]);
+});
+
 test("selected effect ids are normalized and de-duplicated", () => {
   assert.deepEqual(
     normalizeAccessEffectIds([
