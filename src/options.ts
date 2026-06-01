@@ -289,7 +289,6 @@ const renderAccessEffectOption = (
                   (step) => `
                     <li>
                       <span class="effect-step-when">
-                        <span>${escapeHtml(step.atPercent)}%</span>
                         <span data-effect-step-time="${escapeHtml(step.atPercent)}"></span>
                       </span>
                       <span class="effect-step-copy">

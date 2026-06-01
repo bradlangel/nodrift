@@ -189,7 +189,7 @@ separately track active usage time, which means a 1 minute grant can expire
 after 1 real minute even if only part of that minute was spent on the site. The
 Access Effects setting controls what temporarily allowed sites feel like while
 access is active. Built-in effects include grayscale and Stale Mode, which
-progressively softens media based on the percentage of the granted window used.
+progressively softens media and fades feed text as the granted window is used.
 
 The Gate Library chooses the primary access gate shown on the block page. The
 maintained overview of compiled-in gates lives in the

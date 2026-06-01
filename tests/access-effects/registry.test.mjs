@@ -65,6 +65,7 @@ test("effect css composes selected modules", () => {
 
   assert.match(css, /grayscale\(1\)/);
   assert.match(css, /blur\(6px\)/);
+  assert.match(css, /opacity: 0\.74/);
 });
 
 test("milestones are merged and sorted", () => {

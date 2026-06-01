@@ -2,6 +2,11 @@ import { STALE_MODE_ACCESS_EFFECT_ID } from "../../defaults.js";
 import type { AccessEffectModule } from "../types.js";
 
 const MEDIA_SELECTOR = "img, picture, video, canvas, iframe";
+const TEXT_SELECTOR = [
+  "article :is(p, span, li, blockquote, h1, h2, h3)",
+  "[role='article'] :is(p, span, li, blockquote, h1, h2, h3)",
+  "main :is(p, li, blockquote)",
+].join(", ");
 
 const buildMediaCss = (progress: number): string => {
   if (progress >= 0.9) {
@@ -51,18 +56,56 @@ const buildMediaCss = (progress: number): string => {
   `;
 };
 
+const buildTextCss = (progress: number): string => {
+  if (progress >= 0.9) {
+    return `
+      ${TEXT_SELECTOR} {
+        filter: grayscale(1) blur(0.35px) !important;
+        opacity: 0.62 !important;
+        transition: filter 180ms ease, opacity 180ms ease !important;
+      }
+    `;
+  }
+
+  if (progress >= 0.75) {
+    return `
+      ${TEXT_SELECTOR} {
+        filter: grayscale(0.8) !important;
+        opacity: 0.74 !important;
+        transition: filter 180ms ease, opacity 180ms ease !important;
+      }
+    `;
+  }
+
+  if (progress >= 0.5) {
+    return `
+      ${TEXT_SELECTOR} {
+        filter: grayscale(0.4) !important;
+        opacity: 0.86 !important;
+        transition: filter 180ms ease, opacity 180ms ease !important;
+      }
+    `;
+  }
+
+  return `
+    ${TEXT_SELECTOR} {
+      transition: filter 180ms ease, opacity 180ms ease !important;
+    }
+  `;
+};
+
 export const staleModeAccessEffect: AccessEffectModule = {
   id: STALE_MODE_ACCESS_EFFECT_ID,
   label: "Stale Mode",
   description:
-    "Progressively softens media as the granted window is used, making feeds less rewarding over time.",
+    "Progressively softens media and fades text as the granted window is used, making feeds less rewarding over time.",
   enabledByDefault: false,
   milestones: [0, 25, 50, 75, 90],
   timeline: [
     {
       atPercent: 0,
       label: "Start",
-      description: "Media stays readable while NoDrift prepares smooth transitions.",
+      description: "The page stays readable while NoDrift prepares smooth transitions.",
     },
     {
       atPercent: 25,
@@ -72,20 +115,21 @@ export const staleModeAccessEffect: AccessEffectModule = {
     {
       atPercent: 50,
       label: "Blocky stale",
-      description: "Media becomes grayer, dimmer, and lightly blurred.",
+      description: "Media becomes grayer, dimmer, and lightly blurred; feed text starts to fade.",
     },
     {
       atPercent: 75,
       label: "Hard stale",
-      description: "Media becomes strongly blurred and low contrast.",
+      description: "Media becomes strongly blurred; post text gets lower contrast.",
     },
     {
       atPercent: 90,
       label: "Almost done",
-      description: "Media is very blurred and dim shortly before the block returns.",
+      description: "Media is very blurred and text is faded shortly before the block returns.",
     },
   ],
   buildCss: ({ progress }) => `
     ${buildMediaCss(progress)}
+    ${buildTextCss(progress)}
   `,
 };
