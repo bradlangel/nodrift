@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NoDrift Access Effects Fixture</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172126;
+        --muted: #5c6870;
+        --line: #d7dde0;
+        --paper: #f8faf8;
+        --panel: #ffffff;
+        --blue: #2d6cdf;
+        --green: #18845f;
+        --gold: #b06b00;
+        --rose: #b83755;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        gap: 24px;
+        min-height: 900px;
+        padding: 32px;
+      }
+
+      article,
+      aside,
+      .feed-item,
+      .media-grid > * {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      article {
+        padding: 28px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      ul,
+      blockquote {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin-bottom: 12px;
+        font-size: 34px;
+        line-height: 1.12;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        font-size: 22px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 17px;
+      }
+
+      p,
+      li {
+        color: #263238;
+      }
+
+      blockquote {
+        border-left: 4px solid var(--blue);
+        margin-bottom: 18px;
+        padding: 8px 0 8px 16px;
+        color: #38434a;
+        background: #eef5ff;
+      }
+
+      img,
+      video,
+      canvas,
+      iframe {
+        display: block;
+        width: 100%;
+        border: 0;
+        background: #e8edf0;
+      }
+
+      .lede {
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .media-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin: 22px 0;
+      }
+
+      .media-grid figure {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      .media-grid figcaption {
+        padding: 10px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .hero-image {
+        height: 210px;
+        object-fit: cover;
+      }
+
+      video,
+      canvas,
+      iframe {
+        height: 210px;
+      }
+
+      .feed {
+        display: grid;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .feed-item {
+        padding: 16px;
+      }
+
+      .feed-item p:last-child {
+        margin-bottom: 0;
+      }
+
+      aside {
+        align-self: start;
+        padding: 20px;
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .stat {
+        border-radius: 6px;
+        padding: 12px;
+        color: #ffffff;
+      }
+
+      .stat:nth-child(1) {
+        background: var(--blue);
+      }
+
+      .stat:nth-child(2) {
+        background: var(--green);
+      }
+
+      .stat:nth-child(3) {
+        background: var(--gold);
+      }
+
+      .stat:nth-child(4) {
+        background: var(--rose);
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1.1;
+      }
+
+      .md {
+        padding-top: 4px;
+      }
+
+      .fake-frame {
+        display: grid;
+        place-items: center;
+        height: 100%;
+        background:
+          linear-gradient(135deg, rgba(45, 108, 223, 0.22), transparent 36%),
+          linear-gradient(225deg, rgba(24, 132, 95, 0.18), transparent 38%),
+          #f4f7f8;
+        color: #334149;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main data-testid="access-effects-fixture">
+      <article>
+        <h1>Research thread with text, media, and embedded content</h1>
+        <p class="lede">This controlled page keeps the same content every run so Access Effects can be compared visually.</p>
+        <blockquote>
+          Slow Fade should make the page less rewarding as the temporary access window is used, while keeping navigation possible.
+        </blockquote>
+        <p>
+          The fixture includes readable paragraphs, list content, quoted text, images, canvas output, and an embedded frame. The effect should progressively desaturate media, dim text, add haze late in the window, and leave clicks unobstructed.
+        </p>
+        <ul>
+          <li>Early access remains readable with gentle media degradation.</li>
+          <li>Middle access makes images and long-form text less satisfying.</li>
+          <li>Late access adds page-level haze and visibly tougher reading conditions.</li>
+        </ul>
+
+        <section class="media-grid" aria-label="Media examples">
+          <figure>
+            <img
+              class="hero-image"
+              alt="Colorful abstract landscape"
+              src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='420' viewBox='0 0 720 420'%3E%3Crect width='720' height='420' fill='%23f7d15d'/%3E%3Ccircle cx='180' cy='120' r='88' fill='%23e94862'/%3E%3Ccircle cx='560' cy='96' r='70' fill='%232d6cdf'/%3E%3Cpath d='M0 330 L150 210 L270 300 L390 175 L720 360 L720 420 L0 420 Z' fill='%2318845f'/%3E%3Cpath d='M0 360 L230 250 L360 340 L520 225 L720 315 L720 420 L0 420 Z' fill='%230d4f3d' opacity='.78'/%3E%3C/svg%3E"
+            >
+            <figcaption>Inline image with saturated color blocks</figcaption>
+          </figure>
+          <figure>
+            <video
+              muted
+              playsinline
+              poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='420' viewBox='0 0 720 420'%3E%3Crect width='720' height='420' fill='%23263136'/%3E%3Crect x='52' y='52' width='180' height='120' rx='8' fill='%23b83755'/%3E%3Crect x='270' y='52' width='180' height='120' rx='8' fill='%232d6cdf'/%3E%3Crect x='488' y='52' width='180' height='120' rx='8' fill='%2318845f'/%3E%3Cpolygon points='326,242 326,330 405,286' fill='%23ffffff'/%3E%3C/svg%3E"
+            ></video>
+            <figcaption>Video poster used to mimic streaming content</figcaption>
+          </figure>
+          <figure>
+            <canvas id="fixture-canvas" width="720" height="420"></canvas>
+            <figcaption>Canvas chart with colored bars and labels</figcaption>
+          </figure>
+          <figure>
+            <iframe
+              title="Embedded card"
+              srcdoc="<style>body{margin:0;font:16px Arial;background:#f4f7f8;color:#263238}.fake-frame{display:grid;place-items:center;height:210px;background:linear-gradient(135deg,rgba(45,108,223,.22),transparent 36%),linear-gradient(225deg,rgba(24,132,95,.18),transparent 38%),#f4f7f8;font-weight:700}</style><div class='fake-frame'>Embedded frame content</div>"
+            ></iframe>
+            <figcaption>Embedded frame target</figcaption>
+          </figure>
+        </section>
+
+        <section class="feed" role="feed" aria-label="Comment feed">
+          <div class="feed-item" role="article">
+            <h3>Comment with a specific plan</h3>
+            <p>I am checking one answer, saving the useful detail, and leaving when the answer is found.</p>
+          </div>
+          <div class="feed-item" role="article">
+            <h3>Comment with loose browsing energy</h3>
+            <p>The page is interesting enough to continue reading, which makes late-stage friction important.</p>
+          </div>
+        </section>
+      </article>
+
+      <aside>
+        <h2>Side panel</h2>
+        <div class="stat-grid" aria-label="Color swatches">
+          <div class="stat"><strong>25</strong>light fade</div>
+          <div class="stat"><strong>50</strong>soft fade</div>
+          <div class="stat"><strong>75</strong>heavy fade</div>
+          <div class="stat"><strong>90</strong>almost done</div>
+        </div>
+        <div class="md">
+          <p>Markdown-style body text gives Slow Fade another selector path to affect.</p>
+          <p>Late screenshots should show softer contrast, mild text tilt, and a page-level haze.</p>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      const canvas = document.getElementById("fixture-canvas");
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#eef3f5";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const bars = [
+        ["#2d6cdf", 72, 250],
+        ["#18845f", 178, 180],
+        ["#b06b00", 284, 230],
+        ["#b83755", 390, 120],
+        ["#5c6870", 496, 280],
+      ];
+      ctx.font = "700 28px Arial";
+      ctx.fillStyle = "#263238";
+      ctx.fillText("Attention cost", 52, 66);
+      for (const [color, x, height] of bars) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, 360 - height, 72, height);
+      }
+      ctx.strokeStyle = "#8c989f";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(52, 360);
+      ctx.lineTo(620, 360);
+      ctx.stroke();
+    </script>
+  </body>
+</html>
