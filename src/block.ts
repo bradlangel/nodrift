@@ -8,6 +8,7 @@ import {
   DEFAULT_BLOCK_PAGE_ALTERNATIVES,
   DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
   DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+  DEFAULT_INCREASING_ALLOW_DELAY_ENABLED,
   DEFAULT_LLM_PROVIDER,
   DEFAULT_OPENAI_MODEL,
   DEFAULT_SHOW_CHATGPT_PEEK,
@@ -61,6 +62,12 @@ import {
   withTemporaryAllowUsedSeconds,
 } from "./stats.js";
 import { getTemporarilyAllowedDestination } from "./temp-allow-destination.js";
+import {
+  buildTemporaryAllowDelayTargetKey,
+  evaluateTemporaryAllowDelay,
+  normalizePendingTemporaryAllowDelay,
+  type PendingTemporaryAllowDelay,
+} from "./temporary-allow-delay.js";
 import type {
   RequestGateDecisionResult,
   RequestGateInput,
@@ -106,6 +113,7 @@ let tempAllowMinutes: number | null = null;
 let blockedSitesLoaded = false;
 let temporaryAllowStateLoaded = false;
 let dailyStatsUpdateQueue: Promise<unknown> = Promise.resolve();
+let temporaryAllowRequestQueue: Promise<unknown> = Promise.resolve();
 
 let selectedAccessEffectIds = [...DEFAULT_ACCESS_EFFECT_IDS];
 
@@ -595,6 +603,17 @@ const withLastErrorLog =
     }
     next?.();
   };
+
+const TEMPORARILY_ALLOW_CONTEXT_MENU_ID = "temporarily-allow";
+const TEMPORARILY_ALLOW_CONTEXT_MENU_TITLE = "Temporarily allow this site";
+
+const setTemporaryAllowContextMenuTitle = (title: string) => {
+  chrome.contextMenus.update(
+    TEMPORARILY_ALLOW_CONTEXT_MENU_ID,
+    { title },
+    withLastErrorLog("contextMenus.update(temporary allow)")
+  );
+};
 
 const updateDynamicRulesAsync = (
   options: any
@@ -1675,6 +1694,49 @@ type TemporaryAllowResult = {
   model?: string | null;
 };
 
+type TemporaryAllowWaitingResult = {
+  ok: false;
+  waiting: true;
+  allowCountToday: number;
+  delaySeconds: number;
+  remainingSeconds: number;
+  readyAt: number;
+};
+
+const getIncreasingAllowDelayEnabled = (): Promise<boolean> =>
+  getSyncStorageItems({
+    [STORAGE_KEYS.increasingAllowDelayEnabled]:
+      DEFAULT_INCREASING_ALLOW_DELAY_ENABLED,
+  }).then(
+    (items) => items[STORAGE_KEYS.increasingAllowDelayEnabled] === true
+  );
+
+const getPendingTemporaryAllowDelay =
+  async (): Promise<PendingTemporaryAllowDelay | null> => {
+    const items = await getLocalStorageItems({
+      [STORAGE_KEYS.pendingTemporaryAllowDelay]: null,
+    });
+    return normalizePendingTemporaryAllowDelay(
+      items[STORAGE_KEYS.pendingTemporaryAllowDelay]
+    );
+  };
+
+const setPendingTemporaryAllowDelay = (
+  pending: PendingTemporaryAllowDelay | null
+): Promise<void> =>
+  new Promise((resolve) => {
+    chrome.storage.local.set(
+      { [STORAGE_KEYS.pendingTemporaryAllowDelay]: pending },
+      () => resolve()
+    );
+  });
+
+const queueTemporaryAllowRequest = <T>(task: () => Promise<T>): Promise<T> => {
+  const queued = temporaryAllowRequestQueue.then(task, task);
+  temporaryAllowRequestQueue = queued.catch(() => undefined);
+  return queued;
+};
+
 const applyTemporaryAllowDecision = async (
   decision: AccessGateDecision,
   source: string | null = null
@@ -1723,7 +1785,7 @@ const applyTemporaryAllowDecision = async (
 const temporarilyAllowFromUrl = async (
   payload: TemporarilyAllowTabMessage,
   sender?: any
-): Promise<TemporaryAllowResult> => {
+): Promise<TemporaryAllowResult | TemporaryAllowWaitingResult> => {
   const defaultMinutes = await getTempAllowMinutes();
   const requestedScope = payload.scope === "url" ? "url" : "domain";
   const requestedUrl =
@@ -1740,7 +1802,52 @@ const temporarilyAllowFromUrl = async (
     blockedSites,
     defaultMinutes,
   });
-  return applyTemporaryAllowDecision(decision, "temporary-allow");
+  const application = buildDecisionApplication(decision);
+  if (application.operation === "none") {
+    return applyTemporaryAllowDecision(decision, "temporary-allow");
+  }
+
+  const [delayEnabled, stats, pending] = await Promise.all([
+    getIncreasingAllowDelayEnabled(),
+    getDailyStats(),
+    getPendingTemporaryAllowDelay(),
+  ]);
+  const delay = evaluateTemporaryAllowDelay({
+    enabled: delayEnabled,
+    successfulAllowsToday: stats.temporaryAllowsToday,
+    dayKey: stats.dayKey,
+    targetKey: buildTemporaryAllowDelayTargetKey({
+      scope: application.scope,
+      host: application.host,
+      url: application.operation === "allow-url" ? application.url : null,
+    }),
+    pending,
+  });
+
+  if (delay.status === "waiting") {
+    await setPendingTemporaryAllowDelay(delay.pending);
+    setTemporaryAllowContextMenuTitle(
+      `Wait ${delay.remainingSeconds}s, then choose again`
+    );
+    return {
+      ok: false,
+      waiting: true,
+      allowCountToday: delay.allowCountToday,
+      delaySeconds: delay.delaySeconds,
+      remainingSeconds: delay.remainingSeconds,
+      readyAt: delay.readyAt,
+    };
+  }
+
+  const allowResult = await applyTemporaryAllowDecision(
+    decision,
+    "temporary-allow"
+  );
+  if (allowResult.ok || !delayEnabled) {
+    await setPendingTemporaryAllowDelay(null);
+    setTemporaryAllowContextMenuTitle(TEMPORARILY_ALLOW_CONTEXT_MENU_TITLE);
+  }
+  return allowResult;
 };
 
 const getRequestUrlContext = async (
@@ -2899,35 +3006,41 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
     return true;
   }
   if (message?.type === TEMPORARY_ALLOW_MESSAGE_TYPE) {
-    temporarilyAllowFromUrl(message as TemporarilyAllowTabMessage, sender)
-      .then(async (allowResult) => {
-        if (allowResult.ok) {
-          await updateDailyStats((stats) =>
-            withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
-              scope: allowResult.scope,
-              source: "one-click",
-              url: allowResult.url,
-            })
-          );
-        }
-        const destination =
-          allowResult.ok && allowResult.scope === "url"
-            ? allowResult.url
-            : allowResult.ok
-            ? await getTemporarilyAllowedDestination(
-                message as TemporarilyAllowTabMessage,
-                sender,
-                {
-                  getLedgerUrl: getLastNavigatedUrlForTab,
-                  getTabNavigatedHttpUrl,
-                }
-              )
-            : null;
-        return {
-          ok: allowResult.ok,
-          destination,
-        };
-      })
+    queueTemporaryAllowRequest(async () => {
+      const allowResult = await temporarilyAllowFromUrl(
+        message as TemporarilyAllowTabMessage,
+        sender
+      );
+      if ("waiting" in allowResult && allowResult.waiting) {
+        return allowResult;
+      }
+      if (allowResult.ok) {
+        await updateDailyStats((stats) =>
+          withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
+            scope: allowResult.scope,
+            source: "one-click",
+            url: allowResult.url,
+          })
+        );
+      }
+      const destination =
+        allowResult.ok && allowResult.scope === "url"
+          ? allowResult.url
+          : allowResult.ok
+          ? await getTemporarilyAllowedDestination(
+              message as TemporarilyAllowTabMessage,
+              sender,
+              {
+                getLedgerUrl: getLastNavigatedUrlForTab,
+                getTabNavigatedHttpUrl,
+              }
+            )
+          : null;
+      return {
+        ok: allowResult.ok,
+        destination,
+      };
+    })
       .then((response) => sendResponse(response))
       .catch((error) => {
         console.warn("temporarily-allow-tab request failed", error);
@@ -3011,8 +3124,8 @@ if (chrome.runtime.onConnect) {
 chrome.runtime.onInstalled.addListener(() => {
   // Context menu: Temporarily allow current site.
   chrome.contextMenus.create({
-    id: "temporarily-allow",
-    title: "Temporarily allow this site",
+    id: TEMPORARILY_ALLOW_CONTEXT_MENU_ID,
+    title: TEMPORARILY_ALLOW_CONTEXT_MENU_TITLE,
     contexts: ["action"],
   });
 
@@ -3093,22 +3206,24 @@ chrome.alarms.onAlarm.addListener((alarm: { name: string }) => {
 chrome.contextMenus.onClicked.addListener((info: { menuItemId?: string | number }, tab?: ChromeTab) => {
   if (!tab?.url) return;
 
-  // Temporarily allow flow (unchanged; still works off rid or hostname fallback).
-  if (info.menuItemId === "temporarily-allow") {
-    temporarilyAllowFromUrl(
-      { type: "temporarily-allow-tab", url: tab.url, scope: "domain" },
-      { tab }
-    )
-      .then((allowResult) => {
-        if (!allowResult.ok) return;
-        return updateDailyStats((stats) =>
-          withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
-            scope: allowResult.scope,
-            source: "one-click",
-            url: allowResult.url,
-          })
-        );
-      })
+  if (info.menuItemId === TEMPORARILY_ALLOW_CONTEXT_MENU_ID) {
+    queueTemporaryAllowRequest(async () => {
+      const allowResult = await temporarilyAllowFromUrl(
+        { type: "temporarily-allow-tab", url: tab.url, scope: "domain" },
+        { tab }
+      );
+      if ("waiting" in allowResult && allowResult.waiting) {
+        return;
+      }
+      if (!allowResult.ok) return;
+      await updateDailyStats((stats) =>
+        withTemporaryAllow(stats, allowResult.host, allowResult.minutes, Date.now(), {
+          scope: allowResult.scope,
+          source: "one-click",
+          url: allowResult.url,
+        })
+      );
+    })
       .catch((error) => {
         console.warn("context menu temporary allow failed", error);
       });

@@ -26,6 +26,13 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
 - [ ] Open the blocked domain and confirm it redirects to the block page with
       the blocked site name shown.
 - [ ] Click one-click temporary allow and confirm the original site opens.
+- [ ] Enable the increasing allow delay, re-block after the first successful
+      allow of the day, and confirm the next one-click allow shows a 5-second
+      countdown followed by an enabled "Allow now" confirmation.
+- [ ] Confirm repeated global allows increase the wait to 10, 20, 40, and then
+      no more than 60 seconds, including when switching to a different site.
+- [ ] Confirm the popup uses the same global countdown and cannot grant access
+      early.
 - [ ] Confirm the extension badge shows an active temporary allow state.
 - [ ] Leave the site active briefly and confirm Local Stats records temporary
       access usage time.
@@ -45,9 +52,9 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       or saving.
 - [ ] Confirm duplicate blocked-site entries are removed.
 - [ ] Confirm overlapping domains produce the settings warning text.
-- [ ] Save changes to temporary allow minutes, access effects, block-page
-      alternatives, and secondary action toggles, then reload Settings and
-      confirm values persist.
+- [ ] Save changes to temporary allow minutes, increasing delay, access effects,
+      block-page alternatives, and secondary action toggles, then reload Settings
+      and confirm values persist.
 - [ ] Add a block-page alternative with a link using
       `Label | https://example.com`, save, and confirm the block page renders it
       as a clickable list item.

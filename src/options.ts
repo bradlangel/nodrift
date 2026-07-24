@@ -14,6 +14,7 @@ import {
   DEFAULT_GITHUB_CONTRIBUTION_RECENT_WINDOW_MINUTES,
   DEFAULT_GITHUB_CONTRIBUTION_USERNAME,
   DEFAULT_GRAYSCALE_ON_TEMP_ALLOW,
+  DEFAULT_INCREASING_ALLOW_DELAY_ENABLED,
   GRAYSCALE_ACCESS_EFFECT_ID,
   DEFAULT_LLM_LEISURE_ALLOWANCE,
   DEFAULT_LLM_PROVIDER,
@@ -471,6 +472,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const cleanSitesBtn = document.getElementById("clean-sites");
   const saveBtn = document.getElementById("save");
   const minutesInput = document.getElementById("temp-allow-minutes");
+  const increasingAllowDelayCheckbox = document.getElementById(
+    "increasing-allow-delay-enabled"
+  );
   const alternativesInput = document.getElementById("block-page-alternatives");
   const accessEffectList = document.getElementById("access-effect-list");
   const showPeekCheckbox = document.getElementById("show-chatgpt-peek");
@@ -483,6 +487,7 @@ document.addEventListener("DOMContentLoaded", () => {
     !(cleanSitesBtn instanceof HTMLButtonElement) ||
     !(saveBtn instanceof HTMLButtonElement) ||
     !(minutesInput instanceof HTMLInputElement) ||
+    !(increasingAllowDelayCheckbox instanceof HTMLInputElement) ||
     !(alternativesInput instanceof HTMLTextAreaElement) ||
     !(accessEffectList instanceof HTMLElement) ||
     !(showPeekCheckbox instanceof HTMLInputElement) ||
@@ -900,6 +905,8 @@ document.addEventListener("DOMContentLoaded", () => {
       {
         blockedSites: DEFAULT_BLOCKED_SITES,
         tempAllowMinutes: DEFAULT_TEMP_ALLOW_MINUTES,
+        [STORAGE_KEYS.increasingAllowDelayEnabled]:
+          DEFAULT_INCREASING_ALLOW_DELAY_ENABLED,
         accessGateActionId: DEFAULT_ACCESS_GATE_ACTION_ID,
         showChatGptPeek: DEFAULT_SHOW_CHATGPT_PEEK,
         blockPageAlternatives: DEFAULT_BLOCK_PAGE_ALTERNATIVES,
@@ -923,6 +930,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
           textarea.value = storedBlockedSites.join("\n");
           minutesInput.value = String(syncData.tempAllowMinutes);
+          increasingAllowDelayCheckbox.checked =
+            syncData[STORAGE_KEYS.increasingAllowDelayEnabled] === true;
           initializeDefaultGateActionId(syncData.accessGateActionId);
           showPeekCheckbox.checked = syncData.showChatGptPeek !== false;
           alternativesInput.value = normalizeStoredAlternatives(
@@ -998,6 +1007,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const accessGateActionId = normalizeDefaultGateActionId(defaultGateActionId);
     const minutes = parseInt(minutesInput.value, 10) || DEFAULT_TEMP_ALLOW_MINUTES;
+    const increasingAllowDelayEnabled = increasingAllowDelayCheckbox.checked;
     const blockPageAlternatives = normalizeAlternativeLines(alternativesInput.value);
     const accessEffectIds = getSelectedAccessEffectIds();
     const grayscaleOnTemporaryAllow = accessEffectIds.includes(GRAYSCALE_ACCESS_EFFECT_ID);
@@ -1029,6 +1039,8 @@ document.addEventListener("DOMContentLoaded", () => {
       {
         blockedSites: normalizedSites,
         tempAllowMinutes: minutes,
+        [STORAGE_KEYS.increasingAllowDelayEnabled]:
+          increasingAllowDelayEnabled,
         accessGateActionId,
         showChatGptPeek,
         blockPageAlternatives,

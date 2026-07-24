@@ -57,6 +57,9 @@ background worker owns browser orchestration, side effects, and persistence.
   session with CSS or other browser-side friction.
 - Decision shaping for temporary allow lives in `src/access-decisions.ts` and
   `src/gates/temporary-allow/`.
+- The optional global daily backoff policy is pure logic in
+  `src/temporary-allow-delay.ts`; `src/block.ts` persists and enforces pending
+  waits before applying one-click temporary access.
 - LLM-reviewed request decisions, policy, and provider adapters live in
   `src/gates/llm-reviewed/`.
 - Decision-to-application planning lives in `src/core/decision-application.ts`.

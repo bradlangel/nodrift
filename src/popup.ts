@@ -14,7 +14,17 @@ type ActiveGrantDetails = {
   purpose?: string;
 };
 
+type TemporaryAllowMessageResponse = {
+  ok?: boolean;
+  error?: string;
+  waiting?: boolean;
+  allowCountToday?: number;
+  remainingSeconds?: number;
+  readyAt?: number;
+};
+
 let activeTab: ActiveTab | null = null;
+let allowCountdownTimer: ReturnType<typeof window.setInterval> | null = null;
 
 const REQUIRED_HOST_ORIGINS = ["<all_urls>"];
 
@@ -30,6 +40,55 @@ const enableHostPermissionBtn = document.getElementById(
 
 const setStatus = (message: string): void => {
   statusEl.textContent = message;
+};
+
+const stopAllowCountdown = (): void => {
+  if (allowCountdownTimer !== null) {
+    window.clearInterval(allowCountdownTimer);
+    allowCountdownTimer = null;
+  }
+};
+
+const startAllowCountdown = (
+  response: TemporaryAllowMessageResponse
+): void => {
+  stopAllowCountdown();
+  const allowCountToday = Math.max(
+    Math.floor(Number(response.allowCountToday) || 0),
+    0
+  );
+  const readyAt =
+    Number.isFinite(Number(response.readyAt)) && Number(response.readyAt) > 0
+      ? Number(response.readyAt)
+      : Date.now() +
+        Math.max(Number(response.remainingSeconds) || 0, 0) * 1000;
+  const countLabel = `${allowCountToday} ${
+    allowCountToday === 1 ? "allow" : "allows"
+  } today`;
+
+  const render = (): void => {
+    const remainingSeconds = Math.max(
+      Math.ceil((readyAt - Date.now()) / 1000),
+      0
+    );
+    if (remainingSeconds > 0) {
+      allowBtn.disabled = true;
+      reblockBtn.disabled = false;
+      allowBtn.textContent = `Available in ${remainingSeconds}s`;
+      setStatus(`Increasing delay after ${countLabel}.`);
+      return;
+    }
+    stopAllowCountdown();
+    allowBtn.disabled = false;
+    reblockBtn.disabled = false;
+    allowBtn.textContent = "Allow now";
+    setStatus(`Delay complete after ${countLabel}.`);
+  };
+
+  render();
+  if (allowBtn.disabled) {
+    allowCountdownTimer = window.setInterval(render, 250);
+  }
 };
 
 const setHostPermissionVisible = (visible: boolean): void => {
@@ -152,6 +211,7 @@ const sendTabMessage = (type: string): void => {
     return;
   }
 
+  stopAllowCountdown();
   allowBtn.disabled = true;
   reblockBtn.disabled = true;
   setStatus("Working...");
@@ -162,20 +222,28 @@ const sendTabMessage = (type: string): void => {
       tabId: activeTab.id,
       url: activeTab.url,
     },
-    (response: { ok?: boolean; error?: string }) => {
+    (response: TemporaryAllowMessageResponse) => {
       allowBtn.disabled = false;
       reblockBtn.disabled = false;
 
       if (chrome.runtime.lastError) {
+        allowBtn.textContent = "Temporarily allow";
         setStatus(chrome.runtime.lastError.message || "Action failed.");
         return;
       }
 
+      if (type === "temporarily-allow-tab" && response?.waiting) {
+        startAllowCountdown(response);
+        return;
+      }
+
       if (response?.ok) {
+        allowBtn.textContent = "Temporarily allow";
         setStatus(type === "temporarily-allow-tab" ? "Temporarily allowed." : "Re-blocked.");
         return;
       }
 
+      allowBtn.textContent = "Temporarily allow";
       setStatus(response?.error || "Action could not be applied.");
     }
   );
