@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testMatch: "**/*.visual.spec.mjs",
   outputDir: "test-results/playwright",
   snapshotPathTemplate:
     "{testDir}/__screenshots__/{testFilePath}/{projectName}/{arg}{ext}",

@@ -8,6 +8,8 @@
     "test": "npm run build && node tests/browser-compat.test.mjs && node tests/release-targets.test.mjs && node tests/access-decisions.test.mjs && node tests/temporary-allow-delay.test.mjs && node tests/stats.test.mjs && node tests/access-effects/registry.test.mjs && node tests/gates/registry.test.mjs && node tests/gates/temporary-allow/gate.test.mjs && node tests/gates/if-then-intention/gate.test.mjs && node tests/gates/built-gate/gate.test.mjs && node tests/gates/github-contribution/gate.test.mjs && node tests/gates/ai-study-quiz/gate.test.mjs && node tests/gates/llm-reviewed/decision.test.mjs && node tests/gates/llm-reviewed/providers/openai.test.mjs && node tests/gates/llm-reviewed/providers/chrome-local.test.mjs",
     "test:visual": "npm run build && playwright test",
     "test:visual:update": "npm run build && playwright test --update-snapshots",
+    "test:e2e:extension": "npm run build && playwright test --config=playwright.extension.config.mjs",
+    "demo:allow-delay": "npm run build && NODRIFT_RECORD_ALLOW_DELAY_DEMO=1 playwright test --config=playwright.extension.config.mjs --grep \"global increasing delay\"",
     "playwright:install": "playwright install chromium",
     "store:assets": "node scripts/create-store-assets.mjs",
     "release:zip": "npm test && node scripts/package-release.mjs",
