@@ -31,6 +31,8 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Refactor toward modular access gates and actions before adding more gate
       types.
 - [x] Keep the default block page to one visible temporary-allow action.
+- [x] Add an optional globally counted daily delay that increases after each
+      successful temporary allow and requires confirmation when the wait ends.
 - [x] Improve the options page styling and blocked-site editing experience.
 - [ ] Add a low-touch setup helper that suggests starter blocked sites and
       default configuration without making NoDrift feel prescriptive.

@@ -168,6 +168,11 @@
       margin-top: 4px;
     }
 
+    .checkbox-copy {
+      display: grid;
+      gap: 4px;
+    }
+
     .hint {
       font-size: 0.9rem;
       margin: 0;
@@ -520,6 +525,13 @@
             <input type="number" id="temp-allow-minutes" value="1" min="1" />
             <p class="hint">Access expires after this much real time. Stats separately track active time spent on temporarily allowed sites.</p>
           </div>
+          <label class="checkbox-row">
+            <input type="checkbox" id="increasing-allow-delay-enabled" />
+            <span class="checkbox-copy">
+              Increase the wait after repeated temporary access
+              <span class="hint">Uses the global successful allow count for the current day. The first allow is immediate, then waits increase through 5, 10, 20, 40, and 60 seconds.</span>
+            </span>
+          </label>
           <div class="field">
             <span class="label">Access effects</span>
             <p class="hint">Choose what temporarily allowed sites feel like after any gate approves access.</p>

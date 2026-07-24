@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NoDrift local test site</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        align-items: center;
+        background: #f4f7f6;
+        color: #172126;
+        display: grid;
+        margin: 0;
+        min-height: 100vh;
+        padding: 32px;
+      }
+
+      main {
+        background: #ffffff;
+        border: 1px solid #d7dfdc;
+        border-radius: 12px;
+        box-shadow: 0 14px 40px rgba(23, 33, 38, 0.08);
+        margin: 0 auto;
+        max-width: 620px;
+        padding: 36px;
+        width: 100%;
+      }
+
+      .eyebrow {
+        color: #176b5d;
+        font-size: 0.8rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: 2rem;
+        margin: 10px 0 12px;
+      }
+
+      p {
+        color: #52615d;
+        line-height: 1.55;
+        margin: 0;
+      }
+
+      code {
+        color: #176b5d;
+        font-weight: 750;
+      }
+    </style>
+  </head>
+  <body>
+    <main data-testid="local-site">
+      <div class="eyebrow">Deterministic Playwright fixture</div>
+      <h1>Temporary access granted</h1>
+      <p>
+        NoDrift opened the local site at
+        <code data-testid="fixture-host"></code>.
+      </p>
+    </main>
+    <script>
+      document.querySelector('[data-testid="fixture-host"]').textContent =
+        window.location.host;
+    </script>
+  </body>
+</html>

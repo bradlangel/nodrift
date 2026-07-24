@@ -480,10 +480,57 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
   const button = document.getElementById(buttonId);
   if (!button) return;
   const originalLabel = button.textContent || DEFAULT_TEMPORARY_ALLOW_BTN_TEXT;
+  let countdownTimer = null;
+
+  const stopCountdown = () => {
+    if (countdownTimer !== null) {
+      window.clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  };
+
+  const startCountdown = (response) => {
+    stopCountdown();
+    const allowCountToday = Math.max(
+      Math.floor(Number(response.allowCountToday) || 0),
+      0
+    );
+    const readyAt =
+      Number.isFinite(Number(response.readyAt)) && Number(response.readyAt) > 0
+        ? Number(response.readyAt)
+        : Date.now() + Math.max(Number(response.remainingSeconds) || 0, 0) * 1000;
+    const countLabel = `${allowCountToday} ${
+      allowCountToday === 1 ? "allow" : "allows"
+    } today`;
+
+    const render = () => {
+      const remainingSeconds = Math.max(
+        Math.ceil((readyAt - Date.now()) / 1000),
+        0
+      );
+      if (remainingSeconds > 0) {
+        button.disabled = true;
+        button.textContent = `Available in ${remainingSeconds}s · ${countLabel}`;
+        button.title = `The increasing delay uses all successful temporary allows today.`;
+        return;
+      }
+      stopCountdown();
+      button.disabled = false;
+      button.textContent = "Allow now";
+      button.title = `Delay complete after ${countLabel}.`;
+    };
+
+    render();
+    if (button.disabled) {
+      countdownTimer = window.setInterval(render, 250);
+    }
+  };
 
   button.addEventListener("click", () => {
+    stopCountdown();
     button.disabled = true;
     button.textContent = pendingLabel;
+    button.title = "";
 
     chrome.runtime.sendMessage(
       {
@@ -499,6 +546,11 @@ const wireTemporaryAllowButton = (buttonId, scope, pendingLabel) => {
             button.textContent = label;
           }, delay);
         };
+
+        if (!chrome.runtime.lastError && response?.waiting) {
+          startCountdown(response);
+          return;
+        }
 
         if (chrome.runtime.lastError || !response?.ok) {
           console.warn(
