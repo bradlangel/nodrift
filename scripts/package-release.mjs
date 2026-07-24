@@ -12,6 +12,12 @@ const releaseDir = path.join(repoRoot, "release");
 const manifestFile = "manifest.json";
 const distDir = "dist";
 const releaseTargets = new Set(["chrome", "firefox"]);
+const firefoxOptionalProviderDataCollectionPermissions = [
+  "authenticationInfo",
+  "browsingActivity",
+  "technicalAndInteraction",
+  "websiteContent",
+];
 
 function fail(message) {
   console.error(`release:zip failed: ${message}`);
@@ -79,7 +85,12 @@ function buildFirefoxManifest(baseManifest) {
         process.env.FIREFOX_EXTENSION_ID ||
         existingGeckoSettings.id ||
         "nodrift@bradlangel.github.io",
-      strict_min_version: existingGeckoSettings.strict_min_version || "113.0",
+      strict_min_version: existingGeckoSettings.strict_min_version || "142.0",
+      data_collection_permissions:
+        existingGeckoSettings.data_collection_permissions || {
+          required: ["none"],
+          optional: firefoxOptionalProviderDataCollectionPermissions,
+        },
     },
   };
 

@@ -82,6 +82,9 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
 
 - [ ] Open Gate builder in Settings, describe a gate, generate a gate program
       with OpenAI configured, set it as the default, and save.
+- [ ] In Firefox, confirm the OpenAI data-sharing prompt appears before the
+      first Gate Builder generation and that declining it prevents the provider
+      request.
 - [ ] Open a blocked site and confirm the block page uses the generated gate
       name and questions.
 - [ ] Submit answers that satisfy the generated program and confirm access is
@@ -104,6 +107,8 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
       confirm the block page disables the request with a setup message.
 - [ ] Configure OpenAI provider with a model and API key, save, reload Settings,
       and confirm it remains ready.
+- [ ] In Firefox, confirm the OpenAI data-sharing prompt appears before the
+      first AI-reviewed request and that declining it leaves the site blocked.
 - [ ] With OpenAI configured, submit one specific bounded request and one vague
       request, then confirm approvals or denials are applied and recorded with
       provider/model metadata.
@@ -115,6 +120,8 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
 ## Navigation And Cleanup
 
 - [ ] Confirm the block page links to More stats and Settings.
+- [ ] In Firefox, confirm Peek with ChatGPT asks for optional data-sharing
+      consent before collecting a snapshot or opening ChatGPT.
 - [ ] Confirm the action popup can temporarily allow the active site.
 - [ ] Confirm the action popup can re-block all temporary allows.
 - [ ] Reload the extension card and confirm configured settings and today's

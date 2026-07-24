@@ -178,6 +178,21 @@ Chrome local AI provider settings are disabled in Firefox because the Chrome
 Prompt API is not available there. Use the OpenAI provider path for AI-reviewed
 gates in Firefox.
 
+## Firefox AMO Submission
+
+Prepare the Firefox runtime ZIP and matching source-review ZIP:
+
+```sh
+npm run release:amo:firefox
+```
+
+This runs the Firefox validation flow, then writes
+`release/nodrift-firefox-${VERSION}.zip` and
+`release/nodrift-firefox-source-${VERSION}.zip`. The source archive contains the
+TypeScript source, lockfile, reviewer build instructions, and submission notes
+needed for AMO source review. See [AMO_SUBMISSION.md](AMO_SUBMISSION.md) for the
+full checklist, permission rationale, and optional `web-ext` commands.
+
 ## How It Works
 
 Settings are managed from the extension options page. Blocked sites are stored as

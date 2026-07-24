@@ -4,6 +4,12 @@ import {
   DEFAULT_TEMP_ALLOW_MINUTES,
 } from "./defaults.js";
 import { isExtensionPageUrl } from "./browser-compat.js";
+import {
+  ensureFirefoxDataCollectionConsent,
+  FIREFOX_OPENAI_ACCESS_REVIEW_DATA_COLLECTION_PERMISSIONS,
+  FIREFOX_OPENAI_AUTH_DATA_COLLECTION_PERMISSIONS,
+  FIREFOX_PEEK_CHATGPT_DATA_COLLECTION_PERMISSIONS,
+} from "./data-collection-consent.js";
 
 type BlockPageAction = {
   id: string;
@@ -423,9 +429,32 @@ const wirePeekChatGptButton = () => {
   if (isExtensionPageUrl(attemptedUrl)) {
     attemptedUrl = "";
   }
-  peekBtn.addEventListener("click", () => {
+  peekBtn.addEventListener("click", async () => {
+    const reset = (label = originalLabel, delay = 0) => {
+      window.setTimeout(() => {
+        peekBtn.disabled = false;
+        peekBtn.textContent = label;
+      }, delay);
+    };
+
     peekBtn.disabled = true;
     peekBtn.textContent = "Collecting page snapshot...";
+
+    try {
+      await ensureFirefoxDataCollectionConsent(
+        FIREFOX_PEEK_CHATGPT_DATA_COLLECTION_PERMISSIONS,
+        "Peek with ChatGPT"
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Firefox did not grant data sharing for Peek with ChatGPT.";
+      console.warn("Peek with ChatGPT data permission failed", error);
+      reset(message, 0);
+      reset(originalLabel, 4000);
+      return;
+    }
 
     chrome.runtime.sendMessage(
       {
@@ -434,13 +463,6 @@ const wirePeekChatGptButton = () => {
         originalUrl: attemptedUrl || null,
       },
       (response) => {
-        const reset = (label = originalLabel, delay = 0) => {
-          window.setTimeout(() => {
-            peekBtn.disabled = false;
-            peekBtn.textContent = label;
-          }, delay);
-        };
-
         if (chrome.runtime.lastError) {
           console.warn("Peek with ChatGPT failed", chrome.runtime.lastError.message);
           reset("Prompt copied — paste into ChatGPT", 0);
@@ -807,7 +829,7 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     setRequestMode(document.querySelector(`[data-message-type="${activeRequestMessageType}"]`));
   });
 
-  submitBtn.addEventListener("click", () => {
+  submitBtn.addEventListener("click", async () => {
     const purpose = purposeEl.value.trim();
 
     if (!purpose) {
@@ -819,6 +841,29 @@ const wireRequestAccessForm = (configuredGateAction = null) => {
     purposeEl.disabled = true;
     submitBtn.textContent = getActiveWaitingLabel();
     const payload = buildRequestPayload(purpose);
+
+    try {
+      if (activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE) {
+        await ensureFirefoxDataCollectionConsent(
+          FIREFOX_OPENAI_ACCESS_REVIEW_DATA_COLLECTION_PERMISSIONS,
+          "OpenAI access review"
+        );
+      } else if (activeRequestMessageType === REQUEST_AI_STUDY_QUIZ_MESSAGE_TYPE) {
+        await ensureFirefoxDataCollectionConsent(
+          FIREFOX_OPENAI_AUTH_DATA_COLLECTION_PERMISSIONS,
+          "OpenAI study quiz"
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Firefox did not grant data sharing for this external provider feature.";
+      console.warn("Request access data permission failed", error);
+      resetSubmitButton();
+      setResult(message, "fail");
+      return;
+    }
 
     if (
       activeRequestMessageType === REQUEST_LLM_REVIEWED_MESSAGE_TYPE &&

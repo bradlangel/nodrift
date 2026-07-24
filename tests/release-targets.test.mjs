@@ -41,7 +41,19 @@ test("Firefox target manifest uses background scripts and Gecko settings", async
   );
   assert.equal(
     manifest.browser_specific_settings.gecko.strict_min_version,
-    "113.0"
+    "142.0"
+  );
+  assert.deepEqual(
+    manifest.browser_specific_settings.gecko.data_collection_permissions,
+    {
+      required: ["none"],
+      optional: [
+        "authenticationInfo",
+        "browsingActivity",
+        "technicalAndInteraction",
+        "websiteContent",
+      ],
+    }
   );
 });
 

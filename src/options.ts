@@ -30,6 +30,10 @@ import {
   normalizeAccessEffectIds,
 } from "./access-effects/registry.js";
 import {
+  ensureFirefoxDataCollectionConsent,
+  FIREFOX_OPENAI_AUTH_DATA_COLLECTION_PERMISSIONS,
+} from "./data-collection-consent.js";
+import {
   getExtensionStoreListing,
   isChromeLocalAiSupportedBrowser,
 } from "./browser-compat.js";
@@ -270,200 +274,279 @@ const escapeHtml = (value: unknown): string =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-const renderAccessEffectOption = (
-  effect: (typeof ACCESS_EFFECT_MODULES)[number]
-) => `
-  <label class="effect-card" for="access-effect-${escapeHtml(effect.id)}">
-    <input
-      type="checkbox"
-      id="access-effect-${escapeHtml(effect.id)}"
-      data-access-effect-id="${escapeHtml(effect.id)}"
-    />
-    <span class="effect-body">
-      <span class="effect-title">${escapeHtml(effect.label)}</span>
-      <span class="hint">${escapeHtml(effect.description)}</span>
-      ${
-        effect.timeline?.length
-          ? `<ol class="effect-timeline" aria-label="${escapeHtml(effect.label)} timing">
-              ${effect.timeline
-                .map(
-                  (step) => `
-                    <li>
-                      <span class="effect-step-when">
-                        <span data-effect-step-time="${escapeHtml(step.atPercent)}"></span>
-                      </span>
-                      <span class="effect-step-copy">
-                        <span class="effect-step-label">${escapeHtml(step.label)}</span>
-                        <span class="hint">${escapeHtml(step.description)}</span>
-                      </span>
-                    </li>
-                  `
-                )
-                .join("")}
-            </ol>`
-          : ""
-      }
-    </span>
-  </label>
-`;
-
-const renderAccessEffectList = (effectList: HTMLElement) => {
-  effectList.innerHTML = ACCESS_EFFECT_MODULES.map(renderAccessEffectOption).join("");
+const appendTextElement = <K extends keyof HTMLElementTagNameMap>(
+  parent: Node,
+  tagName: K,
+  text: string,
+  className = ""
+): HTMLElementTagNameMap[K] => {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = text;
+  parent.appendChild(element);
+  return element;
 };
 
-const renderTextField = (field: GateOptionsTextField) => `
-  <div class="field" id="${escapeHtml(field.id)}-field">
-    <label for="${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
-    ${
-      field.type === "textarea"
-        ? `<textarea
-            id="${escapeHtml(field.id)}"
-            ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}
-            ${field.rows ? `rows="${field.rows}"` : ""}
-            spellcheck="true"
-          ></textarea>`
-        : `<input
-            type="${escapeHtml(field.type)}"
-            id="${escapeHtml(field.id)}"
-            ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}
-            ${field.autocomplete ? `autocomplete="${escapeHtml(field.autocomplete)}"` : ""}
-          />`
-    }
-    ${field.hint ? `<p class="hint">${escapeHtml(field.hint)}</p>` : ""}
-  </div>
-`;
+const renderAccessEffectOption = (
+  effect: (typeof ACCESS_EFFECT_MODULES)[number]
+): HTMLLabelElement => {
+  const label = document.createElement("label");
+  label.className = "effect-card";
+  label.htmlFor = `access-effect-${effect.id}`;
+
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = `access-effect-${effect.id}`;
+  input.dataset.accessEffectId = effect.id;
+  label.appendChild(input);
+
+  const body = document.createElement("span");
+  body.className = "effect-body";
+  appendTextElement(body, "span", effect.label, "effect-title");
+  appendTextElement(body, "span", effect.description, "hint");
+
+  if (effect.timeline?.length) {
+    const timeline = document.createElement("ol");
+    timeline.className = "effect-timeline";
+    timeline.setAttribute("aria-label", `${effect.label} timing`);
+
+    effect.timeline.forEach((step) => {
+      const item = document.createElement("li");
+      const when = document.createElement("span");
+      when.className = "effect-step-when";
+      const time = document.createElement("span");
+      time.dataset.effectStepTime = String(step.atPercent);
+      when.appendChild(time);
+
+      const copy = document.createElement("span");
+      copy.className = "effect-step-copy";
+      appendTextElement(copy, "span", step.label, "effect-step-label");
+      appendTextElement(copy, "span", step.description, "hint");
+
+      item.append(when, copy);
+      timeline.appendChild(item);
+    });
+
+    body.appendChild(timeline);
+  }
+
+  label.appendChild(body);
+  return label;
+};
+
+const renderAccessEffectList = (effectList: HTMLElement) => {
+  effectList.replaceChildren(...ACCESS_EFFECT_MODULES.map(renderAccessEffectOption));
+};
+
+const renderTextField = (field: GateOptionsTextField): HTMLDivElement => {
+  const root = document.createElement("div");
+  root.className = "field";
+  root.id = `${field.id}-field`;
+
+  const label = appendTextElement(root, "label", field.label);
+  label.htmlFor = field.id;
+
+  if (field.type === "textarea") {
+    const textarea = document.createElement("textarea");
+    textarea.id = field.id;
+    textarea.spellcheck = true;
+    if (field.placeholder) textarea.placeholder = field.placeholder;
+    if (field.rows) textarea.rows = field.rows;
+    root.appendChild(textarea);
+  } else {
+    const input = document.createElement("input");
+    input.type = field.type;
+    input.id = field.id;
+    if (field.placeholder) input.placeholder = field.placeholder;
+    if (field.autocomplete) input.setAttribute("autocomplete", field.autocomplete);
+    root.appendChild(input);
+  }
+
+  if (field.hint) appendTextElement(root, "p", field.hint, "hint");
+  return root;
+};
 
 const renderProvider = (
   providerGroupName: string,
   provider: GateOptionsProvider
-) => `
-  <article class="provider-card" data-provider-card="${escapeHtml(provider.id)}">
-    <label class="provider-choice" for="${escapeHtml(providerGroupName)}-${escapeHtml(provider.id)}">
-      <input
-        type="radio"
-        id="${escapeHtml(providerGroupName)}-${escapeHtml(provider.id)}"
-        name="${escapeHtml(providerGroupName)}"
-        value="${escapeHtml(provider.id)}"
-      />
-      <span>
-        <span class="provider-title">${escapeHtml(provider.label)}</span>
-        <span class="hint">${escapeHtml(provider.description)}</span>
-      </span>
-    </label>
-    ${
-      provider.fields?.length || provider.hint
-        ? `<div class="provider-config">
-            ${provider.fields?.map(renderTextField).join("") ?? ""}
-            ${provider.hint ? `<p class="hint">${escapeHtml(provider.hint)}</p>` : ""}
-          </div>`
-        : ""
-    }
-  </article>
-`;
+): HTMLElement => {
+  const card = document.createElement("article");
+  card.className = "provider-card";
+  card.dataset.providerCard = provider.id;
 
-const renderRangeField = (field: GateOptionsRangeField) => `
-  <div class="field">
-    <label for="${escapeHtml(field.id)}">${escapeHtml(field.label)}</label>
-    <div class="range-row">
-      <input
-        type="range"
-        id="${escapeHtml(field.id)}"
-        min="${field.min}"
-        max="${field.max}"
-        step="${field.step}"
-        value="${escapeHtml(field.value)}"
-      />
-      <span id="${escapeHtml(field.labelId)}" class="range-value"></span>
-    </div>
-  </div>
-`;
+  const choice = document.createElement("label");
+  choice.className = "provider-choice";
+  choice.htmlFor = `${providerGroupName}-${provider.id}`;
 
-const renderButton = (button: GateOptionsButton) => `
-  <button type="button" class="secondary-button" id="${escapeHtml(button.id)}">
-    ${escapeHtml(button.label)}
-  </button>
-`;
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.id = `${providerGroupName}-${provider.id}`;
+  input.name = providerGroupName;
+  input.value = provider.id;
 
-const renderGateOptions = (module: GateModule) => {
-  const options = module.options;
-  if (!options) return "";
+  const copy = document.createElement("span");
+  appendTextElement(copy, "span", provider.label, "provider-title");
+  appendTextElement(copy, "span", provider.description, "hint");
 
-  const providerMarkup = options.providerGroup
-    ? `
-      <fieldset>
-        <legend class="label">${escapeHtml(options.providerGroup.legend)}</legend>
-        <div class="provider-list">
-          ${options.providerGroup.providers
-            .map((provider) =>
-              renderProvider(options.providerGroup!.inputName, provider)
-            )
-            .join("")}
-        </div>
-      </fieldset>
-    `
-    : "";
+  choice.append(input, copy);
+  card.appendChild(choice);
 
-  const rangeMarkup = options.rangeFields?.length
-    ? `<div class="field-row">${options.rangeFields.map(renderRangeField).join("")}</div>`
-    : "";
-  const textFieldsMarkup = options.textFields?.length
-    ? options.textFields.map(renderTextField).join("")
-    : "";
-  const buttonsMarkup = options.buttons?.length
-    ? `<div class="sites-actions">${options.buttons.map(renderButton).join("")}</div>`
-    : "";
+  if (provider.fields?.length || provider.hint) {
+    const config = document.createElement("div");
+    config.className = "provider-config";
+    provider.fields?.forEach((field) => config.appendChild(renderTextField(field)));
+    if (provider.hint) appendTextElement(config, "p", provider.hint, "hint");
+    card.appendChild(config);
+  }
 
-  const statusMarkup = options.statusId
-    ? `<p id="${escapeHtml(options.statusId)}" class="hint warning" aria-live="polite"></p>`
-    : "";
-  const panelMarkup =
-    providerMarkup || rangeMarkup || textFieldsMarkup || buttonsMarkup || statusMarkup
-      ? `<div class="llm-panel">
-          ${providerMarkup}
-          ${textFieldsMarkup}
-          ${buttonsMarkup}
-          ${rangeMarkup}
-          ${statusMarkup}
-        </div>`
-      : "";
-
-  return `
-    ${options.notes?.map((note) => `<p class="hint">${escapeHtml(note)}</p>`).join("") ?? ""}
-    ${panelMarkup}
-  `;
+  return card;
 };
 
-const renderGateCard = (module: GateModule) => {
+const renderRangeField = (field: GateOptionsRangeField): HTMLDivElement => {
+  const root = document.createElement("div");
+  root.className = "field";
+
+  const label = appendTextElement(root, "label", field.label);
+  label.htmlFor = field.id;
+
+  const row = document.createElement("div");
+  row.className = "range-row";
+
+  const input = document.createElement("input");
+  input.type = "range";
+  input.id = field.id;
+  input.min = String(field.min);
+  input.max = String(field.max);
+  input.step = String(field.step);
+  input.value = field.value;
+
+  const value = document.createElement("span");
+  value.id = field.labelId;
+  value.className = "range-value";
+
+  row.append(input, value);
+  root.appendChild(row);
+  return root;
+};
+
+const renderButton = (button: GateOptionsButton): HTMLButtonElement => {
+  const element = document.createElement("button");
+  element.type = "button";
+  element.className = "secondary-button";
+  element.id = button.id;
+  element.textContent = button.label;
+  return element;
+};
+
+const renderGateOptions = (module: GateModule): DocumentFragment => {
+  const fragment = document.createDocumentFragment();
+  const options = module.options;
+  if (!options) return fragment;
+
+  options.notes?.forEach((note) => appendTextElement(fragment, "p", note, "hint"));
+
+  const panel = document.createElement("div");
+  panel.className = "llm-panel";
+  let hasPanelContent = false;
+
+  if (options.providerGroup) {
+    const fieldset = document.createElement("fieldset");
+    appendTextElement(fieldset, "legend", options.providerGroup.legend, "label");
+    const providerList = document.createElement("div");
+    providerList.className = "provider-list";
+    options.providerGroup.providers.forEach((provider) => {
+      providerList.appendChild(
+        renderProvider(options.providerGroup!.inputName, provider)
+      );
+    });
+    fieldset.appendChild(providerList);
+    panel.appendChild(fieldset);
+    hasPanelContent = true;
+  }
+
+  options.textFields?.forEach((field) => {
+    panel.appendChild(renderTextField(field));
+    hasPanelContent = true;
+  });
+
+  if (options.buttons?.length) {
+    const actions = document.createElement("div");
+    actions.className = "sites-actions";
+    options.buttons.forEach((button) => actions.appendChild(renderButton(button)));
+    panel.appendChild(actions);
+    hasPanelContent = true;
+  }
+
+  if (options.rangeFields?.length) {
+    const row = document.createElement("div");
+    row.className = "field-row";
+    options.rangeFields.forEach((field) => row.appendChild(renderRangeField(field)));
+    panel.appendChild(row);
+    hasPanelContent = true;
+  }
+
+  if (options.statusId) {
+    const status = document.createElement("p");
+    status.id = options.statusId;
+    status.className = "hint warning";
+    status.setAttribute("aria-live", "polite");
+    panel.appendChild(status);
+    hasPanelContent = true;
+  }
+
+  if (hasPanelContent) fragment.appendChild(panel);
+  return fragment;
+};
+
+const renderGateCard = (module: GateModule): HTMLElement => {
   const action = module.action;
   const options = module.options;
   const actionLabel = action.settingsLabel || action.label;
   const cardDescription = options?.cardDescription || action.description;
   const detailsSummary = options?.detailsSummary || "Details";
 
-  return `
-    <article class="gate-card" data-gate-card="${escapeHtml(action.id)}">
-      <div class="gate-card-header">
-        <div>
-          <h3>${escapeHtml(actionLabel)}</h3>
-          <p class="hint">${escapeHtml(cardDescription)}</p>
-        </div>
-        <div class="gate-meta">
-          <span class="badge" data-gate-status="${escapeHtml(action.id)}"></span>
-          <button type="button" class="secondary-button" data-set-default="${escapeHtml(action.id)}">Set as default</button>
-        </div>
-      </div>
-      <details class="gate-details" data-gate-details="${escapeHtml(action.id)}">
-        <summary>${escapeHtml(detailsSummary)}</summary>
-        <div class="gate-details-body">
-          ${renderGateOptions(module)}
-        </div>
-      </details>
-    </article>
-  `;
+  const card = document.createElement("article");
+  card.className = "gate-card";
+  card.dataset.gateCard = action.id;
+
+  const header = document.createElement("div");
+  header.className = "gate-card-header";
+
+  const copy = document.createElement("div");
+  appendTextElement(copy, "h3", actionLabel);
+  appendTextElement(copy, "p", cardDescription, "hint");
+
+  const meta = document.createElement("div");
+  meta.className = "gate-meta";
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.dataset.gateStatus = action.id;
+  const setDefault = document.createElement("button");
+  setDefault.type = "button";
+  setDefault.className = "secondary-button";
+  setDefault.dataset.setDefault = action.id;
+  setDefault.textContent = "Set as default";
+  meta.append(badge, setDefault);
+
+  header.append(copy, meta);
+  card.appendChild(header);
+
+  const details = document.createElement("details");
+  details.className = "gate-details";
+  details.dataset.gateDetails = action.id;
+  appendTextElement(details, "summary", detailsSummary);
+
+  const body = document.createElement("div");
+  body.className = "gate-details-body";
+  body.appendChild(renderGateOptions(module));
+  details.appendChild(body);
+  card.appendChild(details);
+
+  return card;
 };
 
 const renderGateLibrary = (gateList: HTMLElement) => {
-  gateList.innerHTML = GATE_MODULES.map(renderGateCard).join("");
+  gateList.replaceChildren(...GATE_MODULES.map(renderGateCard));
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -826,6 +909,11 @@ document.addEventListener("DOMContentLoaded", () => {
     setBuiltGateStatus("Generating a dynamic gate program...", "hint");
 
     try {
+      await ensureFirefoxDataCollectionConsent(
+        FIREFOX_OPENAI_AUTH_DATA_COLLECTION_PERMISSIONS,
+        "OpenAI gate builder"
+      );
+
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
