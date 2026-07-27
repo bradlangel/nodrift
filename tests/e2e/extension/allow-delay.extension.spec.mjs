@@ -207,6 +207,36 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
 
     await expect.poll(() => getDynamicRuleCount(worker)).toBe(2);
 
+    const settingsPage = await context.newPage();
+    await settingsPage.goto(
+      `chrome-extension://${extensionId}/pages/options.html`
+    );
+    await expect(
+      settingsPage.getByRole("heading", { name: "Temporary Access" })
+    ).toBeVisible();
+
+    const beforeAccess = settingsPage.getByRole("region", {
+      name: "Entry friction",
+    });
+    await expect(beforeAccess.getByText("Before access")).toBeVisible();
+    await expect(
+      beforeAccess.getByText("Increasing wait", { exact: true })
+    ).toBeVisible();
+    await expect(
+      beforeAccess.locator("#increasing-allow-delay-enabled")
+    ).toBeChecked();
+
+    const duringAccess = settingsPage.getByRole("region", {
+      name: "Access effects",
+    });
+    await expect(duringAccess.getByText("During access")).toBeVisible();
+    await expect(duringAccess.locator(".effect-card")).toHaveCount(2);
+    await settingsPage.screenshot({
+      path: testInfo.outputPath("access-friction-settings.png"),
+      fullPage: true,
+    });
+    await settingsPage.close();
+
     const controlPage = await context.newPage();
     await controlPage.goto(
       `chrome-extension://${extensionId}/pages/stats.html`
