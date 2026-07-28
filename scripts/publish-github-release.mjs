@@ -19,6 +19,7 @@ const options = {
   allowNonMain: false,
   allowDirty: false,
   skipValidate: false,
+  expectedVersion: null,
   repo: null,
 };
 
@@ -28,8 +29,11 @@ for (const arg of process.argv.slice(2)) {
   else if (arg === "--allow-non-main") options.allowNonMain = true;
   else if (arg === "--allow-dirty") options.allowDirty = true;
   else if (arg === "--skip-validate") options.skipValidate = true;
-  else if (arg.startsWith("--repo=")) options.repo = arg.slice("--repo=".length);
-  else {
+  else if (arg.startsWith("--expected-version=")) {
+    options.expectedVersion = arg.slice("--expected-version=".length);
+  } else if (arg.startsWith("--repo=")) {
+    options.repo = arg.slice("--repo=".length);
+  } else {
     fail(`unknown argument: ${arg}`);
   }
 }
@@ -119,7 +123,23 @@ async function warnIfDryRunZipMissing(zipPath) {
   if (!(await zipExists(zipPath))) {
     console.warn(
       `Dry run: ${path.relative(repoRoot, zipPath)} does not exist yet. ` +
-        "A real release:github run creates it through release:validate."
+        "A real release:github run creates it through release validation."
+    );
+  }
+}
+
+function buildReleaseArtifactPaths(releaseVersion, baseDir = releaseDir) {
+  return [
+    path.join(baseDir, `nodrift-chrome-${releaseVersion}.zip`),
+    path.join(baseDir, `nodrift-firefox-${releaseVersion}.zip`),
+    path.join(baseDir, `nodrift-firefox-source-${releaseVersion}.zip`),
+  ];
+}
+
+function validateExpectedVersion(expectedVersion, releaseVersion) {
+  if (expectedVersion !== null && expectedVersion !== releaseVersion) {
+    throw new Error(
+      `requested version ${expectedVersion} does not match manifest version ${releaseVersion}`
     );
   }
 }
@@ -137,15 +157,6 @@ function assertMainBranch() {
   const branch = trimCommandOutput("git", ["branch", "--show-current"]);
   if (branch !== "main") {
     fail(`release:github must run from main; current branch is ${branch || "(detached)"}`);
-  }
-}
-
-function assertLocalTagDoesNotExist(tag) {
-  const localTag = run("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`], {
-    allowFailure: true,
-  });
-  if (localTag.status === 0) {
-    fail(`local tag already exists: ${tag}`);
   }
 }
 
@@ -167,14 +178,17 @@ function assertReleaseDoesNotExist(repo, tag) {
   }
 }
 
-async function confirmPublish(tag, repo, zipPath) {
+async function confirmPublish(tag, repo, artifactPaths) {
   if (options.dryRun || options.yes) return;
 
   const rl = createInterface({ input, output });
   try {
     console.log("");
     console.log(`About to publish ${tag} to ${repo}`);
-    console.log(`Artifact: ${path.relative(repoRoot, zipPath)}`);
+    console.log("Artifacts:");
+    artifactPaths.forEach((artifactPath) => {
+      console.log(`- ${path.relative(repoRoot, artifactPath)}`);
+    });
     const answer = await new Promise((resolve) => {
       rl.question(`Type ${tag} to create the tag and GitHub Release: `, resolve);
     });
@@ -186,68 +200,84 @@ async function confirmPublish(tag, repo, zipPath) {
   }
 }
 
-function createRelease(repo, tag, zipPath, releaseVersion) {
+function buildReleaseCommand({
+  repo,
+  tag,
+  artifactPaths,
+  releaseVersion,
+  target,
+}) {
   const isPrerelease = releaseVersion.includes("-");
-  const notes = isPrerelease
-    ? `Release candidate for NoDrift ${releaseVersion}.`
-    : `NoDrift ${releaseVersion}.`;
   const releaseArgs = [
     "release",
     "create",
     tag,
-    zipPath,
+    ...artifactPaths,
     "--repo",
     repo,
+    "--target",
+    target,
     "--title",
     `NoDrift ${tag}`,
-    "--notes",
-    notes,
+    "--generate-notes",
   ];
 
   if (isPrerelease) {
     releaseArgs.push("--prerelease");
+    releaseArgs.push("--latest=false");
+  } else {
+    releaseArgs.push("--latest");
   }
 
-  const commands = [
-    ["git", ["tag", "-a", tag, "-m", `NoDrift ${tag}`]],
-    ["git", ["push", "origin", tag]],
-    ["gh", releaseArgs],
-  ];
+  return ["gh", releaseArgs];
+}
+
+function createRelease(repo, tag, artifactPaths, releaseVersion, target) {
+  const command = buildReleaseCommand({
+    repo,
+    tag,
+    artifactPaths,
+    releaseVersion,
+    target,
+  });
 
   if (options.dryRun) {
     console.log("Dry run. Would run:");
-    commands.forEach(([command, args]) => printCommand(command, args));
+    printCommand(...command);
     return;
   }
 
-  for (const [command, args] of commands) {
-    run(command, args, { stdio: "inherit" });
-  }
+  run(...command, { stdio: "inherit" });
 }
 
 async function main() {
   const releaseVersion = await readReleaseVersion();
   const tag = `v${releaseVersion}`;
-  const zipPath = path.join(releaseDir, `nodrift-chrome-${releaseVersion}.zip`);
+  const artifactPaths = buildReleaseArtifactPaths(releaseVersion);
   const repo = getGitHubRepo();
+  const target = trimCommandOutput("git", ["rev-parse", "HEAD"]);
+
+  validateExpectedVersion(options.expectedVersion, releaseVersion);
 
   assertMainBranch();
   assertCleanWorktree();
 
   if (!options.skipValidate) {
     if (options.dryRun) {
-      console.log("Dry run. Skipping npm run release:validate.");
+      console.log(
+        "Dry run. Skipping npm run release:validate:chrome and npm run release:amo:firefox."
+      );
     } else {
-      run(npmCommand, ["run", "release:validate"], { stdio: "inherit" });
+      run(npmCommand, ["run", "release:validate:chrome"], { stdio: "inherit" });
+      run(npmCommand, ["run", "release:amo:firefox"], { stdio: "inherit" });
     }
   }
 
   if (options.dryRun) {
-    await warnIfDryRunZipMissing(zipPath);
+    await Promise.all(artifactPaths.map(warnIfDryRunZipMissing));
   } else {
-    await assertZipExists(zipPath);
+    await Promise.all(artifactPaths.map(assertZipExists));
   }
-  assertLocalTagDoesNotExist(tag);
 
   if (!options.dryRun) {
     run("gh", ["auth", "status", "--hostname", "github.com"], { stdio: "inherit" });
@@ -255,14 +285,25 @@ async function main() {
     assertReleaseDoesNotExist(repo, tag);
   }
 
-  await confirmPublish(tag, repo, zipPath);
-  createRelease(repo, tag, zipPath, releaseVersion);
+  await confirmPublish(tag, repo, artifactPaths);
+  createRelease(repo, tag, artifactPaths, releaseVersion, target);
 
   if (!options.dryRun) {
     console.log(`Published GitHub Release ${tag}: https://github.com/${repo}/releases/tag/${tag}`);
   }
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-});
+export {
+  buildReleaseArtifactPaths,
+  buildReleaseCommand,
+  validateExpectedVersion,
+};
+
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
+  });
+}
