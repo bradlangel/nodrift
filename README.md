@@ -126,19 +126,38 @@ integrity and contents, validates the generated manifest shape, then extracts
 the artifact to both `release/validate/nodrift-${TARGET}-${VERSION}` and a
 stable `release/validate/nodrift-${TARGET}-current` reload folder.
 
-After the release commit is merged to `main`, create the GitHub release from the
-manifest version:
+After the release commit is merged to `main`, publish it from GitHub:
+
+1. Open **Actions** → **Publish browser release**.
+2. Choose **Run workflow** from `main`.
+3. Enter the exact version from `manifest.json`, such as `1.0.4`.
+4. Run the workflow.
+
+The workflow refuses non-`main` refs and version mismatches. It runs the Chrome
+and Firefox release validation, builds the Firefox AMO source archive, creates
+the version tag and GitHub Release, generates release notes from the merged
+pull requests since the previous release, and attaches all three ZIPs:
+
+- `release/nodrift-chrome-${VERSION}.zip`
+- `release/nodrift-firefox-${VERSION}.zip`
+- `release/nodrift-firefox-source-${VERSION}.zip`
+
+The packaged artifacts are also retained with the workflow run for 30 days.
+Publishing to the Chrome Web Store and Firefox AMO remains a separate manual
+step.
+
+As a local fallback, create the same GitHub release from an updated, clean
+`main` checkout:
 
 ```sh
 npm run release:github
 ```
 
-`release:github` runs `release:validate`, derives the tag and ZIP path from
-`manifest.version_name` or `manifest.version`, creates an annotated Git tag,
-pushes it to `origin`, and creates a GitHub Release with the Chrome ZIP
-attached. Versions with a prerelease suffix, such as `1.0.0-rc.1`, are created
-as GitHub prereleases. The command refuses dirty worktrees and non-`main`
-branches by default, and asks you to type the tag before publishing.
+`release:github` derives the version from `manifest.version_name` or
+`manifest.version` and asks you to type the tag before publishing. Versions
+with a prerelease suffix, such as `1.0.0-rc.1`, are created as GitHub
+prereleases. The command refuses dirty worktrees and non-`main` branches by
+default.
 
 Preview the GitHub release commands without creating anything:
 

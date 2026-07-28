@@ -1,0 +1,77 @@
+name: Publish browser release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish (must exactly match manifest.json)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-browser-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Validate and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Require main branch
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          if [[ "$RELEASE_REF" != "refs/heads/main" ]]; then
+            echo "Releases must be dispatched from main; selected ref was $RELEASE_REF." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate, package, and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: >-
+          npm run release:github --
+          --yes
+          --allow-non-main
+          --expected-version="$REQUESTED_VERSION"
+
+      - name: Preserve packaged artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: nodrift-browser-release-${{ inputs.version }}
+          path: |
+            release/nodrift-chrome-${{ inputs.version }}.zip
+            release/nodrift-firefox-${{ inputs.version }}.zip
+            release/nodrift-firefox-source-${{ inputs.version }}.zip
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Add release summary
+        if: ${{ success() }}
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          echo "## Published NoDrift v${RELEASE_VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${RELEASE_VERSION}" >> "$GITHUB_STEP_SUMMARY"

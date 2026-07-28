@@ -22,6 +22,7 @@ const releaseDir = path.join(repoRoot, "release");
 const manifestPath = path.join(repoRoot, "manifest.json");
 
 const sourceEntries = [
+  ".github",
   ".gitignore",
   ".nvmrc",
   "AMO_SUBMISSION.md",
