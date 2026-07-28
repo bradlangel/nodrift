@@ -1,9 +1,10 @@
 import { createServer } from "node:http";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium, expect, test } from "@playwright/test";
+import { createReviewMomentRecorder } from "../review-highlights.mjs";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testDir, "../../..");
@@ -13,6 +14,9 @@ const fixturePath = path.join(
 );
 const recordDemo = process.env.NODRIFT_RECORD_ALLOW_DELAY_DEMO === "1";
 const demoDir = path.join(repoRoot, "test-results/demos");
+const { show: showReviewMoment } = createReviewMomentRecorder({
+  enabled: recordDemo,
+});
 
 const listen = (server) =>
   new Promise((resolve, reject) => {
@@ -159,6 +163,9 @@ const clickAllowAndWaitForSite = async (page, expectedUrl) => {
 
 test("global increasing delay works in the loaded extension", async ({}, testInfo) => {
   const { server, port } = await startFixtureServer();
+  if (recordDemo) {
+    await mkdir(demoDir, { recursive: true });
+  }
   const context = await chromium.launchPersistentContext(
     testInfo.outputPath("user-data"),
     {
@@ -207,7 +214,9 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
 
     await expect.poll(() => getDynamicRuleCount(worker)).toBe(2);
 
-    const settingsPage = await context.newPage();
+    targetPage = await context.newPage();
+    targetVideo = targetPage.video();
+    const settingsPage = recordDemo ? targetPage : await context.newPage();
     await settingsPage.goto(
       `chrome-extension://${extensionId}/pages/options.html`
     );
@@ -231,11 +240,20 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     });
     await expect(duringAccess.getByText("During access")).toBeVisible();
     await expect(duringAccess.locator(".effect-card")).toHaveCount(2);
-    await settingsPage.screenshot({
-      path: testInfo.outputPath("access-friction-settings.png"),
-      fullPage: true,
-    });
-    await settingsPage.close();
+    await showReviewMoment(
+      settingsPage,
+      beforeAccess.locator(".effect-card"),
+      "PR highlight: increasing wait is enabled by default",
+      {
+        screenshotPath: recordDemo
+          ? path.join(demoDir, "01-settings-increasing-wait.png")
+          : testInfo.outputPath("access-friction-settings.png"),
+        fullPage: !recordDemo,
+      }
+    );
+    if (!recordDemo) {
+      await settingsPage.close();
+    }
 
     const controlPage = await context.newPage();
     await controlPage.goto(
@@ -247,8 +265,6 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await expect(
       controlPage.locator("#wait-before-access-time")
     ).toHaveText("0s");
-    targetPage = await context.newPage();
-    targetVideo = targetPage.video();
 
     const firstSiteUrl = `http://127.0.0.1:${port}/first`;
     await openBlockedSite(targetPage, firstSiteUrl, "127.0.0.1");
@@ -278,8 +294,25 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     });
     expect(earlyAttempt.remainingSeconds).toBeGreaterThan(0);
     await expect.poll(() => getDynamicRuleCount(worker)).toBe(2);
+    await showReviewMoment(
+      targetPage,
+      allowButton,
+      "Repeated allow: the global daily count adds a 5-second wait",
+      {
+        screenshotPath: recordDemo
+          ? path.join(demoDir, "02-block-page-five-second-wait.png")
+          : undefined,
+        pauseMs: 900,
+      }
+    );
 
     await expect(allowButton).toHaveText("Allow now", { timeout: 7_000 });
+    await showReviewMoment(
+      targetPage,
+      allowButton,
+      "Wait complete: access still requires an explicit confirmation",
+      { pauseMs: 800 }
+    );
     await clickAllowAndWaitForSite(targetPage, firstSiteUrl);
     await expect.poll(async () => (await getStoredStats(worker))?.temporaryAllowsToday).toBe(2);
     await expect.poll(
@@ -290,18 +323,36 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await expect(
       controlPage.locator("#wait-before-access-time")
     ).toHaveText("5s");
-    await controlPage.setViewportSize({ width: 390, height: 844 });
+    const statsReviewPage = recordDemo ? targetPage : controlPage;
+    if (recordDemo) {
+      await statsReviewPage.goto(
+        `chrome-extension://${extensionId}/pages/stats.html`
+      );
+      await expect(
+        statsReviewPage.locator("#wait-before-access-time")
+      ).toHaveText("5s");
+    }
+    await statsReviewPage.setViewportSize({ width: 390, height: 844 });
     await expect
       .poll(() =>
-        controlPage.locator(".summary-grid").evaluate((element) =>
+        statsReviewPage.locator(".summary-grid").evaluate((element) =>
           getComputedStyle(element).gridTemplateColumns.split(" ").length
         )
       )
       .toBe(2);
-    await controlPage.screenshot({
-      path: testInfo.outputPath("stats-mobile-wait-time.png"),
-      fullPage: true,
-    });
+    await showReviewMoment(
+      statsReviewPage,
+      statsReviewPage.locator("#wait-before-access-summary"),
+      "New local stat: cumulative time spent waiting before access",
+      {
+        screenshotPath: recordDemo
+          ? path.join(demoDir, "03-stats-mobile-wait-time.png")
+          : testInfo.outputPath("stats-mobile-wait-time.png"),
+      }
+    );
+    if (recordDemo) {
+      await statsReviewPage.setViewportSize({ width: 1280, height: 720 });
+    }
 
     await reblockAllSites(controlPage, worker, 2);
     const secondSiteUrl = `http://localhost:${port}/second`;
@@ -312,6 +363,16 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await targetPage.locator("#temporarily-allow-btn").click();
     await expect(targetPage.locator("#temporarily-allow-btn")).toContainText(
       "Available in 10s · 2 allows today"
+    );
+    await showReviewMoment(
+      targetPage,
+      targetPage.locator("#temporarily-allow-btn"),
+      "Global behavior: a different site inherits the 10-second wait",
+      {
+        screenshotPath: recordDemo
+          ? path.join(demoDir, "04-global-count-across-sites.png")
+          : undefined,
+      }
     );
 
     const resetResponse = await sendExtensionMessage(controlPage, {
@@ -338,9 +399,6 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
       controlPage.locator("#wait-before-access-summary")
     ).toBeHidden();
   } finally {
-    if (recordDemo) {
-      await mkdir(demoDir, { recursive: true });
-    }
     await context.tracing.stop({ path: tracePath }).catch(() => undefined);
     const videoPath = recordDemo
       ? path.join(demoDir, "global-allow-delay-demo.webm")
@@ -352,6 +410,26 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await context.close();
     await videoSave;
     if (recordDemo && videoPath) {
+      await writeFile(
+        path.join(demoDir, "README.md"),
+        `# NoDrift visual review
+
+Generated from commit ${process.env.GITHUB_SHA || "local working tree"}.
+
+## Watch
+
+- \`global-allow-delay-demo.webm\`: annotated loaded-extension walkthrough
+- \`global-allow-delay-trace.zip\`: interactive Playwright trace
+
+## Key screenshots
+
+1. \`01-settings-increasing-wait.png\`: enabled-by-default entry friction
+2. \`02-block-page-five-second-wait.png\`: repeated-access countdown
+3. \`03-stats-mobile-wait-time.png\`: cumulative wait stat on mobile
+4. \`04-global-count-across-sites.png\`: global count applied to another site
+`,
+        "utf8"
+      );
       await testInfo.attach("global-allow-delay-demo", {
         path: videoPath,
         contentType: "video/webm",

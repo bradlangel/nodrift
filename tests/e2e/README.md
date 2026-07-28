@@ -42,10 +42,24 @@ Generate a passing demonstration video and trace:
 npm run demo:allow-delay
 ```
 
+Demo mode adds review-only outlines and captions at the important settings,
+countdown, cross-site, and stats states. These annotations are injected by
+Playwright after the extension loads; they are not part of the packaged
+extension.
+
 The stable artifacts are:
 
 - `test-results/demos/global-allow-delay-demo.webm`
 - `test-results/demos/global-allow-delay-trace.zip`
+- `test-results/demos/01-settings-increasing-wait.png`
+- `test-results/demos/02-block-page-five-second-wait.png`
+- `test-results/demos/03-stats-mobile-wait-time.png`
+- `test-results/demos/04-global-count-across-sites.png`
+
+GitHub CI compares the approved Access Effects snapshots, records this
+walkthrough, and uploads the visual review bundle for seven days. The workflow
+summary links directly to the bundle. If a snapshot comparison fails, the
+bundle also includes Playwright's actual and diff images.
 
 Open the trace with:
 
