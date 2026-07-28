@@ -2,15 +2,16 @@
 
 [Install NoDrift from the Chrome Web Store](https://chromewebstore.google.com/detail/hnehakhgloffpelfgleecfknkpkomhhl)
 
-Chrome is the published target today. Firefox can be built as a local extension
-artifact and should be manually verified before AMO submission.
+Chrome is the published target today. Firefox release and source-review
+artifacts are ready for final manual verification and AMO submission.
 
 This is a soft website blocker for interrupting autopilot. It redirects
 configured distracting domains to a block page, offers a small set of deliberate
 access gates, and keeps local stats so patterns are visible without remote
 telemetry.
 
-See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
+See [PRIVACY.md](PRIVACY.md) for the full privacy policy. NoDrift is available
+under the [MIT License](LICENSE).
 
 ## Architecture At A Glance
 
@@ -285,7 +286,7 @@ npm run store:assets
 Render only selected assets by passing their basename:
 
 ```sh
-npm run store:assets -- screenshot-block-page screenshot-settings
+npm run store:assets -- screenshot-block-page screenshot-settings screenshot-local-stats
 ```
 
 Final listing PNGs live in `store-assets/`. Temporary HTML render sources are
