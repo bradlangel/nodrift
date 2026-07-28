@@ -99,6 +99,27 @@ test("Manual workflow is guarded and preserves every release artifact", async ()
   );
 });
 
+test("GitHub workflows use Node 24-compatible action majors", async () => {
+  const workflows = await Promise.all(
+    ["ci.yml", "release.yml"].map((workflowName) =>
+      readFile(
+        new URL(`../.github/workflows/${workflowName}`, import.meta.url),
+        "utf8"
+      )
+    )
+  );
+
+  workflows.forEach((workflow) => {
+    assert.match(workflow, /actions\/checkout@v7/);
+    assert.match(workflow, /actions\/setup-node@v7/);
+    assert.match(workflow, /actions\/upload-artifact@v7/);
+    assert.doesNotMatch(
+      workflow,
+      /actions\/(?:checkout|setup-node|upload-artifact)@v[1-6]\b/
+    );
+  });
+});
+
 let failures = 0;
 for (const { name, run } of tests) {
   try {
