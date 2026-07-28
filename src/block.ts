@@ -1690,6 +1690,7 @@ type TemporaryAllowResult = {
   url: string | null;
   scope: "domain" | "url" | "none";
   minutes: number;
+  waitedSeconds: number;
   provider?: string | null;
   model?: string | null;
 };
@@ -1755,6 +1756,7 @@ const applyTemporaryAllowDecision = async (
       url: ok ? application.url : null,
       scope: "url",
       minutes: application.minutes,
+      waitedSeconds: 0,
     };
   }
 
@@ -1770,6 +1772,7 @@ const applyTemporaryAllowDecision = async (
       url: null,
       scope: "domain",
       minutes: application.minutes,
+      waitedSeconds: 0,
     };
   }
 
@@ -1779,6 +1782,7 @@ const applyTemporaryAllowDecision = async (
     url: null,
     scope: "none",
     minutes: application.minutes,
+    waitedSeconds: 0,
   };
 };
 
@@ -1847,7 +1851,11 @@ const temporarilyAllowFromUrl = async (
     await setPendingTemporaryAllowDelay(null);
     setTemporaryAllowContextMenuTitle(TEMPORARILY_ALLOW_CONTEXT_MENU_TITLE);
   }
-  return allowResult;
+  return {
+    ...allowResult,
+    waitedSeconds:
+      allowResult.ok && delay.pending ? delay.delaySeconds : 0,
+  };
 };
 
 const getRequestUrlContext = async (
@@ -2956,8 +2964,12 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
   }
   if (message?.type === "get-local-stats") {
     flushActiveTemporaryAllowUsage()
-      .then(() => getDailyStats())
-      .then((stats) => sendResponse({ ok: true, stats }))
+      .then(() =>
+        Promise.all([getDailyStats(), getIncreasingAllowDelayEnabled()])
+      )
+      .then(([stats, increasingAllowDelayEnabled]) =>
+        sendResponse({ ok: true, stats, increasingAllowDelayEnabled })
+      )
       .catch((error) => {
         console.warn("get-local-stats request failed", error);
         sendResponse({ ok: false, error: error?.message ?? String(error) });
@@ -3020,6 +3032,7 @@ chrome.runtime.onMessage.addListener((message: any, sender: any, sendResponse: S
             scope: allowResult.scope,
             source: "one-click",
             url: allowResult.url,
+            waitedSeconds: allowResult.waitedSeconds,
           })
         );
       }
@@ -3221,6 +3234,7 @@ chrome.contextMenus.onClicked.addListener((info: { menuItemId?: string | number 
           scope: allowResult.scope,
           source: "one-click",
           url: allowResult.url,
+          waitedSeconds: allowResult.waitedSeconds,
         })
       );
     })

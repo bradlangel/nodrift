@@ -120,6 +120,10 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
+    .summary-grid.has-wait-stat {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .summary-item {
       background: #ffffff;
       border: 1px solid var(--border-soft);
@@ -142,6 +146,10 @@
       font-weight: 800;
       line-height: 1.2;
       margin-top: 3px;
+    }
+
+    .summary-item[hidden] {
+      display: none;
     }
 
     ul {
@@ -240,6 +248,10 @@
         align-items: center;
         grid-template-columns: minmax(0, 1fr) auto;
       }
+
+      .summary-grid.has-wait-stat {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
@@ -260,7 +272,7 @@
       <section class="stats-card" aria-labelledby="today-heading">
         <div class="stats-card-header">
           <h2 id="today-heading">Today summary</h2>
-          <p class="hint">A compact read on interruptions, access grants, and time used.</p>
+          <p class="hint">A compact read on interruptions, access grants, waiting, and time used.</p>
         </div>
         <div class="summary-grid">
           <div class="summary-item">
@@ -270,6 +282,10 @@
           <div class="summary-item">
             <span class="label">Temporary allows</span>
             <span class="value" id="temporary-allows">0</span>
+          </div>
+          <div class="summary-item" id="wait-before-access-summary" hidden>
+            <span class="label">Wait before access</span>
+            <span class="value" id="wait-before-access-time">0s</span>
           </div>
           <div class="summary-item">
             <span class="label">Temp access time</span>

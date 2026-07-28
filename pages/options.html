@@ -129,6 +129,35 @@
       gap: 12px;
     }
 
+    .access-friction {
+      border-top: 1px solid var(--border-soft);
+      display: grid;
+      gap: 18px;
+      margin-top: 4px;
+      padding-top: 16px;
+    }
+
+    .friction-intro,
+    .friction-phase,
+    .friction-phase-header {
+      display: grid;
+      gap: 6px;
+    }
+
+    .friction-intro h3,
+    .friction-phase-header h3 {
+      margin-bottom: 0;
+    }
+
+    .phase-label {
+      color: var(--accent);
+      font-size: 0.76rem;
+      font-weight: 850;
+      letter-spacing: 0.07em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
     label,
     .label {
       font-weight: 750;
@@ -518,24 +547,68 @@
       </section>
 
       <section class="settings-panel" aria-labelledby="access-defaults-heading">
-        <h2 id="access-defaults-heading">Access Defaults</h2>
+        <h2 id="access-defaults-heading">Temporary Access</h2>
         <div class="access-defaults">
           <div class="field">
             <label for="temp-allow-minutes">Temporary allow minutes</label>
             <input type="number" id="temp-allow-minutes" value="1" min="1" />
             <p class="hint">Access expires after this much real time. Stats separately track active time spent on temporarily allowed sites.</p>
           </div>
-          <label class="checkbox-row">
-            <input type="checkbox" id="increasing-allow-delay-enabled" />
-            <span class="checkbox-copy">
-              Increase the wait after repeated temporary access
-              <span class="hint">Uses the global successful allow count for the current day. The first allow is immediate, then waits increase through 5, 10, 20, 40, and 60 seconds.</span>
-            </span>
-          </label>
-          <div class="field">
-            <span class="label">Access effects</span>
-            <p class="hint">Choose what temporarily allowed sites feel like after any gate approves access.</p>
-            <div id="access-effect-list" class="effect-list"></div>
+
+          <div class="access-friction" aria-labelledby="access-friction-heading">
+            <div class="friction-intro">
+              <h3 id="access-friction-heading">Access friction</h3>
+              <p class="hint">Choose what makes temporary access more deliberate before a site opens and while access is active.</p>
+            </div>
+
+            <section class="friction-phase" aria-labelledby="before-access-heading">
+              <div class="friction-phase-header">
+                <span class="phase-label">Before access</span>
+                <h3 id="before-access-heading">Entry friction</h3>
+                <p class="hint">Controls the pause between requesting temporary access and opening the site.</p>
+              </div>
+              <div class="effect-list">
+                <label class="effect-card" for="increasing-allow-delay-enabled">
+                  <input type="checkbox" id="increasing-allow-delay-enabled" />
+                  <span class="effect-body">
+                    <span class="effect-title">Increasing wait</span>
+                    <span class="hint">Uses the global successful allow count for the current day, so repeated entry gets progressively harder across every blocked site.</span>
+                    <ol class="effect-timeline" aria-label="Increasing wait timing">
+                      <li>
+                        <span class="effect-step-when">First</span>
+                        <span class="effect-step-copy">
+                          <span class="effect-step-label">Immediate</span>
+                          <span class="hint">The first successful temporary allow of the day has no added wait.</span>
+                        </span>
+                      </li>
+                      <li>
+                        <span class="effect-step-when">Next</span>
+                        <span class="effect-step-copy">
+                          <span class="effect-step-label">5 → 10 → 20 → 40 seconds</span>
+                          <span class="hint">Each successful allow increases the delay for the next request.</span>
+                        </span>
+                      </li>
+                      <li>
+                        <span class="effect-step-when">Later</span>
+                        <span class="effect-step-copy">
+                          <span class="effect-step-label">60-second maximum</span>
+                          <span class="hint">The delay stays capped at one minute until the daily count resets.</span>
+                        </span>
+                      </li>
+                    </ol>
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section class="friction-phase" aria-labelledby="during-access-heading">
+              <div class="friction-phase-header">
+                <span class="phase-label">During access</span>
+                <h3 id="during-access-heading">Access effects</h3>
+                <p class="hint">Changes how temporarily allowed sites feel while the granted window is active.</p>
+              </div>
+              <div id="access-effect-list" class="effect-list"></div>
+            </section>
           </div>
         </div>
       </section>

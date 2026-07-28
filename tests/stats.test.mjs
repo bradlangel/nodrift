@@ -32,6 +32,7 @@ test("records local request-gate details for temporary allows", () => {
       url: "https://old.reddit.com/r/example/comments/123",
       provider: "openai",
       model: "gpt-5-nano",
+      waitedSeconds: 10,
     }
   );
 
@@ -46,6 +47,8 @@ test("records local request-gate details for temporary allows", () => {
   assert.equal(decision.category, "unclear");
   assert.equal(stats.events[0].name, "access.approved");
   assert.equal(stats.events[0].attributes.granted_minutes, 15);
+  assert.equal(stats.events[0].attributes.waited_seconds, 10);
+  assert.equal(stats.temporaryAllowWaitSecondsToday, 10);
 });
 
 test("records OTel-shaped local stats events and derives daily counters", () => {
@@ -157,6 +160,7 @@ test("normalizes an event-backed stats record as the source of truth", () => {
           site: "news.ycombinator.com",
           scope: "domain",
           granted_minutes: 15,
+          waited_seconds: 5,
           category: "work",
         },
         body: {
@@ -169,6 +173,7 @@ test("normalizes an event-backed stats record as the source of truth", () => {
   const stats = normalizeDailyStats(raw, new Date("2026-04-28T12:02:00Z").getTime());
   assert.equal(stats.blockedAttemptsToday, 1);
   assert.equal(stats.temporaryAllowsToday, 1);
+  assert.equal(stats.temporaryAllowWaitSecondsToday, 5);
   assert.equal(stats.siteStatsToday["news.ycombinator.com"].temporaryAllowsToday, 1);
   assert.equal(stats.recentDecisions[0].action, "temporary-allow");
   assert.equal(stats.recentDecisions[0].category, "work");
