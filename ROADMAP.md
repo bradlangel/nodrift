@@ -40,8 +40,9 @@ interrupt autopilot, but not a hard lock when access is legitimate.
 - [x] Add simple navigation between the block page, settings, and local stats.
 - [x] Redesign the local stats page so it feels as intentional as the options
       page.
-- [x] Keep v1 Chrome-only and document that clearly.
-- [ ] Add Firefox support after the Chrome v1 loop feels solid.
+- [x] Ship v1 on Chrome before expanding browser support.
+- [x] Add Firefox build support and prepare runtime and source-review artifacts
+      for AMO submission.
 
 ## Gate Backlog
 
@@ -115,7 +116,7 @@ then let each feature prove the next boundary.
    navigation.
 8. [x] Bring the stats dashboard up to the options page's visual and information
    architecture standard.
-9. [ ] Add Firefox support after the core Chrome flow has settled.
+9. [x] Add Firefox support after the core Chrome flow has settled.
 
 ## V1 Surface Polish
 
@@ -328,8 +329,8 @@ the same space with clearer configuration and behavior.
 
 ## Browser Support (Post-V1)
 
-Initial Firefox build support now exists. Keep AMO-readiness gated on manual
-browser QA.
+Firefox build, packaging, permission-consent, and automated validation support
+now exists. Publication remains gated on final manual browser QA and AMO review.
 
 - [x] Identify Chrome-specific APIs in the background worker.
 - [x] Add a browser API compatibility wrapper where needed.

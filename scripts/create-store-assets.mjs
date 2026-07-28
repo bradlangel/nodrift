@@ -417,7 +417,7 @@ function screenshotBlockedDocument() {
       <p class="hint">NoDrift redirects distracting sites to a calm page, then makes access deliberate when there is a real reason.</p>
       <div class="feature-strip">
         <div class="feature"><span class="check">&#10003;</span>Temporary access restores blocking automatically</div>
-        <div class="feature"><span class="check">&#10003;</span>LLM-reviewed requests add thoughtful friction</div>
+        <div class="feature"><span class="check">&#10003;</span>Increasing waits interrupt repeated access</div>
         <div class="feature"><span class="check">&#10003;</span>Local stats make patterns visible</div>
       </div>
     </section>
@@ -436,8 +436,8 @@ function screenshotBlockedDocument() {
         <div class="button slate">Temporary allow</div>
       </div>
       <div class="review">
-        <p class="section-label">LLM-reviewed request</p>
-        <span class="provider-pill">Provider: Chrome local Nano</span>
+        <p class="section-label">AI-reviewed request</p>
+        <span class="provider-pill">Provider: Chrome local AI</span>
         <textarea readonly>Find one documentation answer, then leave after 10 minutes.</textarea>
         <div class="review-result">Approved for a focused, time-boxed task.</div>
         <div class="button accent">Request access</div>
@@ -659,7 +659,7 @@ function screenshotSettingsDocument() {
     <header class="page-header">
       <div>
         <h1>Settings</h1>
-        <p class="hint">Choose what gets blocked, which access gate appears, and how review providers are configured.</p>
+        <p class="hint">Choose what gets blocked and how temporary access should feel before and after a site opens.</p>
       </div>
       <div class="button slate">Local stats</div>
     </header>
@@ -680,50 +680,43 @@ function screenshotSettingsDocument() {
         </div>
       </div>
       <div class="surface settings-panel">
-        <h2>Gate Library</h2>
+        <h2>Access friction</h2>
         <div class="gate-list">
           <article class="gate-card default">
             <div class="gate-top">
               <span class="select-dot"></span>
               <div>
-                <h3>LLM-reviewed request</h3>
-                <p class="hint">Use an optional configured provider for a stricter review.</p>
+                <h3>Before access · Increasing wait</h3>
+                <p class="hint">Repeated entry gets progressively harder across every blocked site.</p>
               </div>
             </div>
             <div class="provider-config">
               <div class="provider-row">
                 <span class="radio"></span>
-                <span class="provider-name">Chrome local Nano model</span>
+                <span class="provider-name">Enabled by default</span>
               </div>
-              <p class="provider-note">Requests are reviewed on-device when Chrome's local Prompt API is available.</p>
+              <p class="provider-note">First allow: immediate · Then: 5s → 10s → 20s → 40s → 60s maximum</p>
             </div>
           </article>
-          <article class="gate-card">
+          <p class="coming-soon-heading">During access</p>
+          <article class="gate-card default">
             <div class="gate-top">
               <span class="select-dot"></span>
               <div>
-                <h3>Temporary allow</h3>
-                <p class="hint">Grant time-boxed access and re-block automatically.</p>
+                <h3>Access effects</h3>
+                <p class="hint">Change how temporarily allowed sites feel while the access window is active.</p>
               </div>
             </div>
-          </article>
-          <p class="coming-soon-heading">Coming soon ideas</p>
-          <article class="gate-card coming-soon">
-            <div class="gate-top">
-              <span class="select-dot"></span>
-              <div>
-                <h3>Daily focus budget</h3>
-                <p class="hint">Set a small daily allowance for specific sites before access gets harder.</p>
+            <div class="provider-config">
+              <div class="provider-row">
+                <span class="radio"></span>
+                <span class="provider-name">Grayscale</span>
               </div>
-            </div>
-          </article>
-          <article class="gate-card coming-soon">
-            <div class="gate-top">
-              <span class="select-dot"></span>
-              <div>
-                <h3>Accountability note</h3>
-                <p class="hint">Ask future-you for a short reason that appears in local stats later.</p>
+              <div class="provider-row">
+                <span class="radio"></span>
+                <span class="provider-name">Slow Fade</span>
               </div>
+              <p class="provider-note">Effects are applied only while temporary access is active.</p>
             </div>
           </article>
         </div>
@@ -760,7 +753,7 @@ function screenshotStatsDocument() {
       .stats-grid {
         display: grid;
         gap: 18px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         margin-bottom: 18px;
       }
 
@@ -861,6 +854,7 @@ function screenshotStatsDocument() {
     <section class="stats-grid">
       <div class="surface summary-card"><span class="label">Blocked attempts</span><span class="value">37</span></div>
       <div class="surface summary-card"><span class="label">Temporary allows</span><span class="value">4</span></div>
+      <div class="surface summary-card"><span class="label">Wait before access</span><span class="value">1m 15s</span></div>
       <div class="surface summary-card"><span class="label">Temp access time</span><span class="value">18m</span></div>
     </section>
     <section class="details-grid">
@@ -1049,12 +1043,12 @@ function marqueePromoDocument() {
   <section class="copy">
     <div class="brand-line"><div class="large-mark">N</div>NoDrift</div>
     <h1>Block the drift. Keep the choice.</h1>
-    <p>A calm Chrome website blocker with temporary access, LLM-reviewed requests, and local stats.</p>
+    <p>A calm website blocker with deliberate temporary access, configurable friction, and local stats.</p>
   </section>
   <section class="surface mock">
     <h2>This site is blocked</h2>
     <div class="mock-row"><strong>Temporary allow</strong><span>10m</span></div>
-    <div class="mock-row"><strong>LLM review</strong><span>Nano</span></div>
+    <div class="mock-row"><strong>Increasing wait</strong><span>5s → 60s</span></div>
     <div class="mock-row"><strong>Blocked today</strong><span>14</span></div>
   </section>
 </main>`,

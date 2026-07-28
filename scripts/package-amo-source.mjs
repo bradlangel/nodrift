@@ -27,6 +27,7 @@ const sourceEntries = [
   "AMO_SUBMISSION.md",
   "ARCHITECTURE.md",
   "CONTRIBUTING.md",
+  "LICENSE",
   "MANUAL_QA.md",
   "PRIVACY.md",
   "README.md",
