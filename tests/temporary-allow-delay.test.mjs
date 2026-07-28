@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_INCREASING_ALLOW_DELAY_ENABLED,
+} from "../dist/defaults.js";
+import {
   buildTemporaryAllowDelayTargetKey,
   evaluateTemporaryAllowDelay,
   getGlobalTemporaryAllowDelaySeconds,
@@ -12,6 +15,10 @@ const tests = [];
 const test = (name, run) => {
   tests.push({ name, run });
 };
+
+test("enables increasing delay by default", () => {
+  assert.equal(DEFAULT_INCREASING_ALLOW_DELAY_ENABLED, true);
+});
 
 test("uses the global successful allow count for capped exponential delay", () => {
   assert.deepEqual(

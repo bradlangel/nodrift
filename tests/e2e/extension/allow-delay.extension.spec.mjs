@@ -196,10 +196,10 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     const extensionId = new URL(worker.url()).host;
 
     await clearExtensionStorage(worker, "local");
+    await clearExtensionStorage(worker, "sync");
     await setExtensionStorage(worker, "sync", {
       blockedSites: ["127.0.0.1", "localhost"],
       tempAllowMinutes: 1,
-      increasingAllowDelayEnabled: true,
       accessGateActionId: "temporary-allow-domain",
       accessEffectIds: [],
       showChatGptPeek: false,
