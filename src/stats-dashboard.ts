@@ -10,8 +10,11 @@ import {
 type LocalStatsResponse = {
   ok: boolean;
   stats?: DailyBlockerStats;
+  increasingAllowDelayEnabled?: boolean;
   error?: string;
 };
+
+let increasingAllowDelayEnabled = false;
 
 const formatUsedTime = (seconds: number): string => {
   const value = Number.isFinite(seconds) ? Math.max(seconds, 0) : 0;
@@ -309,10 +312,20 @@ const renderRecentDecisions = (stats: DailyBlockerStats) => {
   });
 };
 
-const renderStats = (stats: DailyBlockerStats) => {
+const renderStats = (
+  stats: DailyBlockerStats,
+  delayEnabled = increasingAllowDelayEnabled
+) => {
   setText("summary-date", stats.dayKey);
   setText("blocked-attempts", String(stats.blockedAttemptsToday || 0));
   setText("temporary-allows", String(stats.temporaryAllowsToday || 0));
+  const waitSeconds = stats.temporaryAllowWaitSecondsToday || 0;
+  const showWaitStat = delayEnabled || waitSeconds > 0;
+  const waitSummary = document.getElementById("wait-before-access-summary");
+  const summaryGrid = waitSummary?.closest(".summary-grid");
+  if (waitSummary) waitSummary.hidden = !showWaitStat;
+  summaryGrid?.classList.toggle("has-wait-stat", showWaitStat);
+  setText("wait-before-access-time", formatUsedTime(waitSeconds));
   setText("temp-allow-time", formatUsedTime(stats.temporaryAllowUsedSecondsToday || 0));
 
   renderTopSites(
@@ -340,7 +353,7 @@ const setStatus = (message: string) => {
   status.textContent = message;
 };
 
-const getLocalStats = (): Promise<DailyBlockerStats> =>
+const getLocalStats = (): Promise<LocalStatsResponse> =>
   new Promise((resolve, reject) => {
     chrome.runtime.sendMessage({ type: "get-local-stats" }, (response: LocalStatsResponse) => {
       if (chrome.runtime.lastError) {
@@ -351,15 +364,17 @@ const getLocalStats = (): Promise<DailyBlockerStats> =>
         reject(new Error(response?.error || "Could not load local stats."));
         return;
       }
-      resolve(response.stats);
+      resolve(response);
     });
   });
 
 const loadAndRenderStats = async () => {
   setStatus("Loading local stats...");
   try {
-    const stats = await getLocalStats();
-    renderStats(stats);
+    const response = await getLocalStats();
+    increasingAllowDelayEnabled =
+      response.increasingAllowDelayEnabled === true;
+    renderStats(response.stats!, increasingAllowDelayEnabled);
     setStatus("All stats stay on this device.");
   } catch (error) {
     console.warn("Failed to render stats dashboard", error);
