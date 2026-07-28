@@ -241,6 +241,12 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await controlPage.goto(
       `chrome-extension://${extensionId}/pages/stats.html`
     );
+    await expect(
+      controlPage.locator("#wait-before-access-summary")
+    ).toBeVisible();
+    await expect(
+      controlPage.locator("#wait-before-access-time")
+    ).toHaveText("0s");
     targetPage = await context.newPage();
     targetVideo = targetPage.video();
 
@@ -276,10 +282,43 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await expect(allowButton).toHaveText("Allow now", { timeout: 7_000 });
     await clickAllowAndWaitForSite(targetPage, firstSiteUrl);
     await expect.poll(async () => (await getStoredStats(worker))?.temporaryAllowsToday).toBe(2);
+    await expect.poll(
+      async () => (await getStoredStats(worker))?.temporaryAllowWaitSecondsToday
+    ).toBe(5);
+
+    await controlPage.reload();
+    await expect(
+      controlPage.locator("#wait-before-access-time")
+    ).toHaveText("5s");
+    await controlPage.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(() =>
+        controlPage.locator(".summary-grid").evaluate((element) =>
+          getComputedStyle(element).gridTemplateColumns.split(" ").length
+        )
+      )
+      .toBe(2);
+    await controlPage.screenshot({
+      path: testInfo.outputPath("stats-mobile-wait-time.png"),
+      fullPage: true,
+    });
 
     await reblockAllSites(controlPage, worker, 2);
     const secondSiteUrl = `http://localhost:${port}/second`;
     await openBlockedSite(targetPage, secondSiteUrl, "localhost");
+    await expect(
+      targetPage.locator("#stats-wait-before-access-item")
+    ).toBeVisible();
+    await expect(
+      targetPage.locator("#stats-wait-before-access")
+    ).toHaveText("5s");
+    await expect(
+      targetPage.locator(".stats-grid")
+    ).toHaveClass(/has-wait-stat/);
+    await targetPage.screenshot({
+      path: testInfo.outputPath("block-page-wait-time.png"),
+      fullPage: true,
+    });
     await targetPage.locator("#temporarily-allow-btn").click();
     await expect(targetPage.locator("#temporarily-allow-btn")).toContainText(
       "Available in 10s · 2 allows today"
@@ -290,13 +329,24 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     });
     expect(resetResponse).toMatchObject({
       ok: true,
-      stats: { temporaryAllowsToday: 0 },
+      stats: {
+        temporaryAllowsToday: 0,
+        temporaryAllowWaitSecondsToday: 0,
+      },
     });
 
     await targetPage.reload();
     await waitForBlockPage(targetPage, "localhost");
     await clickAllowAndWaitForSite(targetPage, secondSiteUrl);
     await expect.poll(async () => (await getStoredStats(worker))?.temporaryAllowsToday).toBe(1);
+
+    await setExtensionStorage(worker, "sync", {
+      increasingAllowDelayEnabled: false,
+    });
+    await controlPage.reload();
+    await expect(
+      controlPage.locator("#wait-before-access-summary")
+    ).toBeHidden();
   } finally {
     if (recordDemo) {
       await mkdir(demoDir, { recursive: true });

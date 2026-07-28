@@ -41,6 +41,7 @@ export type LocalStatsEventAttributes = {
   category?: AccessDecisionCategory;
   requested_minutes?: number | null;
   granted_minutes?: number | null;
+  waited_seconds?: number | null;
   used_seconds?: number | null;
 };
 
@@ -76,6 +77,7 @@ export type DailyBlockerStats = {
   dayKey: string;
   blockedAttemptsToday: number;
   temporaryAllowsToday: number;
+  temporaryAllowWaitSecondsToday: number;
   temporaryAllowUsedSecondsToday: number;
   siteStatsToday: Record<string, DailySiteStats>;
   recentDecisions: AccessDecision[];
@@ -126,7 +128,10 @@ export type DailyStatsProjection = {
   dayKey: string;
   globalStatsToday: Pick<
     DailyBlockerStats,
-    "blockedAttemptsToday" | "temporaryAllowsToday" | "temporaryAllowUsedSecondsToday"
+    | "blockedAttemptsToday"
+    | "temporaryAllowsToday"
+    | "temporaryAllowWaitSecondsToday"
+    | "temporaryAllowUsedSecondsToday"
   >;
   perSiteStatsToday: Record<string, SiteStatsProjection>;
   recentSiteDecisions: AccessDecision[];
@@ -212,6 +217,7 @@ export const createEmptyDailyStats = (dayKey: string): DailyBlockerStats => ({
   dayKey,
   blockedAttemptsToday: 0,
   temporaryAllowsToday: 0,
+  temporaryAllowWaitSecondsToday: 0,
   temporaryAllowUsedSecondsToday: 0,
   siteStatsToday: {},
   recentDecisions: [],
@@ -307,6 +313,7 @@ const normalizeEvent = (value: unknown): LocalStatsEvent | null => {
       category: normalizeDecisionCategory(attributes.category),
       requested_minutes: normalizePositiveInteger(attributes.requested_minutes),
       granted_minutes: normalizePositiveInteger(attributes.granted_minutes),
+      waited_seconds: normalizePositiveInteger(attributes.waited_seconds),
       used_seconds: normalizePositiveInteger(attributes.used_seconds),
     },
     body:
@@ -465,6 +472,7 @@ const projectDailyStatsFromEvents = (
   const siteStatsToday: Record<string, DailySiteStats> = {};
   let blockedAttemptsToday = 0;
   let temporaryAllowsToday = 0;
+  let temporaryAllowWaitSecondsToday = 0;
   let temporaryAllowUsedSecondsToday = 0;
 
   events.forEach((event) => {
@@ -481,6 +489,8 @@ const projectDailyStatsFromEvents = (
     }
     if (event.name === "access.approved") {
       temporaryAllowsToday += 1;
+      temporaryAllowWaitSecondsToday +=
+        normalizePositiveInteger(event.attributes.waited_seconds) ?? 0;
       Object.assign(
         siteStatsToday,
         upsertSiteStats(siteStatsToday, site, (stats) => ({
@@ -513,6 +523,7 @@ const projectDailyStatsFromEvents = (
     dayKey,
     blockedAttemptsToday,
     temporaryAllowsToday,
+    temporaryAllowWaitSecondsToday,
     temporaryAllowUsedSecondsToday,
     siteStatsToday,
     recentDecisions,
@@ -667,7 +678,7 @@ export const withTemporaryAllow = (
     Pick<
       AccessDecision,
       "scope" | "source" | "message" | "purpose" | "url" | "provider" | "model" | "category"
-    > & { requestedMinutes: number }
+    > & { requestedMinutes: number; waitedSeconds: number }
   > = {}
 ): DailyBlockerStats => {
   const normalizedMinutes = Math.max(Math.floor(minutes), 0);
@@ -687,6 +698,7 @@ export const withTemporaryAllow = (
         category: normalizeDecisionCategory(details.category),
         requested_minutes: normalizePositiveInteger(details.requestedMinutes),
         granted_minutes: normalizedMinutes,
+        waited_seconds: normalizePositiveInteger(details.waitedSeconds),
       },
       {
         message: sanitizeDecisionText(details.message),
@@ -850,6 +862,7 @@ export const buildDailyStatsProjection = (
     globalStatsToday: {
       blockedAttemptsToday: stats.blockedAttemptsToday,
       temporaryAllowsToday: stats.temporaryAllowsToday,
+      temporaryAllowWaitSecondsToday: stats.temporaryAllowWaitSecondsToday,
       temporaryAllowUsedSecondsToday: stats.temporaryAllowUsedSecondsToday,
     },
     perSiteStatsToday,
