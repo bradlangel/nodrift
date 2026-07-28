@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build and tests
+        run: npm test
+
+  extension-e2e:
+    name: Loaded extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Compare approved visual snapshots
+        run: npm run test:visual
+
+      - name: Test and record the loaded extension
+        run: npm run demo:allow-delay
+
+      - name: Upload visual review bundle
+        id: visual-review
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: nodrift-visual-review-${{ github.sha }}
+          path: |
+            test-results/demos/
+            test-results/playwright/**/*-actual.png
+            test-results/playwright/**/*-diff.png
+            test-results/playwright/**/*-previous.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Add visual review summary
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "## Visual review"
+            echo
+            echo "[Download the annotated walkthrough, screenshots, and trace](${{ steps.visual-review.outputs.artifact-url }})"
+            echo
+            echo "The bundle is retained for seven days. Visual regression differences are included when present."
+          } >> "$GITHUB_STEP_SUMMARY"
