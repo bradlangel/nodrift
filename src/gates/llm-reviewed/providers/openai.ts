@@ -1,5 +1,9 @@
 import { DailyStatsContext } from "../../../core/access-contracts.js";
 import {
+  ensureFirefoxDataCollectionConsent,
+  FIREFOX_OPENAI_ACCESS_REVIEW_DATA_COLLECTION_PERMISSIONS,
+} from "../../../data-collection-consent.js";
+import {
   buildAccessReviewPolicy,
   LlmReviewLevel,
   normalizeReviewLevel,
@@ -82,6 +86,11 @@ export const requestOpenAiAccessReview = async (
   model: string,
   context: OpenAiAccessReviewContext
 ): Promise<unknown> => {
+  await ensureFirefoxDataCollectionConsent(
+    FIREFOX_OPENAI_ACCESS_REVIEW_DATA_COLLECTION_PERMISSIONS,
+    "OpenAI access review"
+  );
+
   const reasoningEffort = getOpenAiAccessReviewReasoningEffort(model);
   const reviewStrictnessLevel = normalizeReviewLevel(context.reviewStrictnessLevel);
   const leisureAllowanceLevel = normalizeReviewLevel(context.leisureAllowanceLevel);

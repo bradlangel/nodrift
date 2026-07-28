@@ -3,6 +3,10 @@ import {
   getLlmProviderSettings,
   type LlmProviderSettings,
 } from "../llm-reviewed/provider-settings.js";
+import {
+  ensureFirefoxDataCollectionConsent,
+  FIREFOX_OPENAI_AUTH_DATA_COLLECTION_PERMISSIONS,
+} from "../../data-collection-consent.js";
 import { STORAGE_KEYS } from "../../storage-constants.js";
 import {
   extractOpenAiOutputText,
@@ -187,6 +191,11 @@ const requestOpenAiQuiz = async (
   model: string,
   topic: string
 ): Promise<unknown> => {
+  await ensureFirefoxDataCollectionConsent(
+    FIREFOX_OPENAI_AUTH_DATA_COLLECTION_PERMISSIONS,
+    "OpenAI study quiz"
+  );
+
   const reasoningEffort = getOpenAiAccessReviewReasoningEffort(model);
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import { readFile } from "node:fs/promises";
 
 import { buildManifestForTarget } from "../scripts/package-release.mjs";
+import { buildValidationDirectories } from "../scripts/validate-release.mjs";
 
 const tests = [];
 
@@ -41,7 +43,19 @@ test("Firefox target manifest uses background scripts and Gecko settings", async
   );
   assert.equal(
     manifest.browser_specific_settings.gecko.strict_min_version,
-    "113.0"
+    "142.0"
+  );
+  assert.deepEqual(
+    manifest.browser_specific_settings.gecko.data_collection_permissions,
+    {
+      required: ["none"],
+      optional: [
+        "authenticationInfo",
+        "browsingActivity",
+        "technicalAndInteraction",
+        "websiteContent",
+      ],
+    }
   );
 });
 
@@ -55,6 +69,16 @@ test("Chrome target manifest preserves service worker shape", async () => {
   assert.equal(manifest.background.scripts, undefined);
   assert.equal(manifest.incognito, "split");
   assert.equal(manifest.browser_specific_settings, undefined);
+});
+
+test("release validation keeps stable reload folders across versions", () => {
+  assert.deepEqual(
+    buildValidationDirectories("/release", "firefox", "1.0.3"),
+    {
+      versioned: path.join("/release", "validate", "nodrift-firefox-1.0.3"),
+      current: path.join("/release", "validate", "nodrift-firefox-current"),
+    }
+  );
 });
 
 let failures = 0;

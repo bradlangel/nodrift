@@ -17,6 +17,10 @@ import {
   LLM_REVIEWED_ACCESS_GATE_ACTION_ID,
 } from "./defaults.js";
 import {
+  ensureFirefoxDataCollectionConsent,
+  FIREFOX_PEEK_CHATGPT_DATA_COLLECTION_PERMISSIONS,
+} from "./data-collection-consent.js";
+import {
   buildAccessEffectCss,
   buildAccessEffectOverlayCss,
   getAccessEffectMilestones,
@@ -2786,6 +2790,10 @@ const handlePeekWithChatGPTRequest = async (
     ? ensureHttpUrl(`https://${siteForStorage}`)
     : null;
   const targetUrl = originalUrl || ledgerUrl || tabNavigationUrl || fallbackSiteUrl;
+  await ensureFirefoxDataCollectionConsent(
+    FIREFOX_PEEK_CHATGPT_DATA_COLLECTION_PERMISSIONS,
+    "Peek with ChatGPT"
+  );
   const snapshot = targetUrl ? await fetchSnapshot(targetUrl) : "";
 
   const storageUrl = targetUrl || fallbackSiteUrl || trimmedOriginal;

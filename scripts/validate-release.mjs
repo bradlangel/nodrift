@@ -26,6 +26,13 @@ const requiredEntries = [
   "dist/stats.js",
 ];
 
+const firefoxOptionalProviderDataCollectionPermissions = [
+  "authenticationInfo",
+  "browsingActivity",
+  "technicalAndInteraction",
+  "websiteContent",
+];
+
 const forbiddenEntryPattern =
   /^(src\/|tests\/|node_modules\/|\.git\/|package(?:-lock)?\.json$|README\.md$|ARCHITECTURE\.md$|MANUAL_QA\.md$|ROADMAP\.md$|CONTRIBUTING\.md$)/;
 
@@ -120,14 +127,39 @@ function validateManifest(zipPath, target) {
   const manifest = JSON.parse(readZipEntry(zipPath, "manifest.json"));
 
   if (target === "firefox") {
+    const geckoSettings = manifest.browser_specific_settings?.gecko;
+    const dataCollectionPermissions = geckoSettings?.data_collection_permissions;
+
     if (!Array.isArray(manifest.background?.scripts)) {
       fail("Firefox ZIP manifest must use background.scripts");
     }
     if (manifest.background.service_worker) {
       fail("Firefox ZIP manifest must not include background.service_worker");
     }
-    if (!manifest.browser_specific_settings?.gecko?.id) {
+    if (!geckoSettings?.id) {
       fail("Firefox ZIP manifest must define browser_specific_settings.gecko.id");
+    }
+    if (geckoSettings.strict_min_version !== "142.0") {
+      fail("Firefox ZIP manifest must set browser_specific_settings.gecko.strict_min_version to 142.0");
+    }
+    if (!Array.isArray(dataCollectionPermissions?.required)) {
+      fail("Firefox ZIP manifest must define data_collection_permissions.required");
+    }
+    if (
+      JSON.stringify(dataCollectionPermissions.required) !==
+      JSON.stringify(["none"])
+    ) {
+      fail("Firefox ZIP manifest must declare no required external data collection for the core blocker");
+    }
+    if (!Array.isArray(dataCollectionPermissions?.optional)) {
+      fail("Firefox ZIP manifest must define data_collection_permissions.optional");
+    }
+    const optionalPermissions = [...dataCollectionPermissions.optional].sort();
+    if (
+      JSON.stringify(optionalPermissions) !==
+      JSON.stringify([...firefoxOptionalProviderDataCollectionPermissions].sort())
+    ) {
+      fail("Firefox ZIP manifest optional data collection permissions are incomplete");
     }
     if (manifest.incognito === "split") {
       fail("Firefox ZIP manifest must not use unsupported incognito split mode");
@@ -146,11 +178,27 @@ function validateManifest(zipPath, target) {
   }
 }
 
+export function buildValidationDirectories(
+  releaseRoot,
+  target,
+  releaseVersion
+) {
+  const validateRoot = path.join(releaseRoot, "validate");
+  return {
+    versioned: path.join(validateRoot, `nodrift-${target}-${releaseVersion}`),
+    current: path.join(validateRoot, `nodrift-${target}-current`),
+  };
+}
+
 async function main() {
   const target = readReleaseTarget(process.argv.slice(2));
   const releaseVersion = await readReleaseVersion();
   const zipPath = path.join(releaseDir, `nodrift-${target}-${releaseVersion}.zip`);
-  const validateDir = path.join(releaseDir, "validate", `nodrift-${target}-${releaseVersion}`);
+  const validateDirs = buildValidationDirectories(
+    releaseDir,
+    target,
+    releaseVersion
+  );
   const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
   run(npmCommand, ["test"], { stdio: "inherit" });
@@ -161,24 +209,29 @@ async function main() {
   validateEntries(entries);
   validateManifest(zipPath, target);
 
-  await rm(validateDir, { recursive: true, force: true });
-  await mkdir(validateDir, { recursive: true });
-  run("unzip", ["-q", zipPath, "-d", validateDir]);
+  for (const validateDir of Object.values(validateDirs)) {
+    await rm(validateDir, { recursive: true, force: true });
+    await mkdir(validateDir, { recursive: true });
+    run("unzip", ["-q", zipPath, "-d", validateDir]);
+  }
 
   console.log("");
   console.log("Release validation ready:");
   console.log(`ZIP: ${path.relative(repoRoot, zipPath)}`);
-  console.log(`${target === "firefox" ? "Firefox" : "Chrome"} load folder: ${validateDir}`);
+  console.log(`Versioned load folder: ${validateDirs.versioned}`);
+  console.log(`Stable reload folder: ${validateDirs.current}`);
   console.log("");
   if (target === "firefox") {
     console.log("Open about:debugging#/runtime/this-firefox, click Load Temporary Add-on,");
-    console.log("and select manifest.json inside the Firefox load folder above.");
+    console.log("and select manifest.json inside the stable reload folder above.");
   } else {
     console.log("Open chrome://extensions, enable Developer mode, click Load unpacked,");
-    console.log("and select the Chrome load folder above.");
+    console.log("and select the stable reload folder above.");
   }
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
+  });
+}
