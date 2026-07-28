@@ -40,7 +40,6 @@ type StatsDecision = {
 type LocalStats = {
   blockedAttemptsToday?: number;
   temporaryAllowsToday?: number;
-  temporaryAllowWaitSecondsToday?: number;
   temporaryAllowUsedSecondsToday?: number;
   recentDecisions?: StatsDecision[];
 };
@@ -179,27 +178,17 @@ const formatUsedTime = (seconds: unknown): string => {
   return `${remainingSeconds}s`;
 };
 
-const renderStats = (
-  stats: LocalStats,
-  increasingAllowDelayEnabled = false
-): void => {
+const renderStats = (stats: LocalStats): void => {
   const statsRoot = document.getElementById("stats");
   if (!statsRoot || !stats) return;
 
   const blockedEl = document.getElementById("stats-blocked-attempts");
   const allowsEl = document.getElementById("stats-temp-allows");
-  const waitItem = document.getElementById("stats-wait-before-access-item");
-  const waitEl = document.getElementById("stats-wait-before-access");
   const usedMinutesEl = document.getElementById("stats-temp-allow-used-minutes");
   const recentEl = document.getElementById("stats-recent-decisions");
 
   if (blockedEl) blockedEl.textContent = String(stats.blockedAttemptsToday || 0);
   if (allowsEl) allowsEl.textContent = String(stats.temporaryAllowsToday || 0);
-  const waitSeconds = stats.temporaryAllowWaitSecondsToday || 0;
-  const showWaitStat = increasingAllowDelayEnabled || waitSeconds > 0;
-  if (waitItem) waitItem.hidden = !showWaitStat;
-  waitItem?.parentElement?.classList.toggle("has-wait-stat", showWaitStat);
-  if (waitEl) waitEl.textContent = formatUsedTime(waitSeconds);
   if (usedMinutesEl) {
     usedMinutesEl.textContent = formatUsedTime(stats.temporaryAllowUsedSecondsToday || 0);
   }
@@ -233,10 +222,7 @@ const refreshStats = (): void => {
       return;
     }
     if (!response?.ok || !response.stats) return;
-    renderStats(
-      response.stats,
-      response.increasingAllowDelayEnabled === true
-    );
+    renderStats(response.stats);
   });
 };
 

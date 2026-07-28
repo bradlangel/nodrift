@@ -308,17 +308,7 @@ test("global increasing delay works in the loaded extension", async ({}, testInf
     await openBlockedSite(targetPage, secondSiteUrl, "localhost");
     await expect(
       targetPage.locator("#stats-wait-before-access-item")
-    ).toBeVisible();
-    await expect(
-      targetPage.locator("#stats-wait-before-access")
-    ).toHaveText("5s");
-    await expect(
-      targetPage.locator(".stats-grid")
-    ).toHaveClass(/has-wait-stat/);
-    await targetPage.screenshot({
-      path: testInfo.outputPath("block-page-wait-time.png"),
-      fullPage: true,
-    });
+    ).toHaveCount(0);
     await targetPage.locator("#temporarily-allow-btn").click();
     await expect(targetPage.locator("#temporarily-allow-btn")).toContainText(
       "Available in 10s · 2 allows today"
