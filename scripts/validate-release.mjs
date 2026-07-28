@@ -178,11 +178,27 @@ function validateManifest(zipPath, target) {
   }
 }
 
+export function buildValidationDirectories(
+  releaseRoot,
+  target,
+  releaseVersion
+) {
+  const validateRoot = path.join(releaseRoot, "validate");
+  return {
+    versioned: path.join(validateRoot, `nodrift-${target}-${releaseVersion}`),
+    current: path.join(validateRoot, `nodrift-${target}-current`),
+  };
+}
+
 async function main() {
   const target = readReleaseTarget(process.argv.slice(2));
   const releaseVersion = await readReleaseVersion();
   const zipPath = path.join(releaseDir, `nodrift-${target}-${releaseVersion}.zip`);
-  const validateDir = path.join(releaseDir, "validate", `nodrift-${target}-${releaseVersion}`);
+  const validateDirs = buildValidationDirectories(
+    releaseDir,
+    target,
+    releaseVersion
+  );
   const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
   run(npmCommand, ["test"], { stdio: "inherit" });
@@ -193,24 +209,29 @@ async function main() {
   validateEntries(entries);
   validateManifest(zipPath, target);
 
-  await rm(validateDir, { recursive: true, force: true });
-  await mkdir(validateDir, { recursive: true });
-  run("unzip", ["-q", zipPath, "-d", validateDir]);
+  for (const validateDir of Object.values(validateDirs)) {
+    await rm(validateDir, { recursive: true, force: true });
+    await mkdir(validateDir, { recursive: true });
+    run("unzip", ["-q", zipPath, "-d", validateDir]);
+  }
 
   console.log("");
   console.log("Release validation ready:");
   console.log(`ZIP: ${path.relative(repoRoot, zipPath)}`);
-  console.log(`${target === "firefox" ? "Firefox" : "Chrome"} load folder: ${validateDir}`);
+  console.log(`Versioned load folder: ${validateDirs.versioned}`);
+  console.log(`Stable reload folder: ${validateDirs.current}`);
   console.log("");
   if (target === "firefox") {
     console.log("Open about:debugging#/runtime/this-firefox, click Load Temporary Add-on,");
-    console.log("and select manifest.json inside the Firefox load folder above.");
+    console.log("and select manifest.json inside the stable reload folder above.");
   } else {
     console.log("Open chrome://extensions, enable Developer mode, click Load unpacked,");
-    console.log("and select the Chrome load folder above.");
+    console.log("and select the stable reload folder above.");
   }
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
+  });
+}

@@ -13,7 +13,8 @@ Firefox builds are local-loadable artifacts until they complete AMO review.
 - [ ] Confirm the Chrome extension card has no manifest or service-worker
       errors.
 - [ ] Run `npm run release:validate:firefox`.
-- [ ] Load `manifest.json` from the Firefox validation folder in
+- [ ] Load `manifest.json` from
+      `release/validate/nodrift-firefox-current` in
       `about:debugging#/runtime/this-firefox`.
 - [ ] Confirm the Firefox temporary add-on has no manifest or background-script
       errors.

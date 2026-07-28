@@ -122,7 +122,8 @@ npm run release:validate:firefox
 
 The validation script runs `npm test`, packages the selected target, checks ZIP
 integrity and contents, validates the generated manifest shape, then extracts
-the artifact to `release/validate/nodrift-${TARGET}-${VERSION}`.
+the artifact to both `release/validate/nodrift-${TARGET}-${VERSION}` and a
+stable `release/validate/nodrift-${TARGET}-current` reload folder.
 
 After the release commit is merged to `main`, create the GitHub release from the
 manifest version:
@@ -161,14 +162,15 @@ If Chrome reports manifest or service-worker errors, rebuild with
 1. Run `npm run release:validate:firefox`.
 2. Open `about:debugging#/runtime/this-firefox`.
 3. Click Load Temporary Add-on.
-4. Select `manifest.json` inside the printed
-   `release/validate/nodrift-firefox-${VERSION}` folder.
+4. Select `manifest.json` inside
+   `release/validate/nodrift-firefox-current`.
 5. Open the NoDrift toolbar popup and click Enable blocking if Firefox asks for
    site access.
 
 Firefox temporary add-ons are removed when Firefox restarts. Re-run validation
-after source changes so the generated Firefox manifest and compiled `dist/`
-stay in sync.
+after source changes, then use Reload in `about:debugging` so the generated
+Firefox manifest and compiled `dist/` stay in sync. Because the loaded path is
+stable, version changes no longer require selecting a new folder.
 
 Firefox MV3 can leave broad host permissions disabled until the user grants
 them. If the popup says blocking needs site access, grant that permission and
