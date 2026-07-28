@@ -17,7 +17,7 @@ export const DEFAULT_BLOCK_PAGE_ALTERNATIVES: string[] = [
 
 export const DEFAULT_GRAYSCALE_ON_TEMP_ALLOW = true;
 export const DEFAULT_TEMP_ALLOW_MINUTES = 1;
-export const DEFAULT_INCREASING_ALLOW_DELAY_ENABLED = false;
+export const DEFAULT_INCREASING_ALLOW_DELAY_ENABLED = true;
 
 export const GRAYSCALE_ACCESS_EFFECT_ID = "grayscale";
 export const STALE_MODE_ACCESS_EFFECT_ID = "stale-mode";
